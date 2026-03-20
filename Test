@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TextCraft — Lernzettel Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Nunito+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root {
+  --bg: #fdf9f7;
+  --card: #ffffff;
+  --ink: #2d2926;
+  --muted: #9e9690;
+  --border: #e8e2db;
+
+  /* Section colors matching the Lernzettel */
+  --c1: #c8b4e8; /* purple */
+  --c2: #f4a8b0; /* pink/red */
+  --c3: #a8ddb8; /* green */
+  --c4: #f9c97a; /* orange/yellow */
+  --c5: #a8cff4; /* blue */
+  --c6: #f4a8b0;
+  --cbg1: #f3edfb;
+  --cbg2: #fdf0f2;
+  --cbg3: #eef8f2;
+  --cbg4: #fdf6e8;
+  --cbg5: #eaf4fd;
+  --cbg6: #fdf0f2;
+  --accent: #7c5cbf;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nunito Sans', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+header {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 18px 40px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -0.5px;
+}
+.logo-sub {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.main-wrap {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  min-height: calc(100vh - 66px - 44px);
+}
+
+@media (max-width: 860px) {
+  .main-wrap {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+  .left {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  header { padding: 14px 20px; }
+  .right { padding: 20px; }
+  footer { padding: 10px 20px; }
+}
+
+/* ─── LEFT PANEL ─── */
+.left {
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-head {
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-title {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 240px;
+  padding: 20px 24px;
+  border: none;
+  outline: none;
+  resize: vertical;
+  font-family: 'Nunito Sans', sans-serif;
+  font-size: 0.85rem;
+  line-height: 1.75;
+  color: var(--ink);
+  background: transparent;
+}
+textarea::placeholder { color: #c8c0b8; }
+
+.left-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.format-hint {
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.6;
+  background: #f7f3ff;
+  border-radius: 6px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--c1);
+}
+.format-hint code {
+  font-size: 0.68rem;
+  background: rgba(124,92,191,0.12);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: monospace;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  flex: 1;
+  padding: 11px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-parse {
+  background: var(--accent);
+  color: white;
+}
+.btn-parse:hover { background: #6a4daa; }
+.btn-export {
+  background: #eef8f2;
+  color: #2d7a4f;
+  border: 1px solid #a8ddb8;
+}
+.btn-export:hover { background: #dff2e8; }
+.btn-export:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-clean {
+  background: #fdf6e8;
+  color: #8a5e12;
+  border: 1px solid #f9c97a;
+  flex: 0 0 auto;
+  padding: 11px 14px;
+}
+.btn-clean:hover { background: #fcefd0; }
+
+/* ─── RIGHT: PREVIEW ─── */
+.right {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 32px 40px;
+  background: var(--bg);
+}
+
+.lz-page {
+  background: white;
+  max-width: 100%;
+  width: 100%;
+  margin: 0 auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  overflow: hidden;
+  padding: 0 0 24px;
+}
+
+.lz-doc-title {
+  background: #f7f3ff;
+  padding: 22px 32px 16px;
+  border-bottom: 2px solid var(--c1);
+}
+.lz-doc-title h1 {
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lz-doc-title h1::before {
+  content: '';
+  display: inline-block;
+  width: 14px; height: 14px;
+  background: var(--accent);
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.lz-doc-subtitle {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 6px;
+  padding-left: 24px;
+  font-weight: 600;
+}
+
+.lz-body { padding: 20px 32px 0; }
+
+.lz-section {
+  margin-bottom: 22px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lz-section-title {
+  padding: 9px 16px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.lz-bullets {
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lz-bullet {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.lz-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.lz-sub-bullet {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.77rem;
+  color: #5a5450;
+  line-height: 1.5;
+  padding-left: 20px;
+}
+.lz-subdot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.lz-label-bullet {
+  display: flex;
+  align-items: flex-start;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #3a3430;
+  line-height: 1.55;
+  padding-left: 2px;
+  margin-top: 2px;
+}
+.lz-sub-label {
+  display: flex;
+  align-items: flex-start;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.77rem;
+  font-weight: 800;
+  color: #3a3430;
+  line-height: 1.5;
+  padding-left: 20px;
+  margin-top: 2px;
+}
+.lz-sub-sub-bullet {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: #6a6460;
+  line-height: 1.5;
+  padding-left: 38px;
+}
+
+.lz-callout {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lz-callout::before {
+  content: '■■';
+  font-size: 0.55rem;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+
+.lz-merksatz {
+  margin: 20px 32px 8px;
+  background: #f7f3ff;
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.lz-merksatz-icon {
+  width: 28px; height: 28px;
+  background: var(--accent);
+  border-radius: 6px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.lz-merksatz-title {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 0.8rem;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.lz-merksatz-text {
+  font-size: 0.78rem;
+  color: #5a4a7a;
+  line-height: 1.55;
+  font-style: italic;
+}
+
+.lz-page-num {
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--muted);
+  gap: 12px;
+}
+.empty-icon { font-size: 2.5rem; opacity: 0.4; }
+.empty-text { font-size: 0.85rem; text-align: center; max-width: 260px; line-height: 1.6; }
+
+/* status */
+.status {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 4px 0;
+}
+
+footer {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  padding: 10px 40px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Section color cycling */
+.sc0 .lz-section-title { background: var(--cbg2); color: #b03050; }
+.sc0 .lz-dot { background: #f4a8b0; }
+.sc0 .lz-subdot { background: #f4a8b0; }
+.sc1 .lz-section-title { background: var(--cbg3); color: #2d7a4f; }
+.sc1 .lz-dot { background: #a8ddb8; }
+.sc1 .lz-subdot { background: #a8ddb8; }
+.sc2 .lz-section-title { background: var(--cbg4); color: #8a5e12; }
+.sc2 .lz-dot { background: #f9c97a; }
+.sc2 .lz-subdot { background: #f9c97a; }
+.sc3 .lz-section-title { background: var(--cbg5); color: #1a5f8a; }
+.sc3 .lz-dot { background: #a8cff4; }
+.sc3 .lz-subdot { background: #a8cff4; }
+.sc4 .lz-section-title { background: var(--cbg1); color: #5a2d9a; }
+.sc4 .lz-dot { background: #c8b4e8; }
+.sc4 .lz-subdot { background: #c8b4e8; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">TextCraft</div>
+    <div class="logo-sub">Lernzettel Generator</div>
+  </div>
+</header>
+
+<div class="main-wrap">
+  <!-- LEFT: Input -->
+  <div class="left">
+    <div class="panel-head">
+      <div class="panel-title">Text eingeben</div>
+    </div>
+    <textarea id="inputText" placeholder="# Haupttitel
+## Untertitel / Seitenangabe
+
+1. Erster Abschnitt
+- Bullet Punkt
+  - Sub-Bullet
+  - Noch ein Sub-Bullet
+- Weiterer Punkt
+** Wichtiger Hinweis / Callout **
+
+2. Zweiter Abschnitt
+- Punkt A
+- Punkt B
+
+> Kurz-Merksatz: Der wichtigste Satz steht hier."></textarea>
+
+    <div class="left-footer">
+      <div class="format-hint">
+        <strong>Format-Hilfe:</strong><br>
+        <code># Titel</code> → Dokumenttitel &nbsp;
+        <code>## Untertitel</code> → Untertitel<br>
+        <code>1. Abschnitt</code> → farbige Section<br>
+        <code>- Bullet</code> → Punkt &nbsp;
+        <code>&nbsp;&nbsp;- Sub</code> → Unterpunkt<br>
+        <code>** Text **</code> → Callout-Box<br>
+        <code>&gt; Merksatz: ...</code> → Merksatz unten
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-clean" onclick="cleanFiller()" title="KI-Floskeln entfernen">🧹 Bereinigen</button>
+        <button class="btn btn-parse" onclick="parseAndRender()">Vorschau erzeugen →</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-export" id="exportBtn" onclick="exportPDF()" disabled>⬇ Als PDF exportieren</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Preview -->
+  <div class="right" id="rightPanel">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">📄</div>
+      <div class="empty-text">Text eingeben und auf „Vorschau erzeugen" klicken — dein Lernzettel erscheint hier.</div>
+    </div>
+    <div id="lzPreview" style="display:none"></div>
+  </div>
+</div>
+
+<footer>
+  <span>TextCraft — Schöne Lernzettel aus strukturiertem Text</span>
+  <span>Kein Account, keine Cloud — lokal im Browser</span>
+</footer>
+
+<script>
+// ── FLOSKEL CLEANER ──────────────────────────────────────────
+const floskeln = [
+  /\bIn der heutigen schnelllebigen Welt\b/gi,
+  /\bZusammenfassend lässt sich sagen,?\s*/gi,
+  /\bAbschließend lässt sich festhalten,?\s*/gi,
+  /\bEs ist wichtig zu (beachten|betonen|erwähnen),? dass\s*/gi,
+  /\bLetztendlich\b/gi,
+  /\bIm Großen und Ganzen\b/gi,
+  /\bInsgesamt gesehen\b/gi,
+  /\bEs sei darauf hingewiesen, dass\s*/gi,
+  /\bNicht zu vergessen (ist|sind|wäre),?\s*/gi,
+  /\bSelbstverständlich\b/gi,
+  /\bVerständlicherweise\b/gi,
+  /\bIn diesem Kontext\b/gi,
+  /\bDies verdeutlicht,?\s*/gi,
+  /\bwie bereits erwähnt\b/gi,
+  /\bwie oben beschrieben\b/gi,
+];
+
+function cleanFiller() {
+  let text = document.getElementById('inputText').value;
+  let count = 0;
+  floskeln.forEach(re => {
+    const before = text;
+    text = text.replace(re, '');
+    if (text !== before) count++;
+  });
+  // clean up double spaces/newlines
+  text = text.replace(/ {2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  document.getElementById('inputText').value = text;
+  setStatus(count > 0 ? `✓ ${count} Floskel(n) entfernt` : '✓ Keine typischen Floskeln gefunden');
+}
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+  setTimeout(() => document.getElementById('status').textContent = '', 3000);
+}
+
+// ── PARSER ────────────────────────────────────────────────────
+function parseText(raw) {
+  const lines = raw.split('\n');
+  const doc = { title: '', subtitle: '', sections: [], merksatz: null };
+  let currentSection = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith('# ')) {
+      doc.title = trimmed.slice(2).trim();
+    } else if (trimmed.startsWith('## ')) {
+      doc.subtitle = trimmed.slice(3).trim();
+    } else if (/^\d+\.\s/.test(trimmed)) {
+      currentSection = { title: trimmed.replace(/^\d+\.\s*/, ''), items: [], callout: null };
+      doc.sections.push(currentSection);
+    } else if (trimmed.startsWith('> ')) {
+      doc.merksatz = trimmed.slice(2).trim();
+    } else if (/^\*\*(.+)\*\*$/.test(trimmed)) {
+      const text = trimmed.replace(/^\*\*|\*\*$/g, '');
+      if (currentSection) currentSection.callout = text;
+      else doc.sections.push({ title: null, items: [], callout: text });
+    } else if (trimmed.startsWith('- ') || trimmed.startsWith('\u2022 ')) {
+      const text = trimmed.replace(/^[-\u2022]\s*/, '');
+      const indent = line.search(/\S/);
+      if (!currentSection) {
+        currentSection = { title: '', items: [], callout: null };
+        doc.sections.push(currentSection);
+      }
+      if (indent >= 4) {
+        // level 3: sub-sub-bullet
+        const parent = currentSection.items[currentSection.items.length - 1];
+        if (parent && parent.sub) {
+          const lastSub = parent.sub[parent.sub.length - 1];
+          if (lastSub) {
+            if (!lastSub.children) lastSub.children = [];
+            lastSub.children.push(text);
+          }
+        }
+      } else if (indent >= 2) {
+        // level 2: sub-bullet (may be a label ending with colon)
+        const parent = currentSection.items[currentSection.items.length - 1];
+        if (parent) {
+          if (!parent.sub) parent.sub = [];
+          const isLabel = text.trimEnd().endsWith(':');
+          parent.sub.push({ text, isLabel, children: [] });
+        }
+      } else {
+        // level 1
+        const isLabel = text.trimEnd().endsWith(':');
+        currentSection.items.push({ text, isLabel, sub: [] });
+      }
+    }
+  }
+  return doc;
+}
+
+// ── RENDERER ──────────────────────────────────────────────────
+const sectionColors = [
+  { bg: '#fdf0f2', title: '#d44060', dot: '#f4a8b0' },
+  { bg: '#eef8f2', title: '#2d7a4f', dot: '#a8ddb8' },
+  { bg: '#fdf6e8', title: '#8a5e12', dot: '#f9c97a' },
+  { bg: '#eaf4fd', title: '#1a5f8a', dot: '#a8cff4' },
+  { bg: '#f3edfb', title: '#5a2d9a', dot: '#c8b4e8' },
+];
+const calloutColors = [
+  '#fdf0f2', '#eef8f2', '#fdf6e8', '#eaf4fd', '#f3edfb'
+];
+
+function renderDoc(doc) {
+  let html = `<div class="lz-page">`;
+
+  // Title block
+  html += `<div class="lz-doc-title">`;
+  html += `<h1>${doc.title || 'Lernzettel'}</h1>`;
+  if (doc.subtitle) html += `<div class="lz-doc-subtitle">${doc.subtitle}</div>`;
+  html += `</div>`;
+
+  html += `<div class="lz-body">`;
+
+  doc.sections.forEach((sec, si) => {
+    const ci = si % sectionColors.length;
+    const c = sectionColors[ci];
+
+    html += `<div class="lz-section">`;
+
+    if (sec.title) {
+      html += `<div class="lz-section-title" style="background:${c.bg};color:${c.title}">${si + 1}.&nbsp; ${sec.title}</div>`;
+    }
+
+    if (sec.callout) {
+      html += `<div class="lz-callout" style="background:${c.bg};color:${c.title};border-left:3px solid ${c.dot}">${sec.callout}</div>`;
+    }
+
+    if (sec.items.length) {
+      html += `<div class="lz-bullets">`;
+      sec.items.forEach(item => {
+        if (item.isLabel) {
+          // Label bullet: bold text, no dot, acts as group header
+          html += `<div class="lz-label-bullet"><span>${item.text}</span></div>`;
+        } else {
+          html += `<div class="lz-bullet"><div class="lz-dot" style="background:${c.dot}"></div><span>${item.text}</span></div>`;
+        }
+        if (item.sub) item.sub.forEach(s => {
+          if (s.isLabel) {
+            html += `<div class="lz-sub-label"><span>${s.text}</span></div>`;
+            if (s.children) s.children.forEach(ch => {
+              html += `<div class="lz-sub-sub-bullet"><div class="lz-subdot" style="background:${c.dot};opacity:0.6"></div><span>${ch}</span></div>`;
+            });
+          } else {
+            html += `<div class="lz-sub-bullet"><div class="lz-subdot" style="background:${c.dot}"></div><span>${s.text}</span></div>`;
+            if (s.children) s.children.forEach(ch => {
+              html += `<div class="lz-sub-sub-bullet"><div class="lz-subdot" style="background:${c.dot};opacity:0.6"></div><span>${ch}</span></div>`;
+            });
+          }
+        });
+      });
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+  });
+
+  html += `</div>`; // lz-body
+
+  if (doc.merksatz) {
+    // Split "Label: text" if present
+    const ms = doc.merksatz;
+    const colon = ms.indexOf(':');
+    const msTitle = colon > -1 ? ms.slice(0, colon).replace(/^Merksatz\s*/i, '').trim() || 'Kurz-Merksatz' : 'Kurz-Merksatz';
+    const msText = colon > -1 ? ms.slice(colon + 1).trim() : ms;
+    html += `<div class="lz-merksatz">
+      <div class="lz-merksatz-icon"></div>
+      <div>
+        <div class="lz-merksatz-title">${msTitle || 'Kurz-Merksatz'}</div>
+        <div class="lz-merksatz-text">${msText}</div>
+      </div>
+    </div>`;
+  }
+
+  html += `<div class="lz-page-num">— 1 —</div>`;
+  html += `</div>`;
+  return html;
+}
+
+// ── MAIN ACTIONS ─────────────────────────────────────────────
+let parsedDoc = null;
+
+function parseAndRender() {
+  const raw = document.getElementById('inputText').value.trim();
+  if (!raw) { setStatus('Bitte Text eingeben'); return; }
+
+  parsedDoc = parseText(raw);
+  const html = renderDoc(parsedDoc);
+
+  document.getElementById('emptyState').style.display = 'none';
+  const lzPreview = document.getElementById('lzPreview');
+  lzPreview.style.display = 'block';
+  lzPreview.innerHTML = html;
+
+  document.getElementById('exportBtn').disabled = false;
+  setStatus('✓ Vorschau aktualisiert');
+}
+
+// ── PDF EXPORT ────────────────────────────────────────────────
+function exportPDF() {
+  if (!parsedDoc) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  const pageW = 210, margin = 20, cw = pageW - margin * 2;
+  let y = margin;
+
+  const colors = [
+    { bg: [253,240,242], title: [212,64,96], dot: [244,168,176] },
+    { bg: [238,248,242], title: [45,122,79], dot: [168,221,184] },
+    { bg: [253,246,232], title: [138,94,18], dot: [249,201,122] },
+    { bg: [234,244,253], title: [26,95,138], dot: [168,207,244] },
+    { bg: [243,237,251], title: [90,45,154], dot: [200,180,232] },
+  ];
+
+  function checkPage(needed = 10) {
+    if (y + needed > 280) { doc.addPage(); y = margin; }
+  }
+
+  function setRGB(col) { doc.setTextColor(col[0], col[1], col[2]); }
+  function setFill(col) { doc.setFillColor(col[0], col[1], col[2]); }
+
+  // Title block
+  setFill([247, 243, 255]);
+  doc.rect(margin - 4, y - 2, cw + 8, 18, 'F');
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  setRGB([45, 41, 38]);
+  // small square
+  setFill([124, 92, 191]);
+  doc.rect(margin, y + 2, 4, 4, 'F');
+  doc.text(parsedDoc.title || 'Lernzettel', margin + 8, y + 6);
+  y += 12;
+  if (parsedDoc.subtitle) {
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    setRGB([140, 130, 120]);
+    doc.text(parsedDoc.subtitle, margin + 8, y);
+    y += 6;
+  }
+  y += 4;
+
+  // Sections
+  parsedDoc.sections.forEach((sec, si) => {
+    const ci = si % colors.length;
+    const c = colors[ci];
+
+    checkPage(16);
+
+    if (sec.title) {
+      setFill(c.bg);
+      doc.roundedRect(margin, y, cw, 8, 2, 2, 'F');
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'bold');
+      setRGB(c.title);
+      doc.text(`${si + 1}.  ${sec.title}`, margin + 5, y + 5.5);
+      y += 11;
+    }
+
+    if (sec.callout) {
+      checkPage(10);
+      setFill(c.bg);
+      doc.rect(margin, y, cw, 8, 'F');
+      setFill(c.dot);
+      doc.rect(margin, y, 2, 8, 'F');
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bolditalic');
+      setRGB(c.title);
+      const cLines = doc.splitTextToSize(sec.callout, cw - 10);
+      doc.text(cLines, margin + 6, y + 5.5);
+      y += cLines.length * 5 + 4;
+    }
+
+    sec.items.forEach(item => {
+      checkPage(8);
+      if (item.isLabel) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        setRGB([74, 68, 64]);
+        const lines = doc.splitTextToSize(item.text, cw - 8);
+        doc.text(lines, margin + 2, y + 3.5);
+        y += lines.length * 4.5 + 1;
+      } else {
+        setFill(c.dot);
+        doc.circle(margin + 2, y + 2, 1.5, 'F');
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        setRGB([45, 41, 38]);
+        const lines = doc.splitTextToSize(item.text, cw - 8);
+        doc.text(lines, margin + 6, y + 3.5);
+        y += lines.length * 4.5 + 2;
+      }
+
+      if (item.sub) item.sub.forEach(s => {
+        checkPage(7);
+        if (s.isLabel) {
+          doc.setFontSize(7.5);
+          doc.setFont('helvetica', 'bold');
+          setRGB([74, 68, 64]);
+          const sLines = doc.splitTextToSize(s.text, cw - 16);
+          doc.text(sLines, margin + 10, y + 3);
+          y += sLines.length * 4.2 + 1;
+        } else {
+          setFill(c.dot);
+          doc.circle(margin + 8, y + 1.8, 1.1, 'F');
+          doc.setFontSize(7.5);
+          doc.setFont('helvetica', 'normal');
+          setRGB([90, 84, 80]);
+          const sLines = doc.splitTextToSize(s.text, cw - 16);
+          doc.text(sLines, margin + 12, y + 3);
+          y += sLines.length * 4.2 + 1.5;
+        }
+        if (s.children) s.children.forEach(ch => {
+          checkPage(6);
+          setFill(c.dot);
+          doc.circle(margin + 16, y + 1.6, 0.9, 'F');
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'normal');
+          setRGB([106, 100, 96]);
+          const chLines = doc.splitTextToSize(ch, cw - 24);
+          doc.text(chLines, margin + 20, y + 2.8);
+          y += chLines.length * 4 + 1;
+        });
+      });
+    });
+
+    y += 4;
+  });
+
+  // Merksatz
+  if (parsedDoc.merksatz) {
+    checkPage(20);
+    y += 4;
+    setFill([247, 243, 255]);
+    doc.roundedRect(margin, y, cw, 18, 3, 3, 'F');
+    setFill([124, 92, 191]);
+    doc.rect(margin + 4, y + 4, 7, 7, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    setRGB([45, 41, 38]);
+    doc.text('Kurz-Merksatz', margin + 15, y + 8);
+    doc.setFont('helvetica', 'italic');
+    setRGB([90, 45, 154]);
+    const ms = parsedDoc.merksatz.includes(':') ? parsedDoc.merksatz.split(':').slice(1).join(':').trim() : parsedDoc.merksatz;
+    const msLines = doc.splitTextToSize(ms, cw - 20);
+    doc.text(msLines, margin + 15, y + 14);
+    y += 22;
+  }
+
+  // Page number
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  setRGB([160, 155, 145]);
+  doc.text('— 1 —', pageW / 2, 288, { align: 'center' });
+
+  doc.save('lernzettel.pdf');
+  setStatus('✓ PDF heruntergeladen!');
+}
+
+// Load example on start
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('inputText').value = `# Nationale Feindbilder & Propaganda
+## im Ersten Weltkrieg (S. 187 / 188)
+
+1. Ausgangslage: »Erbfeindschaft«
+- Langjährige Spannung zwischen Deutschland und Frankreich
+- Nach 1870/71 stark verstärkt (Krieg, Elsass-Lothringen)
+- Entwicklung eines gegenseitigen Feindbilds
+- Nationalismus verschärft diese Gegensätze
+
+2. Funktion von Feindbildern im Krieg
+- Feind wird stark vereinfacht und negativ dargestellt
+- Ziele:
+  - Eigene Bevölkerung mobilisieren
+  - Zusammenhalt stärken
+  - Krieg rechtfertigen
+- Feind gilt als Bedrohung für:
+  - Kultur, Werte & Existenz der Nation
+** Feindbilder = bewusste Konstruktionen, KEINE objektive Realität! **
+
+3. Rolle der Propaganda
+- Staat steuert gezielt Informationen
+- Medien:
+  - Zeitungen, Bilder / Karikaturen, Plakate
+- Ziele:
+  - Kriegsunterstützung sichern
+  - Moral stärken («Wir sind überlegen»)
+  - Gegner entmenschlichen
+
+> Kurz-Merksatz: Propaganda verzerrt die Realität, um Feindbilder zu erzeugen, die den Krieg legitimieren und die Bevölkerung mobilisieren.`;
+});
+</script>
+</body>
+</html>
