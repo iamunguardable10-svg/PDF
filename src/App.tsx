@@ -7,6 +7,7 @@ import { ShoppingList } from './components/ShoppingList';
 import { ACWRSection } from './components/ACWRSection';
 import { Onboarding } from './components/Onboarding';
 import { ProfileSettings } from './components/ProfileSettings';
+import { AppTour } from './components/AppTour';
 import { wearableData as mockWearable, trainingGoals, recentActivities } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { loadProfile, saveProfile } from './lib/profileStorage';
@@ -23,6 +24,7 @@ function App() {
 
   // Profile — load from localStorage, show onboarding if not completed
   const [profile, setProfile] = useState<AthleteProfile>(() => loadProfile());
+  const [showTour, setShowTour] = useState(() => !localStorage.getItem('fitfuel_tour_done'));
 
   // Wearable data (starts as mock, editable by user)
   const [wearable, setWearable] = useState<WearableData>(mockWearable);
@@ -50,6 +52,11 @@ function App() {
   }, [profile]);
 
   /* ── Onboarding ── */
+  const handleTourDone = () => {
+    localStorage.setItem('fitfuel_tour_done', '1');
+    setShowTour(false);
+  };
+
   const handleOnboardingComplete = (p: AthleteProfile) => {
     setProfile(p);
     saveProfile(p);
@@ -229,6 +236,9 @@ function App() {
           onClose={() => setShowSettings(false)}
         />
       )}
+
+      {/* App tour — shown once on first launch */}
+      {showTour && <AppTour onDone={handleTourDone} />}
     </div>
   );
 }

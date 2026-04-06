@@ -78,6 +78,27 @@ export const DEFAULT_PROFILE: AthleteProfile = {
   onboardingCompleted: false,
 };
 
+/** BMI */
+export function calcBMI(profile: AthleteProfile): number {
+  const hm = profile.height / 100;
+  return Math.round((profile.weight / (hm * hm)) * 10) / 10;
+}
+
+export function bmiLabel(bmi: number): { label: string; color: string } {
+  if (bmi < 18.5) return { label: 'Untergewicht', color: 'text-blue-400' };
+  if (bmi < 25)   return { label: 'Normalgewicht', color: 'text-green-400' };
+  if (bmi < 30)   return { label: 'Übergewicht', color: 'text-yellow-400' };
+  return             { label: 'Adipositas', color: 'text-red-400' };
+}
+
+/** Grundumsatz (BMR) nach Harris-Benedict */
+export function calcBMR(profile: AthleteProfile): number {
+  if (profile.gender === 'weiblich') {
+    return Math.round(447.593 + (9.247 * profile.weight) + (3.098 * profile.height) - (4.330 * profile.age));
+  }
+  return Math.round(88.362 + (13.397 * profile.weight) + (4.799 * profile.height) - (5.677 * profile.age));
+}
+
 /** Berechnet den täglichen Kalorienbedarf basierend auf Profil */
 export function calcTDEE(profile: AthleteProfile, acwr?: number | null): number {
   // Harris-Benedict BMR

@@ -3,6 +3,7 @@ import type { AthleteProfile, AthleteLevel, PrimaryGoal, Gender } from '../types
 import {
   LEVEL_LABELS, LEVEL_DESC, LEVEL_EMOJI,
   GOAL_LABELS, GOAL_EMOJI, DEFAULT_PROFILE,
+  calcBMI, bmiLabel, calcBMR, calcTDEE, calcMacros,
 } from '../types/profile';
 
 interface Props {
@@ -193,21 +194,59 @@ export function Onboarding({ onComplete }: Props) {
               </div>
 
               {/* Zusammenfassung */}
-              <div className="bg-gray-800/50 rounded-2xl p-4 space-y-2 text-sm">
-                <div className="font-semibold text-white mb-2">Dein Profil</div>
-                {[
-                  ['👤', profile.name],
-                  ['🏅', LEVEL_LABELS[profile.level]],
-                  ['⚽', profile.sport],
-                  ['🎯', GOAL_LABELS[profile.primaryGoal]],
-                  ['📏', `${profile.weight}kg · ${profile.height}cm · ${profile.age}J`],
-                  ['🏋️', `${profile.weeklyTrainings}× Training/Woche`],
-                ].map(([icon, val]) => (
-                  <div key={icon} className="flex gap-2 text-gray-300">
-                    <span>{icon}</span><span>{val}</span>
+              {(() => {
+                const bmi = calcBMI(profile);
+                const { label: bmiLbl, color: bmiColor } = bmiLabel(bmi);
+                const bmr = calcBMR(profile);
+                const tdee = calcTDEE(profile);
+                const macros = calcMacros(profile, tdee);
+                return (
+                  <div className="space-y-2">
+                    <div className="bg-gray-800/50 rounded-2xl p-4 space-y-1.5 text-sm">
+                      <div className="font-semibold text-white mb-2">Dein Profil</div>
+                      {[
+                        ['👤', profile.name],
+                        ['🏅', LEVEL_LABELS[profile.level]],
+                        ['⚽', profile.sport],
+                        ['🎯', GOAL_LABELS[profile.primaryGoal]],
+                        ['📏', `${profile.weight}kg · ${profile.height}cm · ${profile.age}J`],
+                        ['🏋️', `${profile.weeklyTrainings}× Training/Woche`],
+                      ].map(([icon, val]) => (
+                        <div key={icon} className="flex gap-2 text-gray-300">
+                          <span>{icon}</span><span>{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Berechnete Werte */}
+                    <div className="bg-gray-800/50 rounded-2xl p-4 text-sm space-y-2">
+                      <div className="font-semibold text-white mb-1">Berechnete Werte</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-gray-900/60 rounded-xl p-2.5">
+                          <div className="text-xs text-gray-500">BMI</div>
+                          <div className={`text-lg font-bold ${bmiColor}`}>{bmi}</div>
+                          <div className={`text-xs ${bmiColor}`}>{bmiLbl}</div>
+                        </div>
+                        <div className="bg-gray-900/60 rounded-xl p-2.5">
+                          <div className="text-xs text-gray-500">Grundumsatz</div>
+                          <div className="text-lg font-bold text-white">{bmr}</div>
+                          <div className="text-xs text-gray-500">kcal/Tag</div>
+                        </div>
+                        <div className="bg-gray-900/60 rounded-xl p-2.5">
+                          <div className="text-xs text-gray-500">Leistungsumsatz</div>
+                          <div className="text-lg font-bold text-violet-400">{tdee}</div>
+                          <div className="text-xs text-gray-500">kcal/Tag</div>
+                        </div>
+                        <div className="bg-gray-900/60 rounded-xl p-2.5">
+                          <div className="text-xs text-gray-500">Protein</div>
+                          <div className="text-lg font-bold text-orange-400">{macros.protein}g</div>
+                          <div className="text-xs text-gray-500">tägl. Ziel</div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">Leistungsumsatz passt sich dynamisch an deinen ACWR an</p>
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
           )}
 

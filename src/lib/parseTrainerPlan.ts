@@ -39,7 +39,14 @@ Heute: ${today} | Monat/Jahr: ${month}/${year}
 Wochentage → Datum:
 ${dayTable}
 
-Erlaubte TE-Typen: ${TRAINING_UNITS.join(', ')}
+Erlaubte TE-Typen (EXAKT so schreiben):
+- Team       → Mannschaftstraining, Teamtraining, Training
+- S&C        → Kraft, Kraftraum, Gym, Athletik, Fitness, Kondition
+- Spiel      → Match, Wettkampf, Partie, Heimspiel, Auswärtsspiel
+- Aufwärmen  → Warm-up, Einlaufen, Aufwärmen
+- Indi       → Individuell, Einzeltraining, Extra
+- Schulsport → Schule, PE, Sport
+- Prävention → Physio, Reha, Prävention, Regen, Regeneration
 
 Trainer-Nachricht:
 ---
@@ -62,10 +69,10 @@ Antworte NUR mit diesem JSON (kein Text davor/danach):
 
 Regeln:
 - datum immer YYYY-MM-DD
-- te exakt aus der Liste: ${TRAINING_UNITS.join(', ')}
-- Spiel + Aufwärmen = zwei separate Sessions
-- geschaetzteDauer in Minuten (Team≈90, S&C≈60, Spiel≈40, Aufwärmen≈30)
-- Ruhetage NICHT aufführen
+- te MUSS exakt eines sein von: ${TRAINING_UNITS.join(', ')} — kein anderer Wert erlaubt
+- Aufwärmen wird automatisch zu Spielen hinzugefügt, du musst es NICHT einfügen
+- geschaetzteDauer in Minuten (Team≈90, S&C≈60, Spiel≈90, Aufwärmen≈30)
+- Ruhetage/Pause/frei NICHT aufführen
 - uhrzeit nur wenn angegeben, sonst weglassen`;
 
   const stream = await client.chat.completions.create({
@@ -91,13 +98,30 @@ Regeln:
 
   const parsed = JSON.parse(jsonStr);
 
+  // Fuzzy-Normalisierung: falls Modell einen ungültigen TE-Typ liefert → auf nächsten erlaubten mappen
+  const TE_ALIASES: Record<string, TrainingUnit> = {
+    team: 'Team', mannschaft: 'Team', training: 'Team', gruppentraining: 'Team',
+    'sc': 'S&C', 's&c': 'S&C', kraft: 'S&C', gym: 'S&C', athletik: 'S&C', fitness: 'S&C', kondition: 'S&C',
+    spiel: 'Spiel', match: 'Spiel', wettkampf: 'Spiel', partie: 'Spiel', heimspiel: 'Spiel', auswärtsspiel: 'Spiel',
+    aufwärmen: 'Aufwärmen', warmup: 'Aufwärmen', 'warm-up': 'Aufwärmen', einlaufen: 'Aufwärmen',
+    indi: 'Indi', individuell: 'Indi', einzeltraining: 'Indi', extra: 'Indi',
+    schulsport: 'Schulsport', schule: 'Schulsport', pe: 'Schulsport',
+    prävention: 'Prävention', physio: 'Prävention', reha: 'Prävention', regeneration: 'Prävention', regen: 'Prävention',
+  };
+
+  function normalizeTE(raw: string): TrainingUnit {
+    const key = raw.toLowerCase().trim().replace(/\s+/g, '');
+    if ((TRAINING_UNITS as string[]).includes(raw)) return raw as TrainingUnit;
+    return TE_ALIASES[key] ?? TE_ALIASES[raw.toLowerCase()] ?? 'Team';
+  }
+
   const sessions: PlannedSession[] = (parsed.sessions ?? []).map((s: {
     datum: string; te: TrainingUnit; uhrzeit?: string;
     geschaetzteDauer?: number; notiz?: string;
   }) => ({
     id: `plan-${s.datum}-${s.te}-${Math.random().toString(36).slice(2, 6)}`,
     datum: s.datum,
-    te: s.te,
+    te: normalizeTE(s.te),
     uhrzeit: s.uhrzeit,
     geschaetzteDauer: s.geschaetzteDauer,
     notiz: s.notiz,

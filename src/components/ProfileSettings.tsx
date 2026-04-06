@@ -3,6 +3,7 @@ import type { AthleteProfile, AthleteLevel, PrimaryGoal, Gender } from '../types
 import {
   LEVEL_LABELS, LEVEL_DESC, LEVEL_EMOJI,
   GOAL_LABELS, GOAL_EMOJI,
+  calcBMI, bmiLabel, calcBMR, calcTDEE, calcMacros,
 } from '../types/profile';
 
 const SPORTS = ['Basketball', 'Fußball', 'Volleyball', 'Handball', 'Leichtathletik', 'Schwimmen', 'Radfahren', 'Fitness / Gym', 'Tennis', 'Sonstiges'];
@@ -165,6 +166,40 @@ export function ProfileSettings({ profile: initial, onSave, onClose }: Props) {
             />
           </section>
         </div>
+
+        {/* Computed stats */}
+        {(() => {
+          const bmi = calcBMI(profile);
+          const { label: bmiLbl, color: bmiColor } = bmiLabel(bmi);
+          const bmr = calcBMR(profile);
+          const tdee = calcTDEE(profile);
+          const macros = calcMacros(profile, tdee);
+          return (
+            <div className="px-5 pb-4">
+              <h3 className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">Berechnete Werte</h3>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <div className="text-xs text-gray-500">BMI</div>
+                  <div className={`text-xl font-bold ${bmiColor}`}>{bmi}</div>
+                  <div className={`text-xs ${bmiColor}`}>{bmiLbl}</div>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <div className="text-xs text-gray-500">Grundumsatz</div>
+                  <div className="text-xl font-bold text-white">{bmr} <span className="text-xs font-normal text-gray-500">kcal</span></div>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <div className="text-xs text-gray-500">Leistungsumsatz</div>
+                  <div className="text-xl font-bold text-violet-400">{tdee} <span className="text-xs font-normal text-gray-500">kcal</span></div>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <div className="text-xs text-gray-500">Protein-Ziel</div>
+                  <div className="text-xl font-bold text-orange-400">{macros.protein}g</div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-600 mt-2">Leistungsumsatz passt sich beim Ernährungsplan dynamisch an deinen ACWR an</p>
+            </div>
+          );
+        })()}
 
         {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-800">
