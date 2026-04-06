@@ -1,5 +1,7 @@
 import Groq from 'groq-sdk';
 import type { WearableData, TrainingGoal, TrainingActivity } from '../types/health';
+import type { AthleteProfile } from '../types/profile';
+import { calcTDEE, calcMacros, LEVEL_LABELS, GOAL_LABELS } from '../types/profile';
 
 const client = new Groq({
   apiKey: import.meta.env.VITE_GROQ_API_KEY,
@@ -14,6 +16,8 @@ export interface MealPlanRequest {
   activities: TrainingActivity[];
   days: number;
   preferences?: string;
+  profile?: AthleteProfile;
+  acwr?: number | null;
 }
 
 export async function generateMealPlan(
@@ -21,28 +25,64 @@ export async function generateMealPlan(
   onChunk: (text: string) => void,
   onComplete: () => void,
 ): Promise<void> {
-  const { wearable, goal, activities, days, preferences } = request;
+  const { wearable, activities, days, preferences, profile, acwr } = request;
 
   const recentActivitySummary = activities
     .map(a => `- ${a.type} (${a.duration} Min, ${a.caloriesBurned} kcal, ${a.intensity})`)
     .join('\n');
 
-  const prompt = `Du bist ein Ernährungsberater und Fitness-Coach. Erstelle einen detaillierten Ernährungsplan für ${days} Tage auf Basis der folgenden Gesundheitsdaten:
+  // Calculate personalized targets if profile is available
+  let targetCalories: number;
+  let proteinTarget: number;
+  let carbTarget: number;
+  let fatTarget: number;
+  let profileContext = '';
 
-Heutige Wearable-Daten:
+  if (profile) {
+    targetCalories = calcTDEE(profile, acwr);
+    const macros = calcMacros(profile, targetCalories);
+    proteinTarget = macros.protein;
+    carbTarget = macros.carbs;
+    fatTarget = macros.fat;
+
+    const acwrInfo = acwr != null
+      ? `ACWR aktuell: ${acwr.toFixed(2)} (${acwr > 1.3 ? '🔴 Hohe Belastung — Regeneration priorisieren' : acwr > 1.1 ? '🟡 Erhöhte Belastung' : acwr < 0.7 ? '🟢 Leichte Phase' : '🟢 Optimale Zone'})`
+      : 'ACWR: keine Daten';
+
+    profileContext = `
+Athleten-Profil:
+- Name: ${profile.name}
+- Niveau: ${LEVEL_LABELS[profile.level]}
+- Sport: ${profile.sport}
+- Ziel: ${GOAL_LABELS[profile.primaryGoal]}
+- Körper: ${profile.weight}kg, ${profile.height}cm, ${profile.age} Jahre, ${profile.gender === 'weiblich' ? 'weiblich' : profile.gender === 'maennlich' ? 'männlich' : 'divers'}
+- Training: ${profile.weeklyTrainings}× pro Woche
+- ${acwrInfo}
+${profile.dietaryPreferences ? `- Ernährungspräferenzen: ${profile.dietaryPreferences}` : ''}`;
+  } else {
+    targetCalories = request.goal.dailyCalorieTarget;
+    proteinTarget = request.goal.proteinTarget;
+    carbTarget = request.goal.carbTarget;
+    fatTarget = request.goal.fatTarget;
+  }
+
+  const prompt = `Du bist ein Ernährungsberater und Fitness-Coach für Leistungssportler. Erstelle einen detaillierten Ernährungsplan für ${days} Tage.
+${profileContext}
+
+Heutige Aktivitätsdaten (Wearable):
 - Schritte: ${wearable.steps.toLocaleString('de-DE')}
 - Verbrannte Kalorien: ${wearable.caloriesBurned} kcal
 - Herzrate: ${wearable.heartRateAvg} bpm (Max: ${wearable.heartRateMax} bpm)
 - Schlaf: ${wearable.sleepHours}h (${wearable.sleepQuality})
 - Aktive Minuten: ${wearable.activeMinutes} Min
 
-Trainingsziel: ${goal.label}
-- Kalorien/Tag: ${goal.dailyCalorieTarget} kcal
-- Protein: ${goal.proteinTarget}g | KH: ${goal.carbTarget}g | Fett: ${goal.fatTarget}g
-
 Letzte Aktivitäten:
 ${recentActivitySummary}
-${preferences ? `\nPräferenzen: ${preferences}` : ''}
+
+Tagesziele (berechnet auf Basis Profil + ACWR):
+- Kalorien: ${targetCalories} kcal
+- Protein: ${proteinTarget}g | KH: ${carbTarget}g | Fett: ${fatTarget}g
+${preferences ? `\nZusätzliche Präferenzen: ${preferences}` : ''}
 
 Antworte NUR mit diesem JSON (kein Text davor oder danach):
 
@@ -50,7 +90,7 @@ Antworte NUR mit diesem JSON (kein Text davor oder danach):
   "days": [
     {
       "day": "Tag 1 - Montag",
-      "totalCalories": 2800,
+      "totalCalories": ${targetCalories},
       "meals": [
         {
           "name": "Haferflocken mit Früchten",
@@ -72,9 +112,10 @@ Antworte NUR mit diesem JSON (kein Text davor oder danach):
 }
 
 Regeln:
-- 3-4 Mahlzeiten pro Tag
+- 3-4 Mahlzeiten pro Tag, Makros möglichst nah am Tagesziel
 - Zutaten die bei Rewe/Edeka erhältlich sind
-- Kategorien: "Obst & Gemüse", "Fleisch & Fisch", "Milchprodukte", "Getreide & Hülsenfrüchte", "Snacks & Sonstiges"`;
+- Kategorien: "Obst & Gemüse", "Fleisch & Fisch", "Milchprodukte", "Getreide & Hülsenfrüchte", "Snacks & Sonstiges"
+- Tipps auf den ACWR-Wert und das Sportler-Niveau eingehen`;
 
   const stream = await client.chat.completions.create({
     model: MODEL,

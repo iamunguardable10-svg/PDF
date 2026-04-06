@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
 import type { WearableData, TrainingGoal, TrainingActivity, DayMealPlan, ShoppingItem } from '../types/health';
+import type { AthleteProfile } from '../types/profile';
+import { calcTDEE, calcMacros } from '../types/profile';
 import { generateMealPlan } from '../lib/claudeApi';
 
 interface Props {
@@ -7,9 +9,14 @@ interface Props {
   goal: TrainingGoal;
   activities: TrainingActivity[];
   onPlanGenerated: (plan: DayMealPlan[], shopping: ShoppingItem[], tips: string) => void;
+  profile?: AthleteProfile;
+  acwr?: number | null;
 }
 
-export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated }: Props) {
+export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated, profile, acwr }: Props) {
+  // Compute personalized targets for display
+  const tdee = profile ? calcTDEE(profile, acwr) : goal.dailyCalorieTarget;
+  const macros = profile ? calcMacros(profile, tdee) : { protein: goal.proteinTarget, carbs: goal.carbTarget, fat: goal.fatTarget };
   const [days, setDays] = useState(5);
   const [preferences, setPreferences] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,7 +35,7 @@ export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated 
 
     try {
       await generateMealPlan(
-        { wearable, goal, activities, days, preferences },
+        { wearable, goal, activities, days, preferences, profile, acwr },
         (chunk) => {
           if (abortRef.current) return;
           accumulated += chunk;
@@ -72,8 +79,41 @@ export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated 
         <span className="text-2xl">🤖</span>
         <div>
           <h2 className="text-lg font-semibold text-white">KI-Ernährungsplan</h2>
-          <p className="text-sm text-gray-400">Generiert mit Claude basierend auf deinen Daten</p>
+          <p className="text-sm text-gray-400">Personalisiert auf dein Profil & ACWR</p>
         </div>
+      </div>
+
+      {/* Personalized targets banner */}
+      <div className="bg-gray-900 rounded-2xl p-3 border border-gray-800 mb-4 flex flex-wrap gap-4 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-orange-400">🔥</span>
+          <span className="text-gray-400">Kalorienziel:</span>
+          <span className="text-white font-semibold">{tdee} kcal</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span>💪</span>
+          <span className="text-gray-400">Protein:</span>
+          <span className="text-white font-semibold">{macros.protein}g</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span>🌾</span>
+          <span className="text-gray-400">KH:</span>
+          <span className="text-white font-semibold">{macros.carbs}g</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span>🥑</span>
+          <span className="text-gray-400">Fett:</span>
+          <span className="text-white font-semibold">{macros.fat}g</span>
+        </div>
+        {acwr != null && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className={acwr > 1.3 ? 'text-red-400' : acwr < 0.7 ? 'text-blue-400' : 'text-green-400'}>
+              {acwr > 1.3 ? '🔴' : acwr < 0.7 ? '🔵' : '🟢'}
+            </span>
+            <span className="text-gray-400">ACWR:</span>
+            <span className="text-white font-semibold">{acwr.toFixed(2)}</span>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">

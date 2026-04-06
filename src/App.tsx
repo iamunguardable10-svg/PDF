@@ -1,21 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { WearableDashboard } from './components/WearableDashboard';
 import { TrainingSection } from './components/TrainingSection';
 import { MealPlanGenerator } from './components/MealPlanGenerator';
 import { MealPlanView } from './components/MealPlanView';
 import { ShoppingList } from './components/ShoppingList';
 import { ACWRSection } from './components/ACWRSection';
-import { wearableData, trainingGoals, recentActivities } from './lib/mockData';
+import { Onboarding } from './components/Onboarding';
+import { ProfileSettings } from './components/ProfileSettings';
+import { wearableData as mockWearable, trainingGoals, recentActivities } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
-import type { DayMealPlan, ShoppingItem, TrainingGoal } from './types/health';
+import { loadProfile, saveProfile } from './lib/profileStorage';
+import { calculateACWR, getCurrentACWR } from './lib/acwrCalculations';
+import type { DayMealPlan, ShoppingItem, TrainingGoal, WearableData } from './types/health';
 import type { Session, PlannedSession } from './types/acwr';
+import type { AthleteProfile } from './types/profile';
 
 type Tab = 'dashboard' | 'acwr';
 
-const PLAYER_NAME = 'Athlet';
-
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Profile — load from localStorage, show onboarding if not completed
+  const [profile, setProfile] = useState<AthleteProfile>(() => loadProfile());
+
+  // Wearable data (starts as mock, editable by user)
+  const [wearable, setWearable] = useState<WearableData>(mockWearable);
 
   // Dashboard state
   const [selectedGoal, setSelectedGoal] = useState<TrainingGoal>(trainingGoals[0]);
@@ -29,26 +39,44 @@ function App() {
 
   const pendingCount = plannedSessions.filter(s => !s.confirmed).length;
 
+  // Current ACWR value (for meal plan personalization)
+  const acwrDataPoints = sessions.length > 0 ? calculateACWR(sessions) : [];
+  const currentACWRPoint = acwrDataPoints.length > 0 ? getCurrentACWR(acwrDataPoints) : null;
+  const acwr = currentACWRPoint?.acwr ?? null;
+
+  // Persist profile whenever it changes (but only after onboarding)
+  useEffect(() => {
+    if (profile.onboardingCompleted) saveProfile(profile);
+  }, [profile]);
+
+  /* ── Onboarding ── */
+  const handleOnboardingComplete = (p: AthleteProfile) => {
+    setProfile(p);
+    saveProfile(p);
+  };
+
+  const handleProfileSave = (p: AthleteProfile) => {
+    setProfile({ ...p, onboardingCompleted: true });
+  };
+
   /* ── ACWR handlers ── */
 
   const handleAddSession = (s: Session) => setSessions(prev => [...prev, s]);
 
   const handleAddPlanned = (newSessions: PlannedSession[]) =>
     setPlannedSessions(prev => {
-      // Duplikate (gleicher Tag + TE) verhindern
       const existing = new Set(prev.map(s => `${s.datum}-${s.te}`));
       const fresh = newSessions.filter(s => !existing.has(`${s.datum}-${s.te}`));
       return [...prev, ...fresh];
     });
 
-  /** Geplante Session bestätigen → wird als Session gespeichert + aus Pending entfernt */
   const handleConfirmPlanned = (id: string, rpe: number, dauer: number) => {
     const ps = plannedSessions.find(s => s.id === id);
     if (!ps) return;
 
     const newSession: Session = {
       id: `confirmed-${id}`,
-      name: PLAYER_NAME,
+      name: profile.name,
       datum: ps.datum,
       te: ps.te,
       rpe,
@@ -62,11 +90,9 @@ function App() {
     );
   };
 
-  /** Geplante Session nachträglich bearbeiten */
   const handleUpdatePlanned = (id: string, updates: Partial<PlannedSession>) =>
     setPlannedSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
 
-  /** Planned session entfernen */
   const handleDismissPlanned = (id: string) =>
     setPlannedSessions(prev => prev.filter(s => s.id !== id));
 
@@ -80,6 +106,11 @@ function App() {
     setShoppingList(prev => prev.map((item, i) =>
       i === index ? { ...item, checked: !item.checked } : item
     ));
+
+  /* ── Onboarding gate ── */
+  if (!profile.onboardingCompleted) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0b0f] text-white">
@@ -121,7 +152,15 @@ function App() {
             </button>
           </div>
 
-          <div className="ml-auto text-sm text-gray-400">👤 {PLAYER_NAME}</div>
+          {/* Profile button */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="ml-auto flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-xl border border-gray-800 hover:border-gray-600"
+          >
+            <span className="text-base">👤</span>
+            <span className="hidden sm:inline">{profile.name}</span>
+            <span className="text-xs text-gray-600">⚙</span>
+          </button>
         </div>
       </header>
 
@@ -130,7 +169,7 @@ function App() {
         {activeTab === 'dashboard' && (
           <>
             <div className="grid lg:grid-cols-2 gap-6">
-              <WearableDashboard data={wearableData} />
+              <WearableDashboard data={wearable} onDataChange={setWearable} />
               <TrainingSection
                 goals={trainingGoals}
                 selectedGoal={selectedGoal}
@@ -139,10 +178,12 @@ function App() {
               />
             </div>
             <MealPlanGenerator
-              wearable={wearableData}
+              wearable={wearable}
               goal={selectedGoal}
               activities={recentActivities}
               onPlanGenerated={handlePlanGenerated}
+              profile={profile}
+              acwr={acwr}
             />
             {mealPlan.length > 0 ? (
               <div className="grid lg:grid-cols-3 gap-6">
@@ -159,7 +200,7 @@ function App() {
               <div className="text-center py-16 text-gray-600">
                 <div className="text-5xl mb-4">🍽️</div>
                 <p className="text-lg">Generiere deinen ersten KI-Ernährungsplan</p>
-                <p className="text-sm mt-2">Personalisiert auf deine Wearable-Daten & Trainingsziele</p>
+                <p className="text-sm mt-2">Personalisiert auf dein Profil, ACWR & Trainingsziele</p>
               </div>
             )}
           </>
@@ -175,10 +216,19 @@ function App() {
             onConfirmPlanned={handleConfirmPlanned}
             onUpdatePlanned={handleUpdatePlanned}
             onDismissPlanned={handleDismissPlanned}
-            playerName={PLAYER_NAME}
+            playerName={profile.name}
           />
         )}
       </main>
+
+      {/* Profile settings drawer */}
+      {showSettings && (
+        <ProfileSettings
+          profile={profile}
+          onSave={handleProfileSave}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 }
