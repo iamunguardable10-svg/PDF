@@ -91,7 +91,7 @@ Regeln:
 
   const parsed = JSON.parse(jsonStr);
 
-  return (parsed.sessions ?? []).map((s: {
+  const sessions: PlannedSession[] = (parsed.sessions ?? []).map((s: {
     datum: string; te: TrainingUnit; uhrzeit?: string;
     geschaetzteDauer?: number; notiz?: string;
   }) => ({
@@ -104,4 +104,37 @@ Regeln:
     reminderScheduled: false,
     confirmed: false,
   }));
+
+  // Jedes Spiel bekommt automatisch ein Aufwärmen (30 Min vor Spiel),
+  // falls noch keines für diesen Tag existiert.
+  const datesWithAufwaermen = new Set(
+    sessions.filter(s => s.te === 'Aufwärmen').map(s => s.datum)
+  );
+  const aufwaermenToAdd: PlannedSession[] = sessions
+    .filter(s => s.te === 'Spiel' && !datesWithAufwaermen.has(s.datum))
+    .map(s => {
+      // Uhrzeit: 30 Min vor Spielbeginn, falls bekannt
+      let uhrzeit: string | undefined;
+      if (s.uhrzeit) {
+        const [h, m] = s.uhrzeit.split(':').map(Number);
+        const totalMin = h * 60 + m - 30;
+        const wh = Math.floor(Math.max(0, totalMin) / 60).toString().padStart(2, '0');
+        const wm = (Math.max(0, totalMin) % 60).toString().padStart(2, '0');
+        uhrzeit = `${wh}:${wm}`;
+      }
+      return {
+        id: `plan-${s.datum}-Aufwärmen-${Math.random().toString(36).slice(2, 6)}`,
+        datum: s.datum,
+        te: 'Aufwärmen' as TrainingUnit,
+        uhrzeit,
+        geschaetzteDauer: 30,
+        notiz: 'Automatisch vor Spiel eingefügt',
+        reminderScheduled: false,
+        confirmed: false,
+      };
+    });
+
+  return [...sessions, ...aufwaermenToAdd].sort((a, b) =>
+    a.datum.localeCompare(b.datum) || (a.uhrzeit ?? '').localeCompare(b.uhrzeit ?? '')
+  );
 }
