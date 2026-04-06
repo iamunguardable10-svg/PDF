@@ -1,10 +1,12 @@
-import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 import type { WearableData, TrainingGoal, TrainingActivity } from '../types/health';
 
-const client = new Anthropic({
-  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
+const client = new Groq({
+  apiKey: import.meta.env.VITE_GROQ_API_KEY,
   dangerouslyAllowBrowser: true,
 });
+
+const MODEL = 'llama-3.3-70b-versatile';
 
 export interface MealPlanRequest {
   wearable: WearableData;
@@ -27,27 +29,23 @@ export async function generateMealPlan(
 
   const prompt = `Du bist ein Ernährungsberater und Fitness-Coach. Erstelle einen detaillierten Ernährungsplan für ${days} Tage auf Basis der folgenden Gesundheitsdaten:
 
-**Heutige Wearable-Daten:**
+Heutige Wearable-Daten:
 - Schritte: ${wearable.steps.toLocaleString('de-DE')}
 - Verbrannte Kalorien: ${wearable.caloriesBurned} kcal
-- Ø Herzrate: ${wearable.heartRateAvg} bpm (Max: ${wearable.heartRateMax} bpm)
-- Schlaf: ${wearable.sleepHours}h (Qualität: ${wearable.sleepQuality})
+- Herzrate: ${wearable.heartRateAvg} bpm (Max: ${wearable.heartRateMax} bpm)
+- Schlaf: ${wearable.sleepHours}h (${wearable.sleepQuality})
 - Aktive Minuten: ${wearable.activeMinutes} Min
-- Zurückgelegte Strecke: ${wearable.distance} km
 
-**Trainingsziel: ${goal.label}**
-- Tägliches Kalorienziel: ${goal.dailyCalorieTarget} kcal
-- Protein: ${goal.proteinTarget}g | Kohlenhydrate: ${goal.carbTarget}g | Fett: ${goal.fatTarget}g
-- Trainingseinheiten/Woche: ${goal.weeklyWorkouts}
+Trainingsziel: ${goal.label}
+- Kalorien/Tag: ${goal.dailyCalorieTarget} kcal
+- Protein: ${goal.proteinTarget}g | KH: ${goal.carbTarget}g | Fett: ${goal.fatTarget}g
 
-**Letzte Trainingsaktivitäten:**
+Letzte Aktivitäten:
 ${recentActivitySummary}
+${preferences ? `\nPräferenzen: ${preferences}` : ''}
 
-${preferences ? `**Ernährungspräferenzen:** ${preferences}` : ''}
+Antworte NUR mit diesem JSON (kein Text davor oder danach):
 
-Erstelle einen Ernährungsplan im folgenden JSON-Format:
-
-\`\`\`json
 {
   "days": [
     {
@@ -55,51 +53,39 @@ Erstelle einen Ernährungsplan im folgenden JSON-Format:
       "totalCalories": 2800,
       "meals": [
         {
-          "name": "Mahlzeitenname",
+          "name": "Haferflocken mit Früchten",
           "time": "07:30",
-          "calories": 500,
-          "protein": 35,
-          "carbs": 55,
-          "fat": 15,
-          "ingredients": ["200g Haferflocken", "1 Banane", "200ml Mandelmilch"],
-          "preparation": "Kurze Zubereitungsanleitung"
+          "calories": 480,
+          "protein": 18,
+          "carbs": 72,
+          "fat": 12,
+          "ingredients": ["80g Haferflocken", "1 Banane", "200ml Hafermilch", "1 EL Honig"],
+          "preparation": "Haferflocken mit heißer Milch übergießen, 3 Min quellen lassen, Banane und Honig dazu."
         }
       ]
     }
   ],
   "shoppingList": [
-    {
-      "name": "Zutatename",
-      "amount": "500g",
-      "category": "Obst & Gemüse"
-    }
+    { "name": "Haferflocken", "amount": "500g", "category": "Getreide & Hülsenfrüchte" }
   ],
-  "tips": "Kurze personalisierte Ernährungstipps basierend auf den Aktivitätsdaten"
+  "tips": "Personalisierte Ernährungstipps hier"
 }
-\`\`\`
 
-Wichtig:
-- 3-4 Mahlzeiten pro Tag (Frühstück, Mittagessen, Abendessen + ggf. Snack)
-- Mahlzeiten passend zu Trainingsintensität anpassen
-- Realistische Zutaten die bei Knuspr/Rewe erhältlich sind
-- Vollständige Einkaufsliste aller benötigten Zutaten
-- Kategorien für Einkaufsliste: "Obst & Gemüse", "Fleisch & Fisch", "Milchprodukte", "Getreide & Hülsenfrüchte", "Snacks & Sonstiges"
-- Antworte NUR mit dem JSON-Block, kein Text davor oder danach`;
+Regeln:
+- 3-4 Mahlzeiten pro Tag
+- Zutaten die bei Rewe/Edeka erhältlich sind
+- Kategorien: "Obst & Gemüse", "Fleisch & Fisch", "Milchprodukte", "Getreide & Hülsenfrüchte", "Snacks & Sonstiges"`;
 
-  const stream = client.messages.stream({
-    model: 'claude-opus-4-6',
-    max_tokens: 8000,
-    thinking: { type: 'adaptive' },
+  const stream = await client.chat.completions.create({
+    model: MODEL,
+    max_tokens: 6000,
     messages: [{ role: 'user', content: prompt }],
+    stream: true,
   });
 
-  for await (const event of stream) {
-    if (
-      event.type === 'content_block_delta' &&
-      event.delta.type === 'text_delta'
-    ) {
-      onChunk(event.delta.text);
-    }
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content ?? '';
+    if (text) onChunk(text);
   }
 
   onComplete();

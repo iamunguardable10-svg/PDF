@@ -1,27 +1,14 @@
-import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 import type { PlannedSession, TrainingUnit } from '../types/acwr';
 import { TRAINING_UNITS } from '../types/acwr';
 
-const client = new Anthropic({
-  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
+const client = new Groq({
+  apiKey: import.meta.env.VITE_GROQ_API_KEY,
   dangerouslyAllowBrowser: true,
 });
 
-interface ParsedPlan {
-  sessions: Array<{
-    datum: string;
-    te: TrainingUnit;
-    uhrzeit?: string;
-    geschaetzteDauer?: number;
-    notiz?: string;
-  }>;
-  woche?: string;
-}
+const MODEL = 'llama-3.3-70b-versatile';
 
-/**
- * Parst eine Trainer-Nachricht mit Claude und extrahiert geplante Sessions.
- * Gibt den Stream-Callback für Live-Feedback und am Ende die Sessions zurück.
- */
 export async function parseTrainerPlan(
   message: string,
   onProgress: (text: string) => void,
@@ -29,66 +16,70 @@ export async function parseTrainerPlan(
   const today = new Date().toISOString().split('T')[0];
   const [year, month] = today.split('-');
 
-  // Nächste 14 Tage als Kontext
+  // Nächste 14 Tage als Kontext aufbauen
   const nextDays: Record<string, string> = {};
   for (let i = 0; i < 14; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
     const iso = d.toISOString().split('T')[0];
-    const wd = d.toLocaleDateString('de-DE', { weekday: 'long' });
-    nextDays[wd.toLowerCase()] = iso;
-    nextDays[wd.toLowerCase().slice(0, 2)] = iso; // Mo, Di, Mi etc.
-    nextDays[wd.toLowerCase().slice(0, 3)] = iso; // Mon, Die etc.
+    const wd = d.toLocaleDateString('de-DE', { weekday: 'long' }).toLowerCase();
+    nextDays[wd] = iso;
+    nextDays[wd.slice(0, 2)] = iso; // Mo, Di, Mi...
   }
 
-  const prompt = `Du bist ein Assistent für Sportdaten-Analyse. Deine Aufgabe ist es, eine Trainer-Nachricht zu parsen und geplante Trainingseinheiten zu extrahieren.
+  const dayTable = Object.entries(nextDays)
+    .filter(([k]) => k.length > 2)
+    .map(([k, v]) => `${k} = ${v}`)
+    .join('\n');
 
-Heute ist ${today} (${new Date().toLocaleDateString('de-DE', { weekday: 'long' })}).
-Aktueller Monat/Jahr: ${month}/${year}
+  const prompt = `Du parst eine Trainer-Nachricht und extrahierst Trainingseinheiten als JSON.
 
-Nächste 14 Tage (Wochentag → Datum):
-${Object.entries(nextDays).filter(([k]) => k.length > 2).map(([k, v]) => `${k} = ${v}`).join('\n')}
+Heute: ${today} | Monat/Jahr: ${month}/${year}
 
-Erlaubte Trainingseinheiten (TE): ${TRAINING_UNITS.join(', ')}
+Wochentage → Datum:
+${dayTable}
+
+Erlaubte TE-Typen: ${TRAINING_UNITS.join(', ')}
 
 Trainer-Nachricht:
 ---
 ${message}
 ---
 
-Extrahiere alle Trainingseinheiten und gib NUR das folgende JSON zurück (kein Text davor/danach):
+Antworte NUR mit diesem JSON (kein Text davor/danach):
 
 {
-  "woche": "kurze Beschreibung der Woche, z.B. KW 15",
   "sessions": [
     {
       "datum": "YYYY-MM-DD",
       "te": "Team",
       "uhrzeit": "17:00",
       "geschaetzteDauer": 90,
-      "notiz": "optionale Zusatzinfo"
+      "notiz": "optional"
     }
   ]
 }
 
 Regeln:
-- Datum immer als YYYY-MM-DD
-- te muss exakt einer der erlaubten Werte sein
-- Bei Spielen: te = "Spiel", Aufwärmen davor = "Aufwärmen" (separate Session)
-- geschaetzteDauer in Minuten (Team ≈ 90, S&C ≈ 60, Spiel ≈ 40, Aufwärmen ≈ 30–60)
-- Wenn keine Uhrzeit angegeben: uhrzeit weglassen
-- Ruhetage / freie Tage NICHT als Session aufführen`;
+- datum immer YYYY-MM-DD
+- te exakt aus der Liste: ${TRAINING_UNITS.join(', ')}
+- Spiel + Aufwärmen = zwei separate Sessions
+- geschaetzteDauer in Minuten (Team≈90, S&C≈60, Spiel≈40, Aufwärmen≈30)
+- Ruhetage NICHT aufführen
+- uhrzeit nur wenn angegeben, sonst weglassen`;
 
-  const stream = client.messages.stream({
-    model: 'claude-opus-4-6',
-    max_tokens: 2000,
+  const stream = await client.chat.completions.create({
+    model: MODEL,
+    max_tokens: 1500,
     messages: [{ role: 'user', content: prompt }],
+    stream: true,
   });
 
   let fullText = '';
-  for await (const event of stream) {
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      fullText += event.delta.text;
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content ?? '';
+    if (text) {
+      fullText += text;
       onProgress(fullText);
     }
   }
@@ -98,9 +89,12 @@ Regeln:
     fullText.match(/(\{[\s\S]*\})/);
   const jsonStr = jsonMatch ? jsonMatch[1] : fullText.trim();
 
-  const parsed: ParsedPlan = JSON.parse(jsonStr);
+  const parsed = JSON.parse(jsonStr);
 
-  return (parsed.sessions ?? []).map(s => ({
+  return (parsed.sessions ?? []).map((s: {
+    datum: string; te: TrainingUnit; uhrzeit?: string;
+    geschaetzteDauer?: number; notiz?: string;
+  }) => ({
     id: `plan-${s.datum}-${s.te}-${Math.random().toString(36).slice(2, 6)}`,
     datum: s.datum,
     te: s.te,
