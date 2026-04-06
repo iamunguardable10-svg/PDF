@@ -6,11 +6,13 @@ import { MealPlanView } from './components/MealPlanView';
 import { ShoppingList } from './components/ShoppingList';
 import { ACWRSection } from './components/ACWRSection';
 import { wearableData, trainingGoals, recentActivities } from './lib/mockData';
-import { initialSessions } from './lib/acwrMockData';
+import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import type { DayMealPlan, ShoppingItem, TrainingGoal } from './types/health';
-import type { Session } from './types/acwr';
+import type { Session, PlannedSession } from './types/acwr';
 
 type Tab = 'dashboard' | 'acwr';
+
+const PLAYER_NAME = 'Athlet';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -23,26 +25,61 @@ function App() {
 
   // ACWR state
   const [sessions, setSessions] = useState<Session[]>(initialSessions);
+  const [plannedSessions, setPlannedSessions] = useState<PlannedSession[]>(initialPlannedSessions);
 
-  const handlePlanGenerated = (plan: DayMealPlan[], shopping: ShoppingItem[], tipText: string) => {
-    setMealPlan(plan);
-    setShoppingList(shopping);
-    setTips(tipText);
+  const pendingCount = plannedSessions.filter(s => !s.confirmed).length;
+
+  /* ── ACWR handlers ── */
+
+  const handleAddSession = (s: Session) => setSessions(prev => [...prev, s]);
+
+  const handleAddPlanned = (newSessions: PlannedSession[]) =>
+    setPlannedSessions(prev => {
+      // Duplikate (gleicher Tag + TE) verhindern
+      const existing = new Set(prev.map(s => `${s.datum}-${s.te}`));
+      const fresh = newSessions.filter(s => !existing.has(`${s.datum}-${s.te}`));
+      return [...prev, ...fresh];
+    });
+
+  /** Geplante Session bestätigen → wird als Session gespeichert + aus Pending entfernt */
+  const handleConfirmPlanned = (id: string, rpe: number, dauer: number) => {
+    const ps = plannedSessions.find(s => s.id === id);
+    if (!ps) return;
+
+    const newSession: Session = {
+      id: `confirmed-${id}`,
+      name: PLAYER_NAME,
+      datum: ps.datum,
+      te: ps.te,
+      rpe,
+      dauer,
+      tl: rpe * dauer,
+    };
+
+    setSessions(prev => [...prev, newSession]);
+    setPlannedSessions(prev =>
+      prev.map(s => s.id === id ? { ...s, confirmed: true, rpe, actualDauer: dauer } : s)
+    );
   };
 
-  const handleItemToggle = (index: number) => {
+  /** Geplante Session nachträglich bearbeiten */
+  const handleUpdatePlanned = (id: string, updates: Partial<PlannedSession>) =>
+    setPlannedSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+
+  /** Planned session entfernen */
+  const handleDismissPlanned = (id: string) =>
+    setPlannedSessions(prev => prev.filter(s => s.id !== id));
+
+  /* ── Meal plan handlers ── */
+
+  const handlePlanGenerated = (plan: DayMealPlan[], shopping: ShoppingItem[], tipText: string) => {
+    setMealPlan(plan); setShoppingList(shopping); setTips(tipText);
+  };
+
+  const handleItemToggle = (index: number) =>
     setShoppingList(prev => prev.map((item, i) =>
       i === index ? { ...item, checked: !item.checked } : item
     ));
-  };
-
-  const handleOrder = () => {
-    console.log('Ordering from Knuspr:', shoppingList.filter(i => !i.checked));
-  };
-
-  const handleAddSession = (s: Session) => {
-    setSessions(prev => [...prev, s]);
-  };
 
   return (
     <div className="min-h-screen bg-[#0a0b0f] text-white">
@@ -55,45 +92,41 @@ function App() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-white leading-none">FitFuel</h1>
-              <p className="text-xs text-gray-500">KI-Ernährungsassistent</p>
+              <p className="text-xs text-gray-500">KI-Gesundheitsassistent</p>
             </div>
           </div>
 
-          {/* Tab Navigation */}
+          {/* Tabs */}
           <div className="flex gap-1 ml-4 bg-gray-900 rounded-xl p-1 border border-gray-800">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'dashboard'
-                  ? 'bg-violet-600 text-white'
-                  : 'text-gray-400 hover:text-white'
+                activeTab === 'dashboard' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
               }`}
             >
               🥗 Ernährung
             </button>
             <button
               onClick={() => setActiveTab('acwr')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'acwr'
-                  ? 'bg-violet-600 text-white'
-                  : 'text-gray-400 hover:text-white'
+              className={`relative px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'acwr' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
               }`}
             >
               📊 ACWR
+              {pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {pendingCount}
+                </span>
+              )}
             </button>
           </div>
 
-          <div className="ml-auto flex items-center gap-2 text-sm text-gray-400">
-            <span>👋</span>
-            <span>Ben</span>
-          </div>
+          <div className="ml-auto text-sm text-gray-400">👤 {PLAYER_NAME}</div>
         </div>
       </header>
 
-      {/* Main content */}
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-
-        {/* ── DASHBOARD TAB ── */}
+        {/* ── ERNÄHRUNG ── */}
         {activeTab === 'dashboard' && (
           <>
             <div className="grid lg:grid-cols-2 gap-6">
@@ -105,30 +138,24 @@ function App() {
                 activities={recentActivities}
               />
             </div>
-
             <MealPlanGenerator
               wearable={wearableData}
               goal={selectedGoal}
               activities={recentActivities}
               onPlanGenerated={handlePlanGenerated}
             />
-
-            {mealPlan.length > 0 && (
+            {mealPlan.length > 0 ? (
               <div className="grid lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                  <MealPlanView plan={mealPlan} tips={tips} />
-                </div>
+                <div className="lg:col-span-2"><MealPlanView plan={mealPlan} tips={tips} /></div>
                 <div>
                   <ShoppingList
                     items={shoppingList}
                     onItemToggle={handleItemToggle}
-                    onOrder={handleOrder}
+                    onOrder={() => console.log('Knuspr order')}
                   />
                 </div>
               </div>
-            )}
-
-            {mealPlan.length === 0 && (
+            ) : (
               <div className="text-center py-16 text-gray-600">
                 <div className="text-5xl mb-4">🍽️</div>
                 <p className="text-lg">Generiere deinen ersten KI-Ernährungsplan</p>
@@ -138,12 +165,17 @@ function App() {
           </>
         )}
 
-        {/* ── ACWR TAB ── */}
+        {/* ── ACWR ── */}
         {activeTab === 'acwr' && (
           <ACWRSection
             sessions={sessions}
+            plannedSessions={plannedSessions}
             onAddSession={handleAddSession}
-            playerName="Ben"
+            onAddPlanned={handleAddPlanned}
+            onConfirmPlanned={handleConfirmPlanned}
+            onUpdatePlanned={handleUpdatePlanned}
+            onDismissPlanned={handleDismissPlanned}
+            playerName={PLAYER_NAME}
           />
         )}
       </main>
