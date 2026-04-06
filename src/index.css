@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f1117;
+  color: #e2e8f0;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.streaming-text {
+  white-space: pre-wrap;
+}
