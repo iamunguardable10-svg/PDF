@@ -10,6 +10,7 @@ import { ACWRChart } from './ACWRChart';
 import { SessionForm } from './SessionForm';
 import { TrainerPlanUpload } from './TrainerPlanUpload';
 import { PendingSessions } from './PendingSessions';
+import { TrainingOverview } from './TrainingOverview';
 
 interface Props {
   sessions: Session[];
@@ -19,6 +20,7 @@ interface Props {
   onConfirmPlanned: (id: string, rpe: number, dauer: number) => void;
   onUpdatePlanned: (id: string, updates: Partial<PlannedSession>) => void;
   onDismissPlanned: (id: string) => void;
+  onSessionConfirmed?: () => void;
   playerName: string;
 }
 
@@ -37,7 +39,7 @@ function StatCard({ label, value, unit, color }: {
 
 export function ACWRSection({
   sessions, plannedSessions, onAddSession, onAddPlanned,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, playerName,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onSessionConfirmed, playerName,
 }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -116,6 +118,9 @@ export function ACWRSection({
   return (
     <div className="space-y-4">
 
+      {/* Trainingsübersicht */}
+      <TrainingOverview sessions={sessions} plannedSessions={plannedSessions} />
+
       {/* Trainer-Plan Import */}
       <TrainerPlanUpload onSessionsAdded={onAddPlanned} />
 
@@ -123,7 +128,7 @@ export function ACWRSection({
       {pendingCount > 0 && (
         <PendingSessions
           planned={plannedSessions}
-          onConfirm={onConfirmPlanned}
+          onConfirm={(id, rpe, dauer) => { onConfirmPlanned(id, rpe, dauer); onSessionConfirmed?.(); }}
           onScheduleReminder={handleScheduleReminder}
           onDismiss={handleDismiss}
         />

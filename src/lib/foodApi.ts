@@ -104,95 +104,191 @@ Regeln:
 
 // ── Predictive nutrition forecast ────────────────────────────────────────────
 
+export interface MealOption {
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  ingredients: string;   // "200g Hähnchen, 150g Reis, ..."
+}
+
+export interface ForecastMeal {
+  type: 'fruehstueck' | 'mittagessen' | 'abendessen' | 'snack';
+  options: [MealOption, MealOption];  // always 2 alternatives
+}
+
 export interface ForecastDay {
   date: string;
   dayLabel: string;
   plannedSessions: string[];
-  estimatedLoad: number;       // TL estimate
   calorieTarget: number;
   proteinTarget: number;
   carbTarget: number;
   fatTarget: number;
-  tips: string[];
   focus: 'recovery' | 'loading' | 'normal' | 'rest';
+  keyMessage: string;   // one-liner why this day is special
+  tips: string[];
+  meals: ForecastMeal[];
 }
 
 export interface NutritionForecast {
+  analysis: string;       // 2-3 sentences: what the AI sees in your training data
+  weekStrategy: string;   // overall nutrition strategy for the week
   days: ForecastDay[];
-  weekSummary: string;
-  topTips: string[];
+  topWarnings: string[];  // e.g. "Mittwoch + Donnerstag back-to-back Spiele — Recovery kritisch"
+}
+
+export interface ForecastInput {
+  plannedSessions: Array<{ datum: string; te: string; geschaetzteDauer?: number }>;
+  recentSessions: Array<{ datum: string; te: string; tl: number; rpe: number; dauer: number }>;
+  acwrHistory: Array<{ datum: string; acwr: number | null; acuteLoad: number; chronicLoad: number }>;
+  baseTDEE: number;
+  baseProtein: number;
+  sport: string;
+  level: string;
+  dietaryPreferences?: string;
 }
 
 export async function generateNutritionForecast(
-  plannedSessions: Array<{ datum: string; te: string; geschaetzteDauer?: number }>,
-  baseTDEE: number,
-  baseProtein: number,
-  acwr: number | null,
+  input: ForecastInput,
   onChunk: (text: string) => void,
 ): Promise<NutritionForecast | null> {
+  const { plannedSessions, recentSessions, acwrHistory, baseTDEE, baseProtein, sport, level, dietaryPreferences } = input;
+
   const today = new Date();
-  const next7: string[] = [];
-  for (let i = 0; i < 7; i++) {
+  const next7: string[] = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
-    next7.push(d.toISOString().split('T')[0]);
-  }
+    return d.toISOString().split('T')[0];
+  });
 
-  const sessionsByDay: Record<string, string[]> = {};
-  for (const date of next7) {
-    sessionsByDay[date] = plannedSessions
+  // Summarise recent training (last 14 days)
+  const recentSummary = recentSessions.length === 0
+    ? 'Keine Sessions in den letzten 14 Tagen eingetragen.'
+    : recentSessions
+        .slice(-14)
+        .map(s => `${s.datum}: ${s.te} | RPE ${s.rpe} | ${s.dauer}min | TL ${s.tl}`)
+        .join('\n');
+
+  // ACWR trend (last 14 data points)
+  const acwrTrend = acwrHistory.length === 0
+    ? 'Keine ACWR-Daten vorhanden.'
+    : acwrHistory
+        .slice(-14)
+        .map(d => `${d.datum}: ACWR ${d.acwr?.toFixed(2) ?? '—'} | Acute ${d.acuteLoad} | Chronic ${d.chronicLoad}`)
+        .join('\n');
+
+  const currentACWR = acwrHistory.length > 0
+    ? acwrHistory[acwrHistory.length - 1].acwr
+    : null;
+
+  // Next 7 days schedule
+  const scheduleText = next7.map(date => {
+    const wd = new Date(date).toLocaleDateString('de-DE', { weekday: 'long' });
+    const daySessions = plannedSessions
       .filter(s => s.datum === date)
       .map(s => `${s.te}${s.geschaetzteDauer ? ` (${s.geschaetzteDauer}min)` : ''}`);
-  }
-
-  const scheduleText = next7.map(date => {
-    const d = new Date(date);
-    const wd = d.toLocaleDateString('de-DE', { weekday: 'long' });
-    const sessions = sessionsByDay[date];
-    return `${wd} (${date}): ${sessions.length ? sessions.join(', ') : 'Ruhetag'}`;
+    return `${wd} (${date}): ${daySessions.length ? daySessions.join(', ') : 'Ruhetag'}`;
   }).join('\n');
 
-  const prompt = `Du bist ein Sporternährungsberater. Erstelle eine vorausschauende Ernährungsplanung für die nächsten 7 Tage basierend auf dem Trainingsplan.
+  const dietNote = dietaryPreferences ? `Ernährungspräferenzen: ${dietaryPreferences}` : '';
 
-Basis-Kalorienbedarf (TDEE): ${baseTDEE} kcal/Tag
-Basis-Protein: ${baseProtein}g/Tag
-Aktueller ACWR: ${acwr != null ? acwr.toFixed(2) : 'unbekannt'}
+  const prompt = `Du bist ein Sporternährungsberater für ${level}-Athleten (${sport}).
 
-Trainingsplan nächste 7 Tage:
+TDEE Basis: ${baseTDEE} kcal/Tag | Protein-Basis: ${baseProtein}g/Tag
+Aktueller ACWR: ${currentACWR != null ? currentACWR.toFixed(2) : 'unbekannt'}
+${dietNote}
+
+=== Letzte Trainingseinheiten (14 Tage) ===
+${recentSummary}
+
+=== ACWR-Verlauf (14 Tage) ===
+${acwrTrend}
+
+=== Trainingsplan nächste 7 Tage ===
 ${scheduleText}
 
-Antworte NUR mit diesem JSON:
+Erstelle eine datenbasierte, vorausschauende Ernährungsplanung. Antworte NUR mit JSON:
 
 {
+  "analysis": "2-3 Sätze: Was siehst du in den Trainingsdaten? ACWR-Trend, Belastungsmuster, worauf musst du achten?",
+  "weekStrategy": "Gesamtstrategie für die Ernährung diese Woche (2 Sätze)",
+  "topWarnings": ["Konkrete Warnung falls nötig, z.B. Back-to-Back Spiele"],
   "days": [
     {
       "date": "YYYY-MM-DD",
       "dayLabel": "Montag",
       "plannedSessions": ["Team (90min)"],
-      "estimatedLoad": 630,
-      "calorieTarget": 3200,
-      "proteinTarget": 170,
-      "carbTarget": 420,
+      "calorieTarget": 3400,
+      "proteinTarget": 175,
+      "carbTarget": 440,
       "fatTarget": 90,
-      "tips": ["Konkrete Empfehlung 1", "Konkrete Empfehlung 2"],
-      "focus": "loading"
+      "focus": "loading",
+      "keyMessage": "Warum ist dieser Tag ernährungstechnisch besonders? (1 Satz)",
+      "tips": [
+        "Konkreter Tipp 1 mit Uhrzeit und Menge (z.B. '2h vor Training: 80g Reis + 150g Hähnchen')",
+        "Konkreter Tipp 2"
+      ],
+      "meals": [
+        {
+          "type": "fruehstueck",
+          "options": [
+            {
+              "name": "Haferbrei mit Banane & Whey",
+              "calories": 520,
+              "protein": 35,
+              "carbs": 70,
+              "fat": 10,
+              "ingredients": "80g Haferflocken, 1 Banane, 30g Whey Protein, 200ml Hafermilch, 1 TL Honig"
+            },
+            {
+              "name": "Eier-Vollkorn-Toast mit Avocado",
+              "calories": 490,
+              "protein": 28,
+              "carbs": 52,
+              "fat": 18,
+              "ingredients": "3 Eier, 2 Scheiben Vollkornbrot, ½ Avocado, 1 Tomate, Salz/Pfeffer"
+            }
+          ]
+        },
+        {
+          "type": "mittagessen",
+          "options": [
+            { "name": "...", "calories": 700, "protein": 45, "carbs": 80, "fat": 20, "ingredients": "..." },
+            { "name": "...", "calories": 680, "protein": 42, "carbs": 78, "fat": 22, "ingredients": "..." }
+          ]
+        },
+        {
+          "type": "abendessen",
+          "options": [
+            { "name": "...", "calories": 650, "protein": 50, "carbs": 60, "fat": 18, "ingredients": "..." },
+            { "name": "...", "calories": 630, "protein": 48, "carbs": 58, "fat": 20, "ingredients": "..." }
+          ]
+        },
+        {
+          "type": "snack",
+          "options": [
+            { "name": "...", "calories": 250, "protein": 20, "carbs": 30, "fat": 5, "ingredients": "..." },
+            { "name": "...", "calories": 230, "protein": 18, "carbs": 28, "fat": 6, "ingredients": "..." }
+          ]
+        }
+      ]
     }
-  ],
-  "weekSummary": "Kurze Zusammenfassung der Trainingswoche und Ernährungsstrategie",
-  "topTips": ["Wichtigster Tipp 1", "Wichtigster Tipp 2", "Wichtigster Tipp 3"]
+  ]
 }
 
 Regeln:
-- focus: "loading" (vor/an Spieltagen), "recovery" (nach Spielen, hoher ACWR), "normal" (Trainingstage), "rest" (Ruhetage)
-- An Spieltagen: +15-20% KH (Carb-Loading), normale Kalorien
-- Ruhetage: -10% Kalorien, normale Protein
-- Nach Spiel/hoher Belastung: +10% Kalorien, +Protein für Recovery
-- tips: konkrete, umsetzbare Empfehlungen (z.B. "2h vor dem Spiel: 80g Nudeln + Hühnchen")
-- Alle Zahlen ganzzahlig`;
+- focus: "loading" (Spiel-/Wettkampftag), "recovery" (Tag nach Spiel oder ACWR>1.3), "normal" (Training), "rest" (Ruhetag)
+- Kalorien anpassen: Spiel +10-15% KH, Recovery +8% kcal +Protein, Ruhetag -10% kcal
+- Mahlzeiten müssen zum focus passen (Spieltag: mehr KH; Recovery: mehr Protein + Antioxidantien)
+- tips: IMMER mit konkreten Mengen und Uhrzeiten
+- Alle Zahlen ganzzahlig
+- ${dietaryPreferences ? `Beachte: ${dietaryPreferences}` : 'Keine Einschränkungen'}`;
 
   const stream = await client.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
-    max_tokens: 3000,
+    max_tokens: 8000,
     messages: [{ role: 'user', content: prompt }],
     stream: true,
   });
@@ -203,7 +299,7 @@ Regeln:
     if (text) { fullText += text; onChunk(fullText); }
   }
 
-  const jsonMatch = fullText.match(/```json\s*([\s\S]*?)\s*```/) || fullText.match(/(\{[\s\S]*\})/);
+  const jsonMatch = fullText.match(/```json\s*([\s\S]*?)\s*```/) || fullText.match(/(\{[\s\S]*\})/s);
   const jsonStr = jsonMatch ? jsonMatch[1] : fullText.trim();
 
   try {
@@ -212,3 +308,4 @@ Regeln:
     return null;
   }
 }
+

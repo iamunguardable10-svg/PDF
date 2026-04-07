@@ -45,6 +45,9 @@ function App() {
   // Food log state
   const [foodLog, setFoodLog] = useState<FoodEntry[]>(() => loadFoodLog());
 
+  // Forecast outdated flag — set true when a session is confirmed
+  const [forecastOutdated, setForecastOutdated] = useState(false);
+
   const pendingCount = plannedSessions.filter(s => !s.confirmed).length;
   const today = new Date().toISOString().split('T')[0];
   const todayEntries = foodLog.filter(e => e.date === today);
@@ -90,6 +93,8 @@ function App() {
       const fresh = newSessions.filter(s => !existing.has(`${s.datum}-${s.te}`));
       return [...prev, ...fresh];
     });
+
+  const handleSessionConfirmed = () => setForecastOutdated(true);
 
   const handleConfirmPlanned = (id: string, rpe: number, dauer: number) => {
     const ps = plannedSessions.find(s => s.id === id);
@@ -208,9 +213,14 @@ function App() {
             </div>
             <NutritionForecast
               plannedSessions={plannedSessions}
+              recentSessions={sessions}
+              acwrHistory={acwrDataPoints}
               baseTDEE={tdee}
               baseProtein={macros.protein}
+              profile={profile}
               acwr={acwr}
+              outdated={forecastOutdated}
+              onForecastGenerated={() => setForecastOutdated(false)}
             />
             <MealPlanGenerator
               wearable={wearable}
@@ -262,6 +272,7 @@ function App() {
             onConfirmPlanned={handleConfirmPlanned}
             onUpdatePlanned={handleUpdatePlanned}
             onDismissPlanned={handleDismissPlanned}
+            onSessionConfirmed={handleSessionConfirmed}
             playerName={profile.name}
           />
         )}

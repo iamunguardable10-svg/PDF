@@ -1,57 +1,107 @@
 import { useState } from 'react';
-import type { PlannedSession } from '../types/acwr';
+import type { PlannedSession, ACWRDataPoint } from '../types/acwr';
 import { TE_EMOJI } from '../types/acwr';
-import type { NutritionForecast as ForecastData, ForecastDay } from '../lib/foodApi';
+import type { Session } from '../types/acwr';
+import type { NutritionForecast as ForecastData, ForecastDay, ForecastMeal, MealOption } from '../lib/foodApi';
 import { generateNutritionForecast } from '../lib/foodApi';
+import type { AthleteProfile } from '../types/profile';
+import { LEVEL_LABELS } from '../types/profile';
 
 interface Props {
   plannedSessions: PlannedSession[];
+  recentSessions: Session[];
+  acwrHistory: ACWRDataPoint[];
   baseTDEE: number;
   baseProtein: number;
+  profile: AthleteProfile;
   acwr: number | null;
+  outdated?: boolean;
+  onForecastGenerated?: () => void;
 }
 
 const FOCUS_CONFIG = {
-  loading:  { label: 'Carb-Loading',  color: 'text-blue-400',   bg: 'bg-blue-900/20',   border: 'border-blue-800',  emoji: '⚡' },
-  recovery: { label: 'Recovery',      color: 'text-orange-400', bg: 'bg-orange-900/20', border: 'border-orange-800', emoji: '🔄' },
-  normal:   { label: 'Training',      color: 'text-violet-400', bg: 'bg-violet-900/20', border: 'border-violet-800', emoji: '💪' },
-  rest:     { label: 'Ruhetag',       color: 'text-gray-400',   bg: 'bg-gray-900/20',   border: 'border-gray-800',   emoji: '😴' },
+  loading:  { label: 'Spieltag / Wettkampf', color: 'text-blue-400',   bg: 'bg-blue-950/40',   border: 'border-blue-800/60',  emoji: '⚡' },
+  recovery: { label: 'Recovery',             color: 'text-orange-400', bg: 'bg-orange-950/40', border: 'border-orange-800/60', emoji: '🔄' },
+  normal:   { label: 'Training',             color: 'text-violet-400', bg: 'bg-violet-950/40', border: 'border-violet-800/60', emoji: '💪' },
+  rest:     { label: 'Ruhetag',              color: 'text-gray-400',   bg: 'bg-gray-900/40',   border: 'border-gray-800',      emoji: '😴' },
 };
+
+const MEAL_LABELS: Record<string, string> = {
+  fruehstueck: '🌅 Frühstück',
+  mittagessen: '☀️ Mittagessen',
+  abendessen:  '🌙 Abendessen',
+  snack:       '🍎 Snack',
+};
+
+function MealOptionCard({ opt, selected, onSelect }: { opt: MealOption; selected: boolean; onSelect: () => void }) {
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full text-left p-3 rounded-xl border transition-all ${selected ? 'border-violet-500 bg-violet-900/20' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'}`}
+    >
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <span className="text-sm font-semibold text-white leading-tight">{opt.name}</span>
+        <span className="text-sm font-bold text-orange-400 shrink-0">{opt.calories} kcal</span>
+      </div>
+      <div className="flex gap-3 text-xs text-gray-500 mb-1.5">
+        <span>P <span className="text-orange-400">{opt.protein}g</span></span>
+        <span>KH <span className="text-blue-400">{opt.carbs}g</span></span>
+        <span>F <span className="text-yellow-400">{opt.fat}g</span></span>
+      </div>
+      <p className="text-xs text-gray-500 leading-relaxed">{opt.ingredients}</p>
+    </button>
+  );
+}
+
+function MealSection({ meal }: { meal: ForecastMeal }) {
+  const [selected, setSelected] = useState(0);
+  return (
+    <div>
+      <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">
+        {MEAL_LABELS[meal.type] ?? meal.type}
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        {meal.options.map((opt, i) => (
+          <MealOptionCard key={i} opt={opt} selected={selected === i} onSelect={() => setSelected(i)} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function DayCard({ day }: { day: ForecastDay }) {
   const [open, setOpen] = useState(false);
-  const cfg = FOCUS_CONFIG[day.focus];
+  const cfg = FOCUS_CONFIG[day.focus] ?? FOCUS_CONFIG.normal;
   const isToday = day.date === new Date().toISOString().split('T')[0];
 
   return (
-    <div className={`rounded-2xl border p-4 ${cfg.bg} ${cfg.border} ${isToday ? 'ring-1 ring-violet-500' : ''}`}>
-      <button className="w-full text-left" onClick={() => setOpen(o => !o)}>
+    <div className={`rounded-2xl border ${cfg.bg} ${cfg.border} ${isToday ? 'ring-1 ring-violet-500' : ''}`}>
+      <button className="w-full text-left p-4" onClick={() => setOpen(o => !o)}>
         <div className="flex items-center gap-3">
-          <div className="text-center min-w-[2.5rem]">
-            <div className={`text-xl font-bold ${cfg.color}`}>{cfg.emoji}</div>
-          </div>
+          <span className="text-xl">{cfg.emoji}</span>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-white">{day.dayLabel}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-bold text-white">{day.dayLabel}</span>
               {isToday && <span className="text-xs bg-violet-600 text-white px-1.5 py-0.5 rounded-full">Heute</span>}
-              <span className={`text-xs px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color} border ${cfg.border}`}>{cfg.label}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>{cfg.label}</span>
             </div>
             {day.plannedSessions.length > 0 && (
-              <div className="text-xs text-gray-500 mt-0.5 truncate">
-                {day.plannedSessions.join(' · ')}
-              </div>
+              <p className="text-xs text-gray-500 mt-0.5 truncate">{day.plannedSessions.join(' · ')}</p>
+            )}
+            {day.keyMessage && (
+              <p className="text-xs text-gray-400 mt-1 italic">{day.keyMessage}</p>
             )}
           </div>
           <div className="text-right shrink-0">
             <div className={`text-lg font-bold ${cfg.color}`}>{day.calorieTarget}</div>
             <div className="text-xs text-gray-500">kcal</div>
           </div>
-          <div className="text-gray-600 text-sm">{open ? '▲' : '▼'}</div>
+          <span className="text-gray-600 text-xs">{open ? '▲' : '▼'}</span>
         </div>
       </button>
 
       {open && (
-        <div className="mt-3 space-y-3 border-t border-gray-800 pt-3">
+        <div className="px-4 pb-4 space-y-4 border-t border-gray-800/50 pt-4">
           {/* Macros */}
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="bg-gray-900/60 rounded-xl p-2">
@@ -67,14 +117,25 @@ function DayCard({ day }: { day: ForecastDay }) {
               <div className="font-bold text-yellow-400">{day.fatTarget}g</div>
             </div>
           </div>
+
           {/* Tips */}
           {day.tips.length > 0 && (
             <div className="space-y-1.5">
               {day.tips.map((tip, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs text-gray-300">
-                  <span className="text-green-500 shrink-0 mt-0.5">→</span>
+                <div key={i} className="flex items-start gap-2 text-sm text-gray-300 bg-gray-900/40 rounded-xl px-3 py-2">
+                  <span className="text-green-400 shrink-0 mt-0.5">→</span>
                   <span>{tip}</span>
                 </div>
+              ))}
+            </div>
+          )}
+
+          {/* Meal options */}
+          {day.meals && day.meals.length > 0 && (
+            <div className="space-y-4">
+              <div className="text-xs text-gray-500 uppercase tracking-wide">Mahlzeiten (2 Optionen wählen)</div>
+              {day.meals.map((meal, i) => (
+                <MealSection key={i} meal={meal} />
               ))}
             </div>
           )}
@@ -84,13 +145,15 @@ function DayCard({ day }: { day: ForecastDay }) {
   );
 }
 
-export function NutritionForecast({ plannedSessions, baseTDEE, baseProtein, acwr }: Props) {
+export function NutritionForecast({
+  plannedSessions, recentSessions, acwrHistory,
+  baseTDEE, baseProtein, profile, acwr: _acwr, outdated, onForecastGenerated,
+}: Props) {
   const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
 
-  // Upcoming sessions only (today + next 7 days)
   const today = new Date().toISOString().split('T')[0];
   const upcoming = plannedSessions.filter(s => s.datum >= today && !s.confirmed);
 
@@ -101,13 +164,23 @@ export function NutritionForecast({ plannedSessions, baseTDEE, baseProtein, acwr
     setForecast(null);
     try {
       const result = await generateNutritionForecast(
-        upcoming,
-        baseTDEE,
-        baseProtein,
-        acwr,
+        {
+          plannedSessions: upcoming,
+          recentSessions: recentSessions.map(s => ({
+            datum: s.datum, te: s.te, tl: s.tl, rpe: s.rpe, dauer: s.dauer,
+          })),
+          acwrHistory: acwrHistory.map(p => ({
+            datum: p.datum, acwr: p.acwr, acuteLoad: p.acuteLoad, chronicLoad: p.chronicLoad,
+          })),
+          baseTDEE,
+          baseProtein,
+          sport: profile.sport,
+          level: LEVEL_LABELS[profile.level],
+          dietaryPreferences: profile.dietaryPreferences,
+        },
         text => setProgress(text),
       );
-      if (result) setForecast(result);
+      if (result) { setForecast(result); onForecastGenerated?.(); }
       else setError('Fehler beim Generieren. Bitte erneut versuchen.');
     } catch {
       setError('Verbindungsfehler. Bitte erneut versuchen.');
@@ -116,56 +189,54 @@ export function NutritionForecast({ plannedSessions, baseTDEE, baseProtein, acwr
     setProgress('');
   };
 
-  // Upcoming sessions preview
-  const upcomingByDay = upcoming.reduce<Record<string, PlannedSession[]>>((acc, s) => {
-    (acc[s.datum] ??= []).push(s);
-    return acc;
-  }, {});
-
   return (
     <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800 space-y-5">
       <div className="flex items-center gap-3">
         <span className="text-2xl">🔮</span>
         <div>
           <h2 className="text-lg font-semibold text-white">Vorausschauende Ernährung</h2>
-          <p className="text-sm text-gray-400">7-Tage-Plan basierend auf deinem Trainingsplan</p>
+          <p className="text-sm text-gray-400">KI-Analyse basierend auf ACWR-Verlauf + Trainingsplan</p>
         </div>
       </div>
 
-      {/* Upcoming sessions preview */}
-      {Object.keys(upcomingByDay).length > 0 ? (
-        <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-3">Geplante Einheiten (nächste 7 Tage)</div>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(upcomingByDay)
-              .filter(([date]) => date <= (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().split('T')[0]; })())
-              .sort(([a], [b]) => a.localeCompare(b))
-              .slice(0, 14)
-              .map(([date, sessions]) => {
-                const d = new Date(date);
-                const label = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
-                return (
-                  <div key={date} className="bg-gray-800 rounded-xl px-3 py-2 text-xs">
-                    <div className="text-gray-400 mb-1">{label}</div>
-                    <div className="flex gap-1 flex-wrap">
-                      {sessions.map(s => (
-                        <span key={s.id} className="bg-gray-700 rounded-lg px-1.5 py-0.5 text-white">
-                          {TE_EMOJI[s.te]} {s.te}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      ) : (
-        <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 text-sm text-gray-500 text-center">
-          Noch keine Trainingseinheiten geplant — trage zuerst Einheiten im ACWR-Tab ein oder lade einen Trainer-Plan hoch.
+      {/* Outdated notice */}
+      {outdated && !loading && (
+        <div className="flex items-center gap-3 bg-orange-900/20 border border-orange-800/50 rounded-2xl p-3">
+          <span className="text-orange-400 text-lg">🔔</span>
+          <span className="text-sm text-orange-300 flex-1">Trainingsplan aktualisiert — Prognose erneuern?</span>
+          <button onClick={handleGenerate}
+            className="text-xs px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-semibold transition-colors">
+            Aktualisieren
+          </button>
         </div>
       )}
 
-      {/* Generate button */}
+      {/* Upcoming sessions preview chips */}
+      {upcoming.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(
+            upcoming
+              .filter(s => { const d = new Date(); d.setDate(d.getDate() + 7); return s.datum <= d.toISOString().split('T')[0]; })
+              .sort((a, b) => a.datum.localeCompare(b.datum))
+              .reduce<Record<string, PlannedSession[]>>((acc, s) => { (acc[s.datum] ??= []).push(s); return acc; }, {})
+          ).map(([date, sessions]) => {
+            const label = new Date(date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
+            return (
+              <div key={date} className="flex items-center gap-1.5 bg-gray-900 rounded-xl px-3 py-1.5 border border-gray-800 text-xs">
+                <span className="text-gray-500">{label}</span>
+                {sessions.map(s => <span key={s.id}>{TE_EMOJI[s.te]} {s.te}</span>)}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {upcoming.length === 0 && (
+        <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 text-sm text-gray-500 text-center">
+          Noch keine Trainingseinheiten geplant — im ACWR-Tab Trainer-Plan hochladen oder manuell eintragen.
+        </div>
+      )}
+
       <button
         onClick={handleGenerate}
         disabled={loading}
@@ -180,38 +251,35 @@ export function NutritionForecast({ plannedSessions, baseTDEE, baseProtein, acwr
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Analysiere Trainingsplan…
+            Analysiere ACWR + Trainingsplan…
           </span>
-        ) : '🔮 7-Tage-Ernährungsplan erstellen'}
+        ) : '🔮 KI-Ernährungsprognose erstellen'}
       </button>
 
-      {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded-xl p-3 text-red-400 text-sm">{error}</div>
-      )}
+      {error && <div className="bg-red-900/30 border border-red-800 rounded-xl p-3 text-red-400 text-sm">{error}</div>}
 
       {loading && progress && (
-        <div className="bg-gray-900 rounded-xl p-3 border border-gray-800 max-h-24 overflow-hidden">
-          <pre className="text-xs text-gray-500 font-mono">{progress.slice(-200)}</pre>
+        <div className="bg-gray-900 rounded-xl p-3 border border-gray-800 max-h-20 overflow-hidden opacity-60">
+          <pre className="text-xs text-gray-600 font-mono">{progress.slice(-300)}</pre>
         </div>
       )}
 
-      {/* Forecast result */}
       {forecast && (
         <div className="space-y-4">
-          {/* Week summary */}
-          <div className="bg-violet-900/20 border border-violet-800 rounded-2xl p-4">
-            <div className="text-xs text-violet-400 uppercase tracking-wide mb-2">Wochen-Analyse</div>
-            <p className="text-sm text-gray-300">{forecast.weekSummary}</p>
+          {/* Analysis */}
+          <div className="bg-violet-900/20 border border-violet-800/50 rounded-2xl p-4 space-y-2">
+            <div className="text-xs text-violet-400 uppercase tracking-wide font-semibold">KI-Analyse deiner Trainingsdaten</div>
+            <p className="text-sm text-gray-300 leading-relaxed">{forecast.analysis}</p>
+            <p className="text-sm text-gray-400 leading-relaxed border-t border-violet-800/30 pt-2">{forecast.weekStrategy}</p>
           </div>
 
-          {/* Top tips */}
-          {forecast.topTips?.length > 0 && (
-            <div className="bg-green-900/10 border border-green-900 rounded-2xl p-4 space-y-2">
-              <div className="text-xs text-green-500 uppercase tracking-wide mb-1">Top-Tipps der Woche</div>
-              {forecast.topTips.map((tip, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm text-gray-300">
-                  <span className="text-green-500 shrink-0">✓</span>
-                  <span>{tip}</span>
+          {/* Warnings */}
+          {forecast.topWarnings?.length > 0 && (
+            <div className="space-y-2">
+              {forecast.topWarnings.map((w, i) => (
+                <div key={i} className="flex items-start gap-2 bg-red-900/20 border border-red-800/40 rounded-xl px-4 py-2.5">
+                  <span className="text-red-400 shrink-0">⚠️</span>
+                  <span className="text-sm text-red-300">{w}</span>
                 </div>
               ))}
             </div>
