@@ -221,7 +221,7 @@ function SessionModal({
   onDismiss?: (id: string) => void;
   initialTab?: 'confirm' | 'edit';
 }) {
-  const today   = new Date().toISOString().split('T')[0];
+  const today   = toISO(new Date());
   const isPast  = session.datum < today;
   const isToday = session.datum === today;
 
@@ -552,7 +552,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
     for (const iso of weekDays) {
       const prevDate = new Date(iso + 'T00:00');
       prevDate.setDate(prevDate.getDate() - 1);
-      const prev = prevDate.toISOString().split('T')[0];
+      const prev = toISO(prevDate);
       if (hasSpiel(iso)) map.set(iso, 'loading');
       else if (hasSpiel(prev)) map.set(iso, 'recovery');
       else if (hasAny(iso)) map.set(iso, 'normal');
