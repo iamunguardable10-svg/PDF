@@ -183,13 +183,31 @@ export async function generateNutritionForecast(
     ? acwrHistory[acwrHistory.length - 1].acwr
     : null;
 
-  // Next 7 days schedule
+  // Pre-compute focus per day from actual TE types — don't let the AI guess
+  function computeFocus(date: string): ForecastDay['focus'] {
+    const daySessions = plannedSessions.filter(s => s.datum === date);
+    if (daySessions.length === 0) return 'rest';
+    if (daySessions.some(s => s.te === 'Spiel')) return 'loading';
+    // Day after a game = recovery
+    const prev = new Date(date);
+    prev.setDate(prev.getDate() - 1);
+    const prevDate = prev.toISOString().split('T')[0];
+    const hadGameYesterday = plannedSessions.some(s => s.datum === prevDate && s.te === 'Spiel')
+      || recentSessions.some(s => s.datum === prevDate && s.te === 'Spiel');
+    if (hadGameYesterday) return 'recovery';
+    if (currentACWR != null && currentACWR > 1.3) return 'recovery';
+    return 'normal';
+  }
+
+  // Next 7 days schedule — with pre-computed focus label so AI can't misclassify
   const scheduleText = next7.map(date => {
     const wd = new Date(date).toLocaleDateString('de-DE', { weekday: 'long' });
     const daySessions = plannedSessions
       .filter(s => s.datum === date)
       .map(s => `${s.te}${s.geschaetzteDauer ? ` (${s.geschaetzteDauer}min)` : ''}`);
-    return `${wd} (${date}): ${daySessions.length ? daySessions.join(', ') : 'Ruhetag'}`;
+    const focus = computeFocus(date);
+    const focusLabel = { loading: '[SPIELTAG]', recovery: '[RECOVERY]', normal: '[TRAINING]', rest: '[RUHETAG]' }[focus];
+    return `${wd} (${date}) ${focusLabel}: ${daySessions.length ? daySessions.join(', ') : '—'}`;
   }).join('\n');
 
   const dietNote = dietaryPreferences ? `Ernährungspräferenzen: ${dietaryPreferences}` : '';
@@ -279,8 +297,9 @@ Erstelle eine datenbasierte, vorausschauende Ernährungsplanung. Antworte NUR mi
 }
 
 Regeln:
-- focus: "loading" (Spiel-/Wettkampftag), "recovery" (Tag nach Spiel oder ACWR>1.3), "normal" (Training), "rest" (Ruhetag)
-- Kalorien anpassen: Spiel +10-15% KH, Recovery +8% kcal +Protein, Ruhetag -10% kcal
+- focus MUSS exakt dem Label im Trainingsplan entsprechen: [SPIELTAG]→"loading", [RECOVERY]→"recovery", [TRAINING]→"normal", [RUHETAG]→"rest"
+- NIEMALS "loading" für Tage mit nur Team/S&C — nur wenn "Spiel" explizit vorhanden
+- Kalorien: [SPIELTAG] +10-15% KH, [RECOVERY] +8% kcal +Protein, [RUHETAG] -10% kcal
 - Mahlzeiten müssen zum focus passen (Spieltag: mehr KH; Recovery: mehr Protein + Antioxidantien)
 - tips: IMMER mit konkreten Mengen und Uhrzeiten
 - Alle Zahlen ganzzahlig
