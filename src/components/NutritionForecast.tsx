@@ -16,6 +16,8 @@ interface Props {
   profile: AthleteProfile;
   acwr: number | null;
   outdated?: boolean;
+  forecast: ForecastData | null;
+  onForecastChange: (f: ForecastData | null) => void;
   onForecastGenerated?: () => void;
 }
 
@@ -147,9 +149,9 @@ function DayCard({ day }: { day: ForecastDay }) {
 
 export function NutritionForecast({
   plannedSessions, recentSessions, acwrHistory,
-  baseTDEE, baseProtein, profile, acwr: _acwr, outdated, onForecastGenerated,
+  baseTDEE, baseProtein, profile, acwr: _acwr, outdated,
+  forecast, onForecastChange, onForecastGenerated,
 }: Props) {
-  const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
@@ -161,7 +163,7 @@ export function NutritionForecast({
     setLoading(true);
     setProgress('');
     setError('');
-    setForecast(null);
+    onForecastChange(null);
     try {
       const result = await generateNutritionForecast(
         {
@@ -180,7 +182,7 @@ export function NutritionForecast({
         },
         text => setProgress(text),
       );
-      if (result) { setForecast(result); onForecastGenerated?.(); }
+      if (result) { onForecastChange(result); onForecastGenerated?.(); }
       else setError('Fehler beim Generieren. Bitte erneut versuchen.');
     } catch {
       setError('Verbindungsfehler. Bitte erneut versuchen.');
