@@ -322,21 +322,75 @@ export function ACWRSection({
           </div>
         </div>
 
-        {/* Wöchentlicher Load */}
-        <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800 flex items-center gap-4">
-          <div>
-            <div className="text-xs text-gray-500 mb-0.5">Load diese Woche</div>
-            <div className="text-xl font-bold text-green-400">
-              {weeklyLoad}
-              <span className="text-xs font-normal text-gray-500 ml-1">AU</span>
+        {/* Wöchentlicher Load + Empfehlung */}
+        {(() => {
+          const chronic = current?.chronicLoad ?? 0;
+          const optMin = Math.round(chronic * 7 * 0.8);
+          const optMax = Math.round(chronic * 7 * 1.3);
+          const remaining = optMax - weeklyLoad;
+          const pct = optMax > 0 ? Math.min(100, (weeklyLoad / optMax) * 100) : 0;
+          const minPct = optMax > 0 ? Math.min(100, (optMin / optMax) * 100) : 0;
+          const barColor = weeklyLoad < optMin
+            ? '#60a5fa'   // under
+            : weeklyLoad <= optMax
+            ? '#4ade80'   // optimal
+            : '#f87171';  // over
+          return (
+            <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-gray-500 mb-0.5">Wochenload</div>
+                  <div className="text-xl font-bold" style={{ color: barColor }}>
+                    {weeklyLoad}
+                    <span className="text-xs font-normal text-gray-500 ml-1">AU</span>
+                  </div>
+                </div>
+                {chronic > 0 && (
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500 mb-0.5">Zielkorridor</div>
+                    <div className="text-sm font-semibold text-gray-300">
+                      {optMin}–{optMax} <span className="text-xs font-normal text-gray-500">AU</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {chronic > 0 && (
+                <>
+                  {/* Fortschrittsbalken mit Zielzone */}
+                  <div className="relative h-2.5 bg-gray-800 rounded-full overflow-hidden">
+                    {/* Zielzone-Highlight */}
+                    <div className="absolute top-0 bottom-0 bg-green-900/50 rounded-full"
+                      style={{ left: `${minPct}%`, right: '0%' }} />
+                    {/* Aktueller Load */}
+                    <div className="absolute top-0 bottom-0 left-0 rounded-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                    {/* Min-Marker */}
+                    <div className="absolute top-0 bottom-0 w-0.5 bg-green-500/60"
+                      style={{ left: `${minPct}%` }} />
+                  </div>
+                  {/* Spielraum-Hinweis */}
+                  <div className="text-xs text-gray-500">
+                    {weeklyLoad < optMin && (
+                      <span className="text-blue-400">
+                        Noch <span className="font-semibold">{optMin - weeklyLoad} AU</span> bis Optimal-Zone
+                      </span>
+                    )}
+                    {weeklyLoad >= optMin && weeklyLoad <= optMax && (
+                      <span className="text-green-400">
+                        ✓ Optimal-Zone · noch <span className="font-semibold">{remaining} AU</span> Spielraum
+                      </span>
+                    )}
+                    {weeklyLoad > optMax && (
+                      <span className="text-red-400">
+                        ⚠ {weeklyLoad - optMax} AU über Limit – mehr Erholung empfohlen
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-          <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
-            <div className="h-full bg-green-400 rounded-full transition-all"
-              style={{ width: `${Math.min(100, (weeklyLoad / Math.max(weeklyLoad, current?.chronicLoad ?? 1)) * 100)}%` }} />
-          </div>
-          <div className="text-xs text-gray-600 shrink-0">7d</div>
-        </div>
+          );
+        })()}
       </div>
 
       {/* Chart */}

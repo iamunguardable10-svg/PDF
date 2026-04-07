@@ -522,6 +522,27 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
     return { doneCount: done.length, plannedCount: planned.length, totalTL: done.reduce((s, x) => s + x.tl, 0) };
   }, [sessions, plannedSessions, weekStart, weekEnd]);
 
+  // Fokus-Label pro Tag (loading / recovery / normal / rest)
+  const focusByDay = useMemo<Map<string, 'loading' | 'recovery' | 'normal' | 'rest'>>(() => {
+    const map = new Map<string, 'loading' | 'recovery' | 'normal' | 'rest'>();
+    const hasSpiel = (date: string) =>
+      sessions.some(s => s.datum === date && s.te === 'Spiel') ||
+      plannedSessions.some(s => s.datum === date && s.te === 'Spiel');
+    const hasAny = (date: string) =>
+      sessions.some(s => s.datum === date) ||
+      plannedSessions.some(s => !s.confirmed && s.datum === date);
+    for (const iso of weekDays) {
+      const prevDate = new Date(iso);
+      prevDate.setDate(prevDate.getDate() - 1);
+      const prev = prevDate.toISOString().split('T')[0];
+      if (hasSpiel(iso)) map.set(iso, 'loading');
+      else if (hasSpiel(prev)) map.set(iso, 'recovery');
+      else if (hasAny(iso)) map.set(iso, 'normal');
+      else map.set(iso, 'rest');
+    }
+    return map;
+  }, [sessions, plannedSessions, weekDays]);
+
   return (
     <>
       <div className="space-y-3">
@@ -572,6 +593,14 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           {weekDays.map((iso, idx) => {
             const isToday = iso === today;
             const d = new Date(iso);
+            const focus = focusByDay.get(iso) ?? 'rest';
+            const focusBadge: Record<string, { label: string; color: string }> = {
+              loading:  { label: 'Spiel',   color: '#f87171' },
+              recovery: { label: 'Recov.',  color: '#34d399' },
+              normal:   { label: 'Train.',  color: '#818cf8' },
+              rest:     { label: 'Ruhe',    color: '#4b5563' },
+            };
+            const badge = focusBadge[focus];
             return (
               <div key={iso} className={`text-center py-1.5 px-0.5 rounded-t-xl ${isToday ? 'bg-violet-600/25' : 'bg-gray-900/60'}`}>
                 <div className={`text-xs font-bold tracking-wide ${isToday ? 'text-violet-300' : 'text-gray-400'}`}>
@@ -579,6 +608,9 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
                 </div>
                 <div className={`text-xs leading-tight ${isToday ? 'text-violet-400 font-semibold' : 'text-gray-600'}`}>
                   {d.getDate()}.{d.getMonth() + 1}
+                </div>
+                <div className="mt-1 text-center" style={{ fontSize: '8px', color: badge.color, fontWeight: 600, letterSpacing: '0.02em', opacity: focus === 'rest' ? 0.4 : 0.85 }}>
+                  {badge.label}
                 </div>
               </div>
             );
