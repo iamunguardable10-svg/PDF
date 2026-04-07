@@ -55,7 +55,8 @@ export function calculateACWR(sessions: Session[]): ACWRDataPoint[] {
   return days.map((day, i) => {
     const acute   = rollingAvg(loads, i, 7);
     const chronic = rollingAvg(loads, i, 28);
-    const acwr    = chronic > 0 ? acute / chronic : null;
+    // Erst ab 28 Tagen Daten sinnvoll — davor ist der Quotient künstlich aufgebläht
+    const acwr = (chronic > 0 && i >= 27) ? acute / chronic : null;
 
     return {
       datum:       day.datum,
