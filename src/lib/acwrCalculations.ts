@@ -1,4 +1,5 @@
 import type { Session, PlannedSession, DayLoad, ACWRDataPoint } from '../types/acwr';
+import { ACWR_ZONES } from '../types/acwr';
 
 /** Aggregiert alle Sessions zu tägl. Load pro Tag */
 export function aggregateDailyLoads(sessions: Session[]): DayLoad[] {
@@ -67,9 +68,9 @@ export function getCurrentACWR(dataPoints: ACWRDataPoint[]): ACWRDataPoint | nul
 }
 
 export function getACWRZoneLabel(acwr: number): { label: string; color: string; bg: string } {
-  if (acwr < 0.8)  return { label: 'Low Risk',    color: '#60a5fa', bg: 'bg-blue-900/30'   };
-  if (acwr <= 1.3) return { label: 'Optimal',     color: '#4ade80', bg: 'bg-green-900/30'  };
-  return              { label: 'High Risk',   color: '#f87171', bg: 'bg-red-900/30'    };
+  if (acwr < ACWR_ZONES.low)  return { label: 'Low Risk',  color: '#60a5fa', bg: 'bg-blue-900/30'  };
+  if (acwr <= ACWR_ZONES.high) return { label: 'Optimal',  color: '#4ade80', bg: 'bg-green-900/30' };
+  return                              { label: 'High Risk', color: '#f87171', bg: 'bg-red-900/30'   };
 }
 
 /** Geschätzte RPE-Defaults nach TE-Typ für die Projektion */

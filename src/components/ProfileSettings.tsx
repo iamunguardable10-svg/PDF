@@ -21,7 +21,13 @@ export function ProfileSettings({ profile: initial, onSave, onClose }: Props) {
     setProfile(p => ({ ...p, [key]: value }));
 
   const handleSave = () => {
-    onSave(profile);
+    // Werte klemmen, damit Berechnungen nicht mit Extremwerten brechen
+    onSave({
+      ...profile,
+      age:    Math.min(80,  Math.max(10,  profile.age)),
+      weight: Math.min(200, Math.max(30,  profile.weight)),
+      height: Math.min(250, Math.max(100, profile.height)),
+    });
     onClose();
   };
 

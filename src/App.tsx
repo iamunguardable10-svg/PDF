@@ -13,6 +13,7 @@ import { wearableData as mockWearable, trainingGoals } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { loadProfile, saveProfile } from './lib/profileStorage';
 import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
+import { loadSessions, saveSessions, loadPlannedSessions, savePlannedSessions } from './lib/trainingStorage';
 import { calculateACWR, getCurrentACWR } from './lib/acwrCalculations';
 import { calcTDEE, calcMacros } from './types/profile';
 import type { DayMealPlan, ShoppingItem, WearableData } from './types/health';
@@ -37,9 +38,9 @@ function App() {
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [tips, setTips] = useState('');
 
-  // ACWR state – leer starten; Testdaten nur über Button
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [plannedSessions, setPlannedSessions] = useState<PlannedSession[]>([]);
+  // ACWR state – aus localStorage laden, leer wenn noch nichts gespeichert
+  const [sessions, setSessions] = useState<Session[]>(() => loadSessions());
+  const [plannedSessions, setPlannedSessions] = useState<PlannedSession[]>(() => loadPlannedSessions());
 
   // Food log state
   const [foodLog, setFoodLog] = useState<FoodEntry[]>(() => loadFoodLog());
@@ -67,9 +68,9 @@ function App() {
     if (profile.onboardingCompleted) saveProfile(profile);
   }, [profile]);
 
-  useEffect(() => {
-    saveFoodLog(foodLog);
-  }, [foodLog]);
+  useEffect(() => { saveFoodLog(foodLog); }, [foodLog]);
+  useEffect(() => { saveSessions(sessions); }, [sessions]);
+  useEffect(() => { savePlannedSessions(plannedSessions); }, [plannedSessions]);
 
   /* ── Handlers ── */
 
@@ -100,7 +101,7 @@ function App() {
 
   const handleConfirmPlanned = (id: string, rpe: number, dauer: number) => {
     const ps = plannedSessions.find(s => s.id === id);
-    if (!ps) return;
+    if (!ps || ps.confirmed) return; // Guard: verhindert Doppel-Bestätigung
     setSessions(prev => [...prev, {
       id: `confirmed-${id}`,
       name: profile.name,
@@ -120,8 +121,11 @@ function App() {
     setPlannedSessions(prev => prev.filter(s => s.id !== id));
 
   const handleLoadMockData = () => {
+    // Setzt alles zurück auf die Testdaten (ersetzt, nicht anhängen)
     setSessions(initialSessions);
     setPlannedSessions(initialPlannedSessions);
+    setForecast(null);
+    setForecastOutdated(false);
   };
 
   const handlePlanGenerated = (plan: DayMealPlan[], shopping: ShoppingItem[], tipText: string) => {

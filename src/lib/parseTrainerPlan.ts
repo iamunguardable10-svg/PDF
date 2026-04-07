@@ -135,7 +135,7 @@ Regeln:
     datum: string; te: TrainingUnit; uhrzeit?: string;
     geschaetzteDauer?: number; notiz?: string;
   }) => ({
-    id: `plan-${s.datum}-${s.te}-${Math.random().toString(36).slice(2, 6)}`,
+    id: `plan-${s.datum}-${s.te}-${Math.random().toString(36).slice(2, 10)}`,
     datum: s.datum,
     te: normalizeTE(s.te),
     uhrzeit: s.uhrzeit,
@@ -163,7 +163,7 @@ Regeln:
         uhrzeit = `${wh}:${wm}`;
       }
       return {
-        id: `plan-${s.datum}-Aufwärmen-${Math.random().toString(36).slice(2, 6)}`,
+        id: `plan-${s.datum}-Aufwärmen-${Math.random().toString(36).slice(2, 10)}`,
         datum: s.datum,
         te: 'Aufwärmen' as TrainingUnit,
         uhrzeit,
