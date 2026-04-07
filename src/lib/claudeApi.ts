@@ -2,6 +2,7 @@ import Groq from 'groq-sdk';
 import type { WearableData, TrainingGoal, TrainingActivity } from '../types/health';
 import type { AthleteProfile } from '../types/profile';
 import { calcTDEE, calcMacros, LEVEL_LABELS, GOAL_LABELS } from '../types/profile';
+import type { NutritionForecast } from './foodApi';
 
 const client = new Groq({
   apiKey: import.meta.env.VITE_GROQ_API_KEY,
@@ -13,6 +14,7 @@ const MODEL = 'llama-3.3-70b-versatile';
 export interface MealPlanRequest {
   wearable: WearableData;
   goal: TrainingGoal;
+  forecast?: NutritionForecast | null;
   activities: TrainingActivity[];
   days: number;
   preferences?: string;
@@ -25,7 +27,7 @@ export async function generateMealPlan(
   onChunk: (text: string) => void,
   onComplete: () => void,
 ): Promise<void> {
-  const { wearable, activities, days, preferences, profile, acwr } = request;
+  const { wearable, activities, days, preferences, profile, acwr, forecast } = request;
 
   const recentActivitySummary = activities
     .map(a => `- ${a.type} (${a.duration} Min, ${a.caloriesBurned} kcal, ${a.intensity})`)
@@ -66,8 +68,29 @@ ${profile.dietaryPreferences ? `- Ernährungspräferenzen: ${profile.dietaryPref
     fatTarget = request.goal.fatTarget;
   }
 
+  const focusLabel: Record<string, string> = {
+    loading: 'SPIELTAG/HOCHBELASTUNG',
+    recovery: 'RECOVERY',
+    rest: 'RUHETAG',
+    normal: 'TRAINING',
+  };
+
+  const forecastContext = forecast?.days?.length
+    ? [
+        '',
+        '=== Vorausschauende Ernährungsprognose (nutze diese als Basis) ===',
+        `Wochenstrategie: ${forecast.weekStrategy}`,
+        forecast.days.slice(0, days).map(d =>
+          `${d.dayLabel} [${focusLabel[d.focus] ?? d.focus}]: ${d.calorieTarget} kcal | P ${d.proteinTarget}g | KH ${d.carbTarget}g | F ${d.fatTarget}g — ${d.keyMessage}`
+        ).join('\n'),
+        forecast.topWarnings?.length ? `Warnungen: ${forecast.topWarnings.join(' | ')}` : '',
+        '=== Ende Prognose ===',
+      ].filter(Boolean).join('\n')
+    : '';
+
   const prompt = `Du bist ein Ernährungsberater und Fitness-Coach für Leistungssportler. Erstelle einen detaillierten Ernährungsplan für ${days} Tage.
 ${profileContext}
+${forecastContext}
 
 Heutige Aktivitätsdaten (Wearable):
 - Schritte: ${wearable.steps.toLocaleString('de-DE')}

@@ -3,6 +3,7 @@ import type { WearableData, TrainingGoal, TrainingActivity, DayMealPlan, Shoppin
 import type { AthleteProfile } from '../types/profile';
 import { calcTDEE, calcMacros } from '../types/profile';
 import { generateMealPlan } from '../lib/claudeApi';
+import type { NutritionForecast } from '../lib/foodApi';
 
 interface Props {
   wearable: WearableData;
@@ -11,9 +12,10 @@ interface Props {
   onPlanGenerated: (plan: DayMealPlan[], shopping: ShoppingItem[], tips: string) => void;
   profile?: AthleteProfile;
   acwr?: number | null;
+  forecast?: NutritionForecast | null;
 }
 
-export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated, profile, acwr }: Props) {
+export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated, profile, acwr, forecast }: Props) {
   // Compute personalized targets for display
   const tdee = profile ? calcTDEE(profile, acwr) : goal.dailyCalorieTarget;
   const macros = profile ? calcMacros(profile, tdee) : { protein: goal.proteinTarget, carbs: goal.carbTarget, fat: goal.fatTarget };
@@ -35,7 +37,7 @@ export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated,
 
     try {
       await generateMealPlan(
-        { wearable, goal, activities, days, preferences, profile, acwr },
+        { wearable, goal, activities, days, preferences, profile, acwr, forecast },
         (chunk) => {
           if (abortRef.current) return;
           accumulated += chunk;
@@ -115,6 +117,14 @@ export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated,
           </div>
         )}
       </div>
+
+      {forecast?.days?.length ? (
+        <div className="bg-violet-900/20 border border-violet-700/40 rounded-2xl px-4 py-2.5 mb-4 flex items-center gap-2 text-sm">
+          <span className="text-violet-400">📈</span>
+          <span className="text-violet-300 font-medium">Prognose vorhanden</span>
+          <span className="text-gray-400">— wird als Basis für den Plan verwendet</span>
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         {/* Days selector */}

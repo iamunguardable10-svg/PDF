@@ -19,6 +19,7 @@ import type { DayMealPlan, ShoppingItem, WearableData } from './types/health';
 import type { Session, PlannedSession } from './types/acwr';
 import type { AthleteProfile } from './types/profile';
 import type { FoodEntry } from './types/food';
+import type { NutritionForecast as NutritionForecastData } from './lib/foodApi';
 
 type Tab = 'dashboard' | 'tagebuch' | 'acwr';
 
@@ -42,6 +43,9 @@ function App() {
 
   // Food log state
   const [foodLog, setFoodLog] = useState<FoodEntry[]>(() => loadFoodLog());
+
+  // Forecast state — lifted from NutritionForecast so MealPlanGenerator can use it
+  const [forecast, setForecast] = useState<NutritionForecastData | null>(null);
 
   // Forecast outdated flag — set true when a session is confirmed
   const [forecastOutdated, setForecastOutdated] = useState(false);
@@ -210,6 +214,8 @@ function App() {
               profile={profile}
               acwr={acwr}
               outdated={forecastOutdated}
+              forecast={forecast}
+              onForecastChange={setForecast}
               onForecastGenerated={() => setForecastOutdated(false)}
             />
             <MealPlanGenerator
@@ -219,6 +225,7 @@ function App() {
               onPlanGenerated={handlePlanGenerated}
               profile={profile}
               acwr={acwr}
+              forecast={forecast}
             />
             {mealPlan.length > 0 ? (
               <div className="grid lg:grid-cols-3 gap-6">
