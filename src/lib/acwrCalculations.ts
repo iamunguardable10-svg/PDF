@@ -17,19 +17,25 @@ export function aggregateDailyLoads(sessions: Session[]): DayLoad[] {
   return Array.from(map.values()).sort((a, b) => a.datum.localeCompare(b.datum));
 }
 
-/** Füllt fehlende Tage (Ruhetage) mit Load=0 auf */
+/** Füllt fehlende Tage (Ruhetage) mit Load=0 auf, mind. bis heute */
 function fillMissingDays(days: DayLoad[]): DayLoad[] {
   if (days.length === 0) return [];
   const result: DayLoad[] = [];
-  const start = new Date(days[0].datum);
-  const end   = new Date(days[days.length - 1].datum);
+  const start = new Date(days[0].datum + 'T00:00');
+  const todayISO = localISO(new Date());
+  const lastSession = days[days.length - 1].datum;
+  const end = new Date((lastSession < todayISO ? todayISO : lastSession) + 'T00:00');
   const dayMap = new Map(days.map(d => [d.datum, d]));
 
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const key = d.toISOString().split('T')[0];
+    const key = localISO(d);
     result.push(dayMap.get(key) ?? { datum: key, loads: {}, taeglLoad: 0 });
   }
   return result;
+}
+
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** Gleitender Durchschnitt über window-Tage (inkl. Nulltage) */
@@ -61,10 +67,11 @@ export function calculateACWR(sessions: Session[]): ACWRDataPoint[] {
   });
 }
 
-/** Aktuellster ACWR-Wert */
+/** Aktuellster ACWR-Wert — bevorzugt heutigen Eintrag (Ruhetage senken Acute Load korrekt) */
 export function getCurrentACWR(dataPoints: ACWRDataPoint[]): ACWRDataPoint | null {
-  const active = dataPoints.filter(d => d.taeglLoad > 0);
-  return active[active.length - 1] ?? dataPoints[dataPoints.length - 1] ?? null;
+  if (dataPoints.length === 0) return null;
+  // Der letzte Eintrag ist heute (fillMissingDays verlängert bis heute)
+  return dataPoints[dataPoints.length - 1];
 }
 
 export function getACWRZoneLabel(acwr: number): { label: string; color: string; bg: string } {
@@ -89,7 +96,7 @@ export function projectFutureACWR(
   plannedSessions: PlannedSession[],
   daysAhead = 21,
 ): ACWRDataPoint[] {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO(new Date());
   const historicalDays = fillMissingDays(aggregateDailyLoads(sessions));
   if (historicalDays.length === 0) return [];
 
@@ -109,9 +116,9 @@ export function projectFutureACWR(
   const projected: ACWRDataPoint[] = [];
 
   for (let i = 1; i <= daysAhead; i++) {
-    const d = new Date(lastDate);
+    const d = new Date(lastDate + 'T00:00');
     d.setDate(d.getDate() + i);
-    const iso = d.toISOString().split('T')[0];
+    const iso = localISO(d);
     const load = plannedMap.get(iso) ?? 0;
     extLoads.push(load);
     const idx = extLoads.length - 1;
