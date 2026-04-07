@@ -16,21 +16,37 @@ export async function parseTrainerPlan(
   const today = new Date().toISOString().split('T')[0];
   const [year, month] = today.split('-');
 
-  // Nächste 14 Tage als Kontext aufbauen
+  // Nächste 14 Tage als Kontext aufbauen — deutsch + englisch
+  const EN_DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const EN_SHORT = ['sun','mon','tue','wed','thu','fri','sat'];
+
   const nextDays: Record<string, string> = {};
   for (let i = 0; i < 14; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
     const iso = d.toISOString().split('T')[0];
-    const wd = d.toLocaleDateString('de-DE', { weekday: 'long' }).toLowerCase();
-    nextDays[wd] = iso;
-    nextDays[wd.slice(0, 2)] = iso; // Mo, Di, Mi...
+    const wdDE = d.toLocaleDateString('de-DE', { weekday: 'long' }).toLowerCase();
+    const wdIdx = d.getDay();
+    // German: full + 2-char short (Mo, Di, Mi…)
+    nextDays[wdDE] = iso;
+    nextDays[wdDE.slice(0, 2)] = iso;
+    // English: full + 3-char short
+    nextDays[EN_DAYS[wdIdx]] = iso;
+    nextDays[EN_SHORT[wdIdx]] = iso;
   }
 
   const dayTable = Object.entries(nextDays)
-    .filter(([k]) => k.length > 2)
+    .filter(([k]) => k.length >= 3)
     .map(([k, v]) => `${k} = ${v}`)
     .join('\n');
+
+  // Pre-filter: strip lines that are clearly rest/off days before sending to AI
+  const OFF_PATTERN = /\b(off|rest|frei|pause|ruhetag|keine\s+einheit|no\s+training|recovery\s+day)\b/i;
+  const cleanedMessage = message
+    .split('\n')
+    .filter(line => !OFF_PATTERN.test(line))
+    .join('\n')
+    .trim();
 
   const prompt = `Du parst eine Trainer-Nachricht und extrahierst Trainingseinheiten als JSON.
 
@@ -50,7 +66,7 @@ Erlaubte TE-Typen (EXAKT so schreiben):
 
 Trainer-Nachricht:
 ---
-${message}
+${cleanedMessage}
 ---
 
 Antworte NUR mit diesem JSON (kein Text davor/danach):
@@ -72,7 +88,7 @@ Regeln:
 - te MUSS exakt eines sein von: ${TRAINING_UNITS.join(', ')} — kein anderer Wert erlaubt
 - Aufwärmen wird automatisch zu Spielen hinzugefügt, du musst es NICHT einfügen
 - geschaetzteDauer in Minuten (Team≈90, S&C≈60, Spiel≈90, Aufwärmen≈30)
-- Ruhetage/Pause/frei NICHT aufführen
+- Ruhetage/OFF/Rest/Pause/frei → einfach NICHT in sessions aufführen
 - uhrzeit nur wenn angegeben, sonst weglassen`;
 
   const stream = await client.chat.completions.create({

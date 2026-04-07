@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { WearableDashboard } from './components/WearableDashboard';
-import { TrainingSection } from './components/TrainingSection';
 import { MealPlanGenerator } from './components/MealPlanGenerator';
 import { MealPlanView } from './components/MealPlanView';
 import { ShoppingList } from './components/ShoppingList';
@@ -10,13 +9,13 @@ import { ProfileSettings } from './components/ProfileSettings';
 import { AppTour } from './components/AppTour';
 import { FoodLog } from './components/FoodLog';
 import { NutritionForecast } from './components/NutritionForecast';
-import { wearableData as mockWearable, trainingGoals, recentActivities } from './lib/mockData';
+import { wearableData as mockWearable, trainingGoals } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { loadProfile, saveProfile } from './lib/profileStorage';
 import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
 import { calculateACWR, getCurrentACWR } from './lib/acwrCalculations';
 import { calcTDEE, calcMacros } from './types/profile';
-import type { DayMealPlan, ShoppingItem, TrainingGoal, WearableData } from './types/health';
+import type { DayMealPlan, ShoppingItem, WearableData } from './types/health';
 import type { Session, PlannedSession } from './types/acwr';
 import type { AthleteProfile } from './types/profile';
 import type { FoodEntry } from './types/food';
@@ -33,7 +32,6 @@ function App() {
   const [wearable, setWearable] = useState<WearableData>(mockWearable);
 
   // Dashboard state
-  const [selectedGoal, setSelectedGoal] = useState<TrainingGoal>(trainingGoals[0]);
   const [mealPlan, setMealPlan] = useState<DayMealPlan[]>([]);
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [tips, setTips] = useState('');
@@ -202,15 +200,7 @@ function App() {
         {/* ── ERNÄHRUNG ── */}
         {activeTab === 'dashboard' && (
           <>
-            <div className="grid lg:grid-cols-2 gap-6">
-              <WearableDashboard data={wearable} onDataChange={setWearable} />
-              <TrainingSection
-                goals={trainingGoals}
-                selectedGoal={selectedGoal}
-                onGoalChange={setSelectedGoal}
-                activities={recentActivities}
-              />
-            </div>
+            <WearableDashboard data={wearable} onDataChange={setWearable} />
             <NutritionForecast
               plannedSessions={plannedSessions}
               recentSessions={sessions}
@@ -224,8 +214,8 @@ function App() {
             />
             <MealPlanGenerator
               wearable={wearable}
-              goal={selectedGoal}
-              activities={recentActivities}
+              goal={trainingGoals[0]}
+              activities={[]}
               onPlanGenerated={handlePlanGenerated}
               profile={profile}
               acwr={acwr}
