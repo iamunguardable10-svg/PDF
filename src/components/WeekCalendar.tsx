@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import type { Session, PlannedSession } from '../types/acwr';
-import { TE_COLORS, TE_EMOJI } from '../types/acwr';
+import type { Session, PlannedSession, TrainingUnit } from '../types/acwr';
+import { TE_COLORS, TE_EMOJI, TRAINING_UNITS } from '../types/acwr';
 
 interface Props {
   sessions: Session[];
@@ -8,6 +8,7 @@ interface Props {
   onConfirm?: (id: string, rpe: number, dauer: number) => void;
   onUpdate?: (id: string, updates: Partial<PlannedSession>) => void;
   onDismiss?: (id: string) => void;
+  onAddPlanned?: (sessions: PlannedSession[]) => void;
 }
 
 const WEEKDAYS_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -65,6 +66,131 @@ interface DayEntry {
   session?: PlannedSession;
 }
 
+// ─── Create Session Modal ─────────────────────────────────────────────────────
+
+function CreateSessionModal({
+  datum, onClose, onAdd,
+}: {
+  datum: string;
+  onClose: () => void;
+  onAdd: (s: PlannedSession) => void;
+}) {
+  const [te, setTe]       = useState<TrainingUnit>('Team');
+  const [time, setTime]   = useState('');
+  const [dauer, setDauer] = useState(90);
+  const [note, setNote]   = useState('');
+
+  const color = TE_COLORS[te];
+  const emoji = TE_EMOJI[te];
+
+  function handleCreate() {
+    onAdd({
+      id: `planned-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      datum,
+      te,
+      uhrzeit: time || undefined,
+      geschaetzteDauer: dauer,
+      notiz: note || undefined,
+      reminderScheduled: false,
+      confirmed: false,
+    });
+    onClose();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-sm bg-gray-900 rounded-3xl border border-gray-700 shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-3 flex items-center gap-3 border-b border-gray-800">
+          <div className="flex-1">
+            <div className="text-sm font-bold text-white">Neue Einheit</div>
+            <div className="text-xs text-gray-400">
+              {new Date(datum).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
+          </div>
+          <button onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-xl text-gray-500 hover:text-white hover:bg-gray-800 transition-colors text-sm">
+            ✕
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* TE-Typ Auswahl */}
+          <div>
+            <div className="text-xs text-gray-500 mb-2">Typ</div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {TRAINING_UNITS.map(unit => {
+                const selected = te === unit;
+                return (
+                  <button
+                    key={unit}
+                    onClick={() => setTe(unit)}
+                    className={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl border text-xs font-medium transition-all ${
+                      selected ? 'border-transparent text-white' : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
+                    }`}
+                    style={selected ? { backgroundColor: TE_COLORS[unit] + '44', borderColor: TE_COLORS[unit] } : {}}
+                  >
+                    <span className="text-base leading-none">{TE_EMOJI[unit]}</span>
+                    <span className="leading-tight truncate w-full text-center" style={{ fontSize: '9px' }}>
+                      {unit === 'Aufwärmen' ? 'Warm.' : unit === 'Schulsport' ? 'Schule' : unit === 'Prävention' ? 'Präv.' : unit}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Vorschau */}
+          <div className="flex items-center gap-3 p-3 rounded-2xl border border-gray-800"
+            style={{ backgroundColor: color + '11' }}>
+            <div className="text-2xl">{emoji}</div>
+            <div>
+              <div className="text-sm font-semibold text-white">{te}</div>
+              <div className="text-xs text-gray-500">
+                {time ? `${time} Uhr · ` : ''}{dauer} Min
+              </div>
+            </div>
+          </div>
+
+          {/* Uhrzeit + Dauer */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500 block mb-1.5">Uhrzeit (optional)</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1.5">Dauer: {dauer} Min</label>
+              <input type="range" min={15} max={180} step={15} value={dauer}
+                onChange={e => setDauer(Number(e.target.value))}
+                className="w-full mt-2 accent-violet-500" />
+            </div>
+          </div>
+
+          {/* Notiz */}
+          <div>
+            <label className="text-xs text-gray-500 block mb-1.5">Notiz (optional)</label>
+            <input type="text" value={note} onChange={e => setNote(e.target.value)}
+              placeholder="z.B. Halle 2, Vollzug..."
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500" />
+          </div>
+
+          <button
+            onClick={handleCreate}
+            className="w-full py-2.5 rounded-2xl font-semibold text-sm text-white transition-colors"
+            style={{ backgroundColor: color }}
+          >
+            {emoji} Einheit planen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Session Detail Modal ──────────────────────────────────────────────────────
 
 function SessionModal({
@@ -85,8 +211,9 @@ function SessionModal({
   const [dauer, setDauer] = useState(session.geschaetzteDauer ?? 90);
   const [time, setTime]   = useState(session.uhrzeit ?? '');
   const [note, setNote]   = useState(session.notiz ?? '');
+  const isFuture = !isPast && !isToday;
   const [tab, setTab]     = useState<'confirm' | 'edit'>(
-    initialTab ?? (isPast || isToday ? 'confirm' : 'edit')
+    initialTab ?? (isFuture ? 'edit' : 'confirm')
   );
   const [saved, setSaved] = useState(false);
 
@@ -143,14 +270,26 @@ function SessionModal({
 
         {/* Tabs */}
         <div className="flex px-5 pt-3 gap-1">
-          {(['confirm', 'edit'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
+          {/* Eintragen nur für heute / vergangene Sessions */}
+          {!isFuture && (
+            <button onClick={() => setTab('confirm')}
               className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                tab === t ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'
+                tab === 'confirm' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'
               }`}>
-              {t === 'confirm' ? '✓ Eintragen' : '✏ Bearbeiten'}
+              ✓ Eintragen
             </button>
-          ))}
+          )}
+          <button onClick={() => setTab('edit')}
+            className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-all ${
+              tab === 'edit' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'
+            }`}>
+            ✏ Bearbeiten
+          </button>
+          {isFuture && (
+            <div className="flex items-center px-2 text-xs text-gray-600 italic">
+              Noch nicht beendet
+            </div>
+          )}
         </div>
 
         <div className="px-5 pb-5 pt-3 space-y-4">
@@ -253,9 +392,10 @@ function SessionModal({
 
 // ─── Haupt-Komponente ──────────────────────────────────────────────────────────
 
-export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss }: Props) {
+export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned }: Props) {
   const [weekOffset, setWeekOffset]           = useState(0);
   const [selectedSession, setSelectedSession] = useState<PlannedSession | null>(null);
+  const [createForDay, setCreateForDay]       = useState<string | null>(null);
   const [draggingId, setDraggingId]           = useState<string | null>(null);
   const [dragOverDay, setDragOverDay]         = useState<string | null>(null);
   const [droppedId, setDroppedId]             = useState<string | null>(null);
@@ -467,17 +607,40 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
                     : 'bg-gray-900/50 border border-gray-800'
                 }`}
               >
-                {/* Drop-Hint wenn Drag aktiv und Zelle leer */}
-                {isDragOver && entries.filter(e => e.kind !== 'done').length === 0 && (
+                {/* Drop-Hint wenn Drag aktiv */}
+                {isDragOver && (
                   <div className="flex-1 flex items-center justify-center">
-                    <span className="text-violet-400 text-xs">Hier ablegen</span>
+                    <span className="text-violet-400 text-xs">↓</span>
                   </div>
                 )}
 
+                {/* Leere Zelle: + Button zum Erstellen */}
                 {!isDragOver && entries.length === 0 && (
-                  <div className="flex-1 flex items-center justify-center">
-                    <span className="text-gray-800 text-xs">–</span>
-                  </div>
+                  <button
+                    onClick={() => onAddPlanned && setCreateForDay(iso)}
+                    className={`flex-1 flex items-center justify-center rounded-lg transition-colors group ${
+                      onAddPlanned ? 'hover:bg-gray-700/30 cursor-pointer' : 'cursor-default'
+                    }`}
+                    title={onAddPlanned ? 'Neue Einheit planen' : undefined}
+                  >
+                    <span className={`text-xs transition-colors ${
+                      onAddPlanned ? 'text-gray-700 group-hover:text-gray-400' : 'text-gray-800'
+                    }`}>
+                      {onAddPlanned ? '+' : '–'}
+                    </span>
+                  </button>
+                )}
+
+                {/* Zelle mit Einträgen: kleiner + Button oben rechts */}
+                {!isDragOver && entries.length > 0 && onAddPlanned && (
+                  <button
+                    onClick={() => setCreateForDay(iso)}
+                    className="self-end text-gray-700 hover:text-gray-400 transition-colors leading-none"
+                    title="Weitere Einheit planen"
+                    style={{ fontSize: '10px' }}
+                  >
+                    +
+                  </button>
                 )}
 
                 {entries.map(entry => (
@@ -514,6 +677,15 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           onUpdate={onUpdate}
           onDismiss={onDismiss}
           initialTab={dropInitialTab}
+        />
+      )}
+
+      {/* Create Modal */}
+      {createForDay && onAddPlanned && (
+        <CreateSessionModal
+          datum={createForDay}
+          onClose={() => setCreateForDay(null)}
+          onAdd={s => { onAddPlanned([s]); setCreateForDay(null); }}
         />
       )}
     </>

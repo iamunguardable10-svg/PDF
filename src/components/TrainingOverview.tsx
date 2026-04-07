@@ -9,6 +9,7 @@ interface Props {
   onConfirmPlanned?: (id: string, rpe: number, dauer: number) => void;
   onUpdatePlanned?: (id: string, updates: Partial<PlannedSession>) => void;
   onDismissPlanned?: (id: string) => void;
+  onAddPlanned?: (sessions: PlannedSession[]) => void;
 }
 
 function isoWeekStart(offset = 0): string {
@@ -21,7 +22,7 @@ function isoWeekStart(offset = 0): string {
 
 export function TrainingOverview({
   sessions, plannedSessions,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onAddPlanned,
 }: Props) {
   const [view, setView] = useState<'kalender' | 'woche' | 'verlauf'>('kalender');
 
@@ -104,6 +105,7 @@ export function TrainingOverview({
           onConfirm={onConfirmPlanned}
           onUpdate={onUpdatePlanned}
           onDismiss={onDismissPlanned}
+          onAddPlanned={onAddPlanned}
         />
       )}
 

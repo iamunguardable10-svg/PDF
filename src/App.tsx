@@ -37,9 +37,9 @@ function App() {
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [tips, setTips] = useState('');
 
-  // ACWR state
-  const [sessions, setSessions] = useState<Session[]>(initialSessions);
-  const [plannedSessions, setPlannedSessions] = useState<PlannedSession[]>(initialPlannedSessions);
+  // ACWR state – leer starten; Testdaten nur über Button
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [plannedSessions, setPlannedSessions] = useState<PlannedSession[]>([]);
 
   // Food log state
   const [foodLog, setFoodLog] = useState<FoodEntry[]>(() => loadFoodLog());
@@ -118,6 +118,11 @@ function App() {
 
   const handleDismissPlanned = (id: string) =>
     setPlannedSessions(prev => prev.filter(s => s.id !== id));
+
+  const handleLoadMockData = () => {
+    setSessions(initialSessions);
+    setPlannedSessions(initialPlannedSessions);
+  };
 
   const handlePlanGenerated = (plan: DayMealPlan[], shopping: ShoppingItem[], tipText: string) => {
     setMealPlan(plan); setShoppingList(shopping); setTips(tipText);
@@ -270,6 +275,7 @@ function App() {
             onUpdatePlanned={handleUpdatePlanned}
             onDismissPlanned={handleDismissPlanned}
             onSessionConfirmed={handleSessionConfirmed}
+            onLoadMockData={handleLoadMockData}
             playerName={profile.name}
           />
         )}

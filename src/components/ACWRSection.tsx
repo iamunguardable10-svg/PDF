@@ -21,13 +21,14 @@ interface Props {
   onUpdatePlanned: (id: string, updates: Partial<PlannedSession>) => void;
   onDismissPlanned: (id: string) => void;
   onSessionConfirmed?: () => void;
+  onLoadMockData?: () => void;
   playerName: string;
 }
 
 
 export function ACWRSection({
   sessions, plannedSessions, onAddSession, onAddPlanned,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onSessionConfirmed, playerName,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onSessionConfirmed, onLoadMockData, playerName,
 }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -114,6 +115,7 @@ export function ACWRSection({
         onConfirmPlanned={(id, rpe, dauer) => { onConfirmPlanned(id, rpe, dauer); onSessionConfirmed?.(); }}
         onUpdatePlanned={onUpdatePlanned}
         onDismissPlanned={handleDismiss}
+        onAddPlanned={onAddPlanned}
       />
 
       {/* Trainer-Plan Import */}
@@ -169,9 +171,17 @@ export function ACWRSection({
         )}
 
         {sessions.length === 0 && (
-          <div className="text-center py-8 text-gray-600">
-            <div className="text-3xl mb-2">📋</div>
+          <div className="text-center py-8 text-gray-600 space-y-3">
+            <div className="text-3xl">📋</div>
             <p className="text-sm">Noch keine Sessions – Trainer-Plan importieren oder manuell eintragen.</p>
+            {onLoadMockData && (
+              <button
+                onClick={onLoadMockData}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-700 text-xs text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+              >
+                🧪 Testdaten laden (4 Wochen)
+              </button>
+            )}
           </div>
         )}
 
