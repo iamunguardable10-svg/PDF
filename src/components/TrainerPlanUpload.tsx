@@ -22,6 +22,15 @@ export function TrainerPlanUpload({ onSessionsAdded }: Props) {
   const [progress, setProgress] = useState('');
   const [preview, setPreview] = useState<PlannedSession[] | null>(null);
   const [error, setError] = useState('');
+  const [dayOffset, setDayOffset] = useState(0);
+
+  function shiftDate(datum: string, days: number): string {
+    const d = new Date(datum);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+  }
+
+  const shiftedPreview = preview?.map(s => ({ ...s, datum: shiftDate(s.datum, dayOffset) })) ?? null;
 
   const handleParse = async () => {
     if (!message.trim()) return;
@@ -41,9 +50,10 @@ export function TrainerPlanUpload({ onSessionsAdded }: Props) {
   };
 
   const handleConfirmImport = () => {
-    if (!preview) return;
-    onSessionsAdded(preview);
+    if (!shiftedPreview) return;
+    onSessionsAdded(shiftedPreview);
     setPreview(null);
+    setDayOffset(0);
     setMessage('');
     setProgress('');
     setOpen(false);
@@ -132,13 +142,61 @@ export function TrainerPlanUpload({ onSessionsAdded }: Props) {
           )}
 
           {/* Preview */}
-          {preview && (
+          {shiftedPreview && (
             <div className="space-y-3">
-              <div className="text-sm font-semibold text-white">
-                {preview.length} Einheiten erkannt — bitte prüfen:
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-white">
+                  {shiftedPreview.length} Einheiten erkannt
+                </div>
+                {dayOffset !== 0 && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${dayOffset > 0 ? 'bg-blue-900/40 text-blue-400 border border-blue-800' : 'bg-orange-900/40 text-orange-400 border border-orange-800'}`}>
+                    {dayOffset > 0 ? `+${dayOffset}` : dayOffset} Tage
+                  </span>
+                )}
               </div>
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {preview.map(s => (
+
+              {/* Date offset controls */}
+              <div className="bg-gray-900 rounded-2xl p-3 border border-gray-700 space-y-2">
+                <div className="text-xs text-gray-500 flex items-center gap-1.5">
+                  <span>📅</span>
+                  <span>Datumskorrektur — falls die KI alle Einheiten um eine Woche versetzt hat:</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <button onClick={() => setDayOffset(o => o - 7)}
+                      className="px-2.5 py-1.5 rounded-lg border border-gray-700 text-gray-300 hover:border-orange-500 hover:text-orange-400 text-xs font-mono transition-colors">
+                      −7
+                    </button>
+                    <button onClick={() => setDayOffset(o => o - 1)}
+                      className="px-2.5 py-1.5 rounded-lg border border-gray-700 text-gray-300 hover:border-orange-500 hover:text-orange-400 text-xs font-mono transition-colors">
+                      −1
+                    </button>
+                  </div>
+                  <div className="flex-1 text-center text-sm font-bold text-white tabular-nums">
+                    {dayOffset === 0 ? 'Kein Versatz' : `${dayOffset > 0 ? '+' : ''}${dayOffset} ${Math.abs(dayOffset) === 1 ? 'Tag' : 'Tage'}`}
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => setDayOffset(o => o + 1)}
+                      className="px-2.5 py-1.5 rounded-lg border border-gray-700 text-gray-300 hover:border-blue-500 hover:text-blue-400 text-xs font-mono transition-colors">
+                      +1
+                    </button>
+                    <button onClick={() => setDayOffset(o => o + 7)}
+                      className="px-2.5 py-1.5 rounded-lg border border-gray-700 text-gray-300 hover:border-blue-500 hover:text-blue-400 text-xs font-mono transition-colors">
+                      +7
+                    </button>
+                  </div>
+                  {dayOffset !== 0 && (
+                    <button onClick={() => setDayOffset(0)}
+                      className="text-xs text-gray-600 hover:text-gray-400 transition-colors px-1">
+                      ↺
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Session list */}
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                {shiftedPreview.map(s => (
                   <div key={s.id} className="flex items-center gap-3 bg-gray-900 rounded-xl px-3 py-2.5 border border-gray-800">
                     <div className="text-xs font-mono text-gray-400 w-20 shrink-0">{formatDatum(s.datum)}</div>
                     <div className="flex-1">
@@ -154,16 +212,12 @@ export function TrainerPlanUpload({ onSessionsAdded }: Props) {
               </div>
 
               <div className="flex gap-2">
-                <button
-                  onClick={handleConfirmImport}
-                  className="flex-1 py-2.5 rounded-xl bg-green-700 hover:bg-green-600 text-white font-semibold text-sm transition-colors"
-                >
+                <button onClick={handleConfirmImport}
+                  className="flex-1 py-2.5 rounded-xl bg-green-700 hover:bg-green-600 text-white font-semibold text-sm transition-colors">
                   ✓ Importieren
                 </button>
-                <button
-                  onClick={() => setPreview(null)}
-                  className="px-4 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white text-sm transition-colors"
-                >
+                <button onClick={() => { setPreview(null); setDayOffset(0); }}
+                  className="px-4 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white text-sm transition-colors">
                   Neu
                 </button>
               </div>
