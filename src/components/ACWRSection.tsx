@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import type { Session, PlannedSession, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
-import { calculateACWR, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel } from '../lib/acwrCalculations';
+import { calculateACWR, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel, projectFutureACWR } from '../lib/acwrCalculations';
 import {
   requestNotificationPermission, getNotificationPermission,
   scheduleSessionReminder, cancelReminder, sendTestNotification,
@@ -24,18 +24,6 @@ interface Props {
   playerName: string;
 }
 
-function StatCard({ label, value, unit, color }: {
-  label: string; value: string | number; unit?: string; color: string;
-}) {
-  return (
-    <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 text-center">
-      <div className={`text-2xl font-bold ${color}`}>
-        {value}{unit && <span className="text-sm font-normal text-gray-400 ml-1">{unit}</span>}
-      </div>
-      <div className="text-xs text-gray-500 mt-1">{label}</div>
-    </div>
-  );
-}
 
 export function ACWRSection({
   sessions, plannedSessions, onAddSession, onAddPlanned,
@@ -48,9 +36,10 @@ export function ACWRSection({
   // Reminder-Timeouts: id → timeoutId
   const reminderTimeouts = useRef<Map<string, number>>(new Map());
 
-  const acwrData   = useMemo(() => calculateACWR(sessions), [sessions]);
-  const dailyLoads = useMemo(() => aggregateDailyLoads(sessions), [sessions]);
-  const current    = useMemo(() => getCurrentACWR(acwrData), [acwrData]);
+  const acwrData      = useMemo(() => calculateACWR(sessions), [sessions]);
+  const projectedData = useMemo(() => projectFutureACWR(sessions, plannedSessions), [sessions, plannedSessions]);
+  const dailyLoads    = useMemo(() => aggregateDailyLoads(sessions), [sessions]);
+  const current       = useMemo(() => getCurrentACWR(acwrData), [acwrData]);
   const acwr       = current?.acwr ?? null;
   const zone       = acwr !== null ? getACWRZoneLabel(acwr) : null;
 
@@ -119,7 +108,13 @@ export function ACWRSection({
     <div className="space-y-4">
 
       {/* Trainingsübersicht */}
-      <TrainingOverview sessions={sessions} plannedSessions={plannedSessions} />
+      <TrainingOverview
+        sessions={sessions}
+        plannedSessions={plannedSessions}
+        onConfirmPlanned={(id, rpe, dauer) => { onConfirmPlanned(id, rpe, dauer); onSessionConfirmed?.(); }}
+        onUpdatePlanned={onUpdatePlanned}
+        onDismissPlanned={handleDismiss}
+      />
 
       {/* Trainer-Plan Import */}
       <TrainerPlanUpload onSessionsAdded={onAddPlanned} />
@@ -173,42 +168,6 @@ export function ACWRSection({
           </div>
         )}
 
-        {/* Kennzahlen */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-          <StatCard
-            label="Aktueller ACWR"
-            value={acwr !== null ? acwr.toFixed(2) : '—'}
-            color={acwr === null ? 'text-gray-500' : acwr < 0.8 ? 'text-blue-400' : acwr <= 1.3 ? 'text-green-400' : 'text-red-400'}
-          />
-          <StatCard label="Acute Load (7d Ø)" value={current?.acuteLoad ?? '—'} unit="AU" color="text-blue-400" />
-          <StatCard label="Chronic Load (28d Ø)" value={current?.chronicLoad ?? '—'} unit="AU" color="text-amber-400" />
-          <StatCard label="Load diese Woche" value={weeklyLoad} unit="AU" color="text-green-400" />
-        </div>
-
-        {/* Ampel */}
-        {acwr !== null && zone && (
-          <div className={`rounded-2xl p-4 border flex items-center gap-4 ${zone.bg} border-gray-700 mb-5`}>
-            <div className="text-4xl font-black" style={{ color: zone.color }}>{acwr.toFixed(2)}</div>
-            <div>
-              <div className="font-bold text-white">{zone.label}</div>
-              <div className="text-sm text-gray-400">
-                {acwr < 0.8 && 'Zu wenig Belastung – Verletzungsrisiko durch Unterbelastung.'}
-                {acwr >= 0.8 && acwr <= 1.3 && 'Optimale Zone – gute Balance zwischen Belastung und Erholung.'}
-                {acwr > 1.3 && 'Achtung! Überbelastung – erhöhtes Verletzungsrisiko.'}
-              </div>
-            </div>
-            <div className="ml-auto flex gap-1 items-end h-8 shrink-0">
-              {[0.4, 0.6, 0.8, 1.0, 1.2, 1.3, 1.5].map((v, i) => (
-                <div key={i} className="w-3 rounded-sm"
-                  style={{
-                    height: `${20 + i * 6}px`,
-                    backgroundColor: v <= acwr ? zone.color : '#374151',
-                  }} />
-              ))}
-            </div>
-          </div>
-        )}
-
         {sessions.length === 0 && (
           <div className="text-center py-8 text-gray-600">
             <div className="text-3xl mb-2">📋</div>
@@ -216,13 +175,119 @@ export function ACWRSection({
           </div>
         )}
 
-        {/* Legende */}
-        <div className="flex gap-4 text-xs">
-          {[['#60a5fa','Low Risk <0.8'], ['#4ade80','Optimal 0.8–1.3'], ['#f87171','High Risk >1.3']].map(([c, l]) => (
-            <span key={l} className="flex items-center gap-1.5" style={{ color: c }}>
-              <span className="w-3 h-1 rounded inline-block" style={{ backgroundColor: c }} />{l}
-            </span>
-          ))}
+        {/* ACWR Gauge */}
+        {acwr !== null && zone && (
+          <div className="mb-5 space-y-3">
+            {/* Hauptanzeige: Wert + Zone */}
+            <div className="flex items-center gap-4">
+              <div
+                className="w-16 h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border border-gray-700"
+                style={{ backgroundColor: zone.color + '22' }}
+              >
+                <span className="text-xl font-black leading-none" style={{ color: zone.color }}>
+                  {acwr.toFixed(2)}
+                </span>
+                <span className="text-xs text-gray-400 mt-0.5">ACWR</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-white text-sm">{zone.label}</div>
+                <div className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+                  {acwr < 0.8 && 'Zu wenig Belastung – Risiko durch Unterbelastung.'}
+                  {acwr >= 0.8 && acwr <= 1.3 && 'Optimale Zone – gute Balance zwischen Belastung und Erholung.'}
+                  {acwr > 1.3 && 'Achtung! Überbelastung – erhöhtes Verletzungsrisiko.'}
+                </div>
+              </div>
+            </div>
+
+            {/* Horizontale Gauge-Leiste */}
+            <div className="relative h-5">
+              {/* Gradient-Balken */}
+              <div className="absolute inset-0 rounded-full overflow-hidden"
+                style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 32%, #4ade80 40%, #4ade80 72%, #f87171 82%, #f87171 100%)' }}
+              />
+              {/* Zonen-Labels */}
+              <div className="absolute inset-0 flex items-center">
+                <div className="absolute" style={{ left: '32%', transform: 'translateX(-50%)' }}>
+                  <div className="w-px h-3 bg-gray-900/60 mx-auto" />
+                </div>
+                <div className="absolute" style={{ left: '72%', transform: 'translateX(-50%)' }}>
+                  <div className="w-px h-3 bg-gray-900/60 mx-auto" />
+                </div>
+              </div>
+              {/* Zeiger */}
+              {(() => {
+                const clampedACWR = Math.max(0, Math.min(2, acwr));
+                const pct = (clampedACWR / 2) * 100;
+                return (
+                  <div
+                    className="absolute top-0 bottom-0 flex items-center"
+                    style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}
+                  >
+                    <div className="w-3 h-3 bg-white rounded-full border-2 border-gray-900 shadow-lg" />
+                  </div>
+                );
+              })()}
+            </div>
+            {/* Skalenbeschriftung */}
+            <div className="flex justify-between text-xs text-gray-500 -mt-1 px-0.5">
+              <span>0</span>
+              <span className="text-blue-400">0.8</span>
+              <span className="text-green-400">1.0</span>
+              <span className="text-red-400">1.3</span>
+              <span>2.0</span>
+            </div>
+          </div>
+        )}
+
+        {/* Kennzahlen: Acute vs Chronic Load */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {/* Acute Load */}
+          <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-500">Acute Load</span>
+              <span className="text-xs text-gray-600">7d Ø</span>
+            </div>
+            <div className="text-xl font-bold text-blue-400">
+              {current?.acuteLoad ?? '—'}
+              <span className="text-xs font-normal text-gray-500 ml-1">AU</span>
+            </div>
+            <div className="mt-2 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-400 rounded-full transition-all"
+                style={{ width: `${Math.min(100, ((current?.acuteLoad ?? 0) / 1500) * 100)}%` }} />
+            </div>
+          </div>
+
+          {/* Chronic Load */}
+          <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-500">Chronic Load</span>
+              <span className="text-xs text-gray-600">28d Ø</span>
+            </div>
+            <div className="text-xl font-bold text-amber-400">
+              {current?.chronicLoad ?? '—'}
+              <span className="text-xs font-normal text-gray-500 ml-1">AU</span>
+            </div>
+            <div className="mt-2 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-full bg-amber-400 rounded-full transition-all"
+                style={{ width: `${Math.min(100, ((current?.chronicLoad ?? 0) / 1500) * 100)}%` }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Wöchentlicher Load */}
+        <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800 flex items-center gap-4">
+          <div>
+            <div className="text-xs text-gray-500 mb-0.5">Load diese Woche</div>
+            <div className="text-xl font-bold text-green-400">
+              {weeklyLoad}
+              <span className="text-xs font-normal text-gray-500 ml-1">AU</span>
+            </div>
+          </div>
+          <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+            <div className="h-full bg-green-400 rounded-full transition-all"
+              style={{ width: `${Math.min(100, (weeklyLoad / Math.max(weeklyLoad, current?.chronicLoad ?? 1)) * 100)}%` }} />
+          </div>
+          <div className="text-xs text-gray-600 shrink-0">7d</div>
         </div>
       </div>
 
@@ -230,7 +295,7 @@ export function ACWRSection({
       {sessions.length > 0 && (
         <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800">
           <h3 className="text-sm font-semibold text-white mb-4">ACWR Verlauf (letzte 60 Tage)</h3>
-          <ACWRChart data={acwrData} />
+          <ACWRChart data={acwrData} projectedData={projectedData} />
         </div>
       )}
 

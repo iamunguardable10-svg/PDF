@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { Session, PlannedSession } from '../types/acwr';
 import { TRAINING_UNITS, TE_COLORS, TE_EMOJI } from '../types/acwr';
+import { WeekCalendar } from './WeekCalendar';
 
 interface Props {
   sessions: Session[];
   plannedSessions: PlannedSession[];
+  onConfirmPlanned?: (id: string, rpe: number, dauer: number) => void;
+  onUpdatePlanned?: (id: string, updates: Partial<PlannedSession>) => void;
+  onDismissPlanned?: (id: string) => void;
 }
 
 function isoWeekStart(offset = 0): string {
@@ -15,8 +19,11 @@ function isoWeekStart(offset = 0): string {
   return d.toISOString().split('T')[0];
 }
 
-export function TrainingOverview({ sessions, plannedSessions }: Props) {
-  const [view, setView] = useState<'woche' | 'verlauf'>('woche');
+export function TrainingOverview({
+  sessions, plannedSessions,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned,
+}: Props) {
+  const [view, setView] = useState<'kalender' | 'woche' | 'verlauf'>('kalender');
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -81,14 +88,24 @@ export function TrainingOverview({ sessions, plannedSessions }: Props) {
           <p className="text-sm text-gray-400">{sessions.length} Einheiten gesamt</p>
         </div>
         <div className="ml-auto flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
-          {(['woche', 'verlauf'] as const).map(v => (
+          {([['kalender', 'Kalender'], ['woche', 'Woche'], ['verlauf', 'Verlauf']] as const).map(([v, label]) => (
             <button key={v} onClick={() => setView(v)}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${view === v ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
-              {v === 'woche' ? 'Woche' : 'Verlauf'}
+              {label}
             </button>
           ))}
         </div>
       </div>
+
+      {view === 'kalender' && (
+        <WeekCalendar
+          sessions={sessions}
+          plannedSessions={plannedSessions}
+          onConfirm={onConfirmPlanned}
+          onUpdate={onUpdatePlanned}
+          onDismiss={onDismissPlanned}
+        />
+      )}
 
       {view === 'woche' && (
         <>
