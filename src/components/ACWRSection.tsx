@@ -444,7 +444,7 @@ export function ACWRSection({
       {sessions.length > 0 && (
         <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800">
           <h3 className="text-sm font-semibold text-white mb-4">ACWR Verlauf (letzte 60 Tage)</h3>
-          <ACWRChart data={acwrData} projectedData={projectedData} />
+          <ACWRChart data={acwrData} projectedData={projectedData} dailyLoads={dailyLoads} />
         </div>
       )}
 
