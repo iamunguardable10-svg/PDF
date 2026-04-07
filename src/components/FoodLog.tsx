@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { FoodEntry, MealType, DrinkType } from '../types/food';
 import { MEAL_LABELS, MEAL_EMOJI, DRINK_LABELS, DRINK_EMOJI, sumEntries } from '../types/food';
 import { lookupBarcode, analyzeFoodPhoto } from '../lib/foodApi';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 interface Props {
   entries: FoodEntry[];
@@ -128,17 +129,21 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
   const handleBarcodeFile = async (file: File) => {
     setLoading(true); setLoadingMsg('Barcode wird gescannt…'); setError('');
     try {
-      let barcodeValue = '';
-      if ('BarcodeDetector' in window) {
-        const img = await createImageBitmap(file);
-        // @ts-expect-error BarcodeDetector not in all TS libs
-        const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
-        const codes = await detector.detect(img);
-        if (codes.length > 0) barcodeValue = codes[0].rawValue;
+      // @zxing/browser works in all browsers including Safari
+      const reader = new BrowserMultiFormatReader();
+      const imgUrl = URL.createObjectURL(file);
+      const result = await reader.decodeFromImageUrl(imgUrl);
+      URL.revokeObjectURL(imgUrl);
+      if (!result?.getText()) {
+        setError('Kein Barcode erkannt. Code manuell eingeben.');
+        setLoading(false);
+        return;
       }
-      if (!barcodeValue) { setError('Kein Barcode erkannt. Code manuell eingeben.'); setLoading(false); return; }
-      setBarcode(barcodeValue); // triggers auto-lookup via useEffect
-    } catch { setError('Fehler beim Scannen.'); setLoading(false); }
+      setBarcode(result.getText()); // triggers auto-lookup via useEffect
+    } catch {
+      setError('Kein Barcode erkannt. Bitte manuell eingeben.');
+      setLoading(false);
+    }
   };
 
   const handlePhotoFile = async (file: File) => {
