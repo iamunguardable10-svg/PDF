@@ -18,6 +18,18 @@ type InputMode = 'manual' | 'barcode' | 'photo';
 
 const EMPTY_FORM = { name: '', calories: 0, protein: 0, carbs: 0, fat: 0, amount: '' };
 
+// Per-100g base values from barcode — used to scale by entered grams
+interface Per100g { calories: number; protein: number; carbs: number; fat: number; }
+function scaleNutrition(base: Per100g, grams: number): Omit<Per100g, never> {
+  const f = grams / 100;
+  return {
+    calories: Math.round(base.calories * f),
+    protein:  Math.round(base.protein  * f * 10) / 10,
+    carbs:    Math.round(base.carbs    * f * 10) / 10,
+    fat:      Math.round(base.fat      * f * 10) / 10,
+  };
+}
+
 // EAN-8 or EAN-13
 const isCompleteBarcode = (v: string) => /^\d{8}$/.test(v) || /^\d{13}$/.test(v);
 
@@ -70,6 +82,8 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
   const [mealType, setMealType] = useState<MealType>('mittagessen');
   const [drinkType, setDrinkType] = useState<DrinkType>('wasser');
   const [form, setForm] = useState(EMPTY_FORM);
+  const [per100g, setPer100g] = useState<Per100g | null>(null);  // set after barcode hit
+  const [grams, setGrams] = useState<number>(100);
   const [barcode, setBarcode] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
@@ -85,7 +99,14 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
   const calPct = Math.min(100, targetCalories > 0 ? (totals.totalCalories / targetCalories) * 100 : 0);
   const calOver = totals.totalCalories > targetCalories;
 
-  const resetForm = () => { setForm(EMPTY_FORM); setBarcode(''); setError(''); setLoadingMsg(''); };
+  const resetForm = () => {
+    setForm(EMPTY_FORM);
+    setBarcode('');
+    setPer100g(null);
+    setGrams(100);
+    setError('');
+    setLoadingMsg('');
+  };
 
   // Auto-lookup when barcode is complete (EAN-8 or EAN-13)
   useEffect(() => {
@@ -99,11 +120,25 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
       if (cancelled) return;
       setLoading(false);
       setLoadingMsg('');
-      if (r) setForm({ name: r.name, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat, amount: r.amount });
-      else setError('Produkt nicht gefunden. Bitte manuell eintragen.');
+      if (r) {
+        // Store per-100g base; default to 100g portion
+        const base = { calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat };
+        setPer100g(base);
+        setGrams(100);
+        setForm(f => ({ ...f, name: r.name, amount: '100g', ...scaleNutrition(base, 100) }));
+      } else {
+        setError('Produkt nicht gefunden. Bitte manuell eintragen.');
+      }
     })();
     return () => { cancelled = true; };
   }, [barcode]);
+
+  // Recalculate macros whenever the gram value changes (only for barcode hits)
+  useEffect(() => {
+    if (!per100g) return;
+    const scaled = scaleNutrition(per100g, grams);
+    setForm(f => ({ ...f, amount: `${grams}g`, ...scaled }));
+  }, [grams, per100g]);
 
   const handleAdd = () => {
     if (!form.name.trim()) { setError('Name fehlt'); return; }
@@ -329,28 +364,94 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
               {/* Barcode mode */}
               {mode === 'barcode' && (
                 <div className="space-y-3">
-                  <button onClick={() => fileRef.current?.click()}
-                    className="w-full py-3 rounded-xl border-2 border-dashed border-gray-700 hover:border-violet-500 text-gray-400 hover:text-white text-sm transition-all">
-                    📸 Barcode-Foto hochladen
-                  </button>
-                  <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
-                    onChange={e => e.target.files?.[0] && handleBarcodeFile(e.target.files[0])} />
-                  <div className="relative">
-                    <input type="text" placeholder="EAN-Code eingeben (8 oder 13 Stellen)"
-                      value={barcode} onChange={e => { setBarcode(e.target.value.replace(/\D/g, '')); setError(''); }}
-                      maxLength={13}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 font-mono tracking-widest pr-10" />
-                    {loading && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <svg className="animate-spin w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
+                  {/* Scan / type input — only shown before product is found */}
+                  {!per100g && (
+                    <>
+                      <button onClick={() => fileRef.current?.click()}
+                        className="w-full py-3 rounded-xl border-2 border-dashed border-gray-700 hover:border-violet-500 text-gray-400 hover:text-white text-sm transition-all">
+                        📸 Barcode-Foto hochladen
+                      </button>
+                      <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
+                        onChange={e => e.target.files?.[0] && handleBarcodeFile(e.target.files[0])} />
+                      <div className="relative">
+                        <input type="text" placeholder="EAN-Code eingeben (8 oder 13 Stellen)"
+                          value={barcode} onChange={e => { setBarcode(e.target.value.replace(/\D/g, '')); setError(''); }}
+                          maxLength={13}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 font-mono tracking-widest pr-10" />
+                        {loading && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <svg className="animate-spin w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  {barcode.length > 0 && !isCompleteBarcode(barcode) && (
-                    <p className="text-xs text-gray-600">{barcode.length}/13 Stellen — wird automatisch gesucht bei 8 oder 13</p>
+                      {barcode.length > 0 && !isCompleteBarcode(barcode) && (
+                        <p className="text-xs text-gray-600">{barcode.length}/13 Stellen — wird automatisch gesucht</p>
+                      )}
+                    </>
+                  )}
+
+                  {/* Product found — show name + gram input only */}
+                  {per100g && form.name && (
+                    <div className="bg-green-900/20 border border-green-800/50 rounded-2xl p-4 space-y-4">
+                      <div className="flex items-start gap-2">
+                        <span className="text-green-400 text-lg shrink-0">✓</span>
+                        <div>
+                          <div className="text-sm font-semibold text-white">{form.name}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            pro 100g: {per100g.calories} kcal · P {per100g.protein}g · KH {per100g.carbs}g · F {per100g.fat}g
+                          </div>
+                        </div>
+                        <button onClick={() => { setPer100g(null); setBarcode(''); setForm(EMPTY_FORM); }}
+                          className="ml-auto text-gray-600 hover:text-gray-400 text-sm shrink-0">↩ Neu</button>
+                      </div>
+
+                      {/* Gram input */}
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-2">
+                          Wie viel hast du gegessen?
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="number" min={1} max={2000} step={5}
+                            value={grams}
+                            onChange={e => setGrams(Math.max(1, Number(e.target.value)))}
+                            className="w-28 bg-gray-800 border border-violet-600 rounded-xl px-3 py-2.5 text-white text-lg font-bold focus:outline-none text-center"
+                          />
+                          <span className="text-gray-400 font-semibold">g</span>
+                          <div className="flex gap-1.5 ml-auto">
+                            {[50, 100, 150, 200, 250].map(g => (
+                              <button key={g} onClick={() => setGrams(g)}
+                                className={`px-2 py-1 rounded-lg text-xs font-medium border transition-all ${grams === g ? 'border-violet-500 bg-violet-900/30 text-white' : 'border-gray-700 text-gray-500 hover:text-white hover:border-gray-600'}`}>
+                                {g}g
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Live calculated values */}
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                        <div className="bg-gray-900/60 rounded-xl py-2">
+                          <div className="text-base font-bold text-orange-400">{form.calories}</div>
+                          <div className="text-xs text-gray-500">kcal</div>
+                        </div>
+                        <div className="bg-gray-900/60 rounded-xl py-2">
+                          <div className="text-base font-bold text-orange-300">{form.protein}g</div>
+                          <div className="text-xs text-gray-500">Protein</div>
+                        </div>
+                        <div className="bg-gray-900/60 rounded-xl py-2">
+                          <div className="text-base font-bold text-blue-400">{form.carbs}g</div>
+                          <div className="text-xs text-gray-500">KH</div>
+                        </div>
+                        <div className="bg-gray-900/60 rounded-xl py-2">
+                          <div className="text-base font-bold text-yellow-400">{form.fat}g</div>
+                          <div className="text-xs text-gray-500">Fett</div>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
