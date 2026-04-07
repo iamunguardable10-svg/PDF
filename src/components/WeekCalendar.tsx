@@ -24,6 +24,16 @@ const RPE_LABELS = [
   'Schwer', 'Schwer+', 'Sehr schwer', 'Sehr schwer+', 'Maximal fast', 'Maximal',
 ];
 
+const DEFAULT_DURATIONS: Record<string, number> = {
+  Team:       120,
+  'S&C':       60,
+  Spiel:       90,  // sport-dependent — 90 as neutral default
+  Aufwärmen:   60,
+  Indi:        60,
+  Schulsport:  75,
+  Prävention:  30,
+};
+
 function getWeekStart(offsetWeeks = 0): Date {
   const d = new Date();
   const day = d.getDay() || 7;
@@ -77,8 +87,13 @@ function CreateSessionModal({
 }) {
   const [te, setTe]       = useState<TrainingUnit>('Team');
   const [time, setTime]   = useState('');
-  const [dauer, setDauer] = useState(90);
+  const [dauer, setDauer] = useState(DEFAULT_DURATIONS['Team']);
   const [note, setNote]   = useState('');
+
+  function handleTeChange(unit: TrainingUnit) {
+    setTe(unit);
+    setDauer(DEFAULT_DURATIONS[unit] ?? 60);
+  }
 
   const color = TE_COLORS[te];
   const emoji = TE_EMOJI[te];
@@ -127,7 +142,7 @@ function CreateSessionModal({
                 return (
                   <button
                     key={unit}
-                    onClick={() => setTe(unit)}
+                    onClick={() => handleTeChange(unit)}
                     className={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl border text-xs font-medium transition-all ${
                       selected ? 'border-transparent text-white' : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
                     }`}
@@ -781,14 +796,6 @@ function SessionBlock({
       {isDone && entry.dauer && (
         <div className="text-center text-gray-500 leading-tight" style={{ fontSize: '8px' }}>
           {entry.dauer}′
-        </div>
-      )}
-      {isDone && entry.rpe !== undefined && (
-        <div className="mt-0.5 h-0.5 w-full rounded-full bg-gray-700/50">
-          <div className="h-0.5 rounded-full" style={{
-            width: `${(entry.rpe / 10) * 100}%`,
-            backgroundColor: entry.rpe <= 3 ? '#4ade80' : entry.rpe <= 6 ? '#facc15' : '#f87171',
-          }} />
         </div>
       )}
     </div>
