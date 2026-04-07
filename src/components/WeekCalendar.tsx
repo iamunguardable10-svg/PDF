@@ -54,13 +54,13 @@ function getISOWeek(d: Date): number {
 }
 
 function shiftDate(iso: string, days: number): string {
-  const d = new Date(iso);
+  const d = new Date(iso + 'T00:00');
   d.setDate(d.getDate() + days);
   return toISO(d);
 }
 
 function fmtWeekday(iso: string): string {
-  return new Date(iso).toLocaleDateString('de-DE', {
+  return new Date(iso + 'T00:00').toLocaleDateString('de-DE', {
     weekday: 'short', day: '2-digit', month: '2-digit',
   });
 }
@@ -123,7 +123,7 @@ function CreateSessionModal({
           <div className="flex-1">
             <div className="text-sm font-bold text-white">Neue Einheit</div>
             <div className="text-xs text-gray-400">
-              {new Date(datum).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {new Date(datum + 'T00:00').toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
             </div>
           </div>
           <button onClick={onClose}
@@ -607,7 +607,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           {/* Kopfzeile */}
           {weekDays.map((iso, idx) => {
             const isToday = iso === today;
-            const d = new Date(iso);
+            const d = new Date(iso + 'T00:00');
             const focus = focusByDay.get(iso) ?? 'rest';
             const focusBadge: Record<string, { label: string; color: string }> = {
               loading:  { label: 'Spiel',   color: '#f87171' },
