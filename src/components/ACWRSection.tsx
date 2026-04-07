@@ -122,8 +122,55 @@ export function ACWRSection({
 
   const pendingCount = plannedSessions.filter(s => !s.confirmed).length;
 
+  const [showInfo, setShowInfo] = useState(false);
+
   return (
     <div className="space-y-4">
+
+      {/* ACWR Info */}
+      <div className="bg-gray-900/50 rounded-2xl border border-gray-800 overflow-hidden">
+        <button
+          onClick={() => setShowInfo(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-900/40 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-sm">ℹ️</span>
+            <span className="text-sm font-medium text-gray-300">Was ist der ACWR?</span>
+          </div>
+          <span className="text-gray-600 text-xs">{showInfo ? '▲' : '▼'}</span>
+        </button>
+        {showInfo && (
+          <div className="px-4 pb-4 space-y-3 border-t border-gray-800 pt-3">
+            <p className="text-sm text-gray-400 leading-relaxed">
+              Der <span className="text-white font-semibold">Acute:Chronic Workload Ratio (ACWR)</span> misst das Verhältnis zwischen kurzfristiger und langfristiger Trainingsbelastung. Er zeigt, ob du gerade mehr trainierst als dein Körper gewohnt ist.
+            </p>
+            <div className="grid grid-cols-1 gap-2 text-xs">
+              <div className="bg-gray-800/60 rounded-xl p-3">
+                <div className="font-semibold text-white mb-1">Formel</div>
+                <div className="text-gray-400">ACWR = Ø-Last 7 Tage ÷ Ø-Last 28 Tage</div>
+                <div className="text-gray-500 mt-1">Trainingsbelastung (TL) = RPE × Dauer in Minuten</div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-blue-900/20 border border-blue-800/40 rounded-xl p-2.5 text-center">
+                  <div className="text-blue-400 font-bold text-sm">&lt; 0.8</div>
+                  <div className="text-gray-400 mt-0.5">Unterbelastung</div>
+                  <div className="text-gray-500 text-xs mt-0.5">Verletzungsrisiko durch mangelnde Fitness</div>
+                </div>
+                <div className="bg-green-900/20 border border-green-800/40 rounded-xl p-2.5 text-center">
+                  <div className="text-green-400 font-bold text-sm">0.8 – 1.3</div>
+                  <div className="text-gray-400 mt-0.5">Optimal</div>
+                  <div className="text-gray-500 text-xs mt-0.5">Trainingsreiz ohne Überbelastung</div>
+                </div>
+                <div className="bg-red-900/20 border border-red-800/40 rounded-xl p-2.5 text-center">
+                  <div className="text-red-400 font-bold text-sm">&gt; 1.3</div>
+                  <div className="text-gray-400 mt-0.5">Überbelastung</div>
+                  <div className="text-gray-500 text-xs mt-0.5">Erhöhtes Verletzungsrisiko</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Trainingsübersicht */}
       <TrainingOverview

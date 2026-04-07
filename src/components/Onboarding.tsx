@@ -164,13 +164,6 @@ export function Onboarding({ onComplete }: Props) {
                   </button>
                 ))}
               </div>
-              <div>
-                <label className="text-xs text-gray-500 block mb-2">Trainingseinheiten pro Woche: <span className="text-white font-semibold">{profile.weeklyTrainings}×</span></label>
-                <input type="range" min={1} max={14} value={profile.weeklyTrainings}
-                  onChange={e => set('weeklyTrainings', Number(e.target.value))}
-                  className="w-full accent-violet-500" />
-                <div className="flex justify-between text-xs text-gray-600 mt-1"><span>1×</span><span>7×</span><span>14×</span></div>
-              </div>
             </div>
           )}
 
@@ -210,7 +203,6 @@ export function Onboarding({ onComplete }: Props) {
                         ['⚽', profile.sport],
                         ['🎯', GOAL_LABELS[profile.primaryGoal]],
                         ['📏', `${profile.weight}kg · ${profile.height}cm · ${profile.age}J`],
-                        ['🏋️', `${profile.weeklyTrainings}× Training/Woche`],
                       ].map(([icon, val]) => (
                         <div key={icon} className="flex gap-2 text-gray-300">
                           <span>{icon}</span><span>{val}</span>

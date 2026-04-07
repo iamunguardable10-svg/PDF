@@ -82,28 +82,34 @@ interface DayEntry {
 // ─── Create Session Modal ─────────────────────────────────────────────────────
 
 function CreateSessionModal({
-  datum, onClose, onAdd,
+  datum, onClose, onAdd, onConfirmDirect,
 }: {
   datum: string;
   onClose: () => void;
   onAdd: (s: PlannedSession) => void;
+  onConfirmDirect?: (id: string, rpe: number, dauer: number) => void;
 }) {
+  const isPast = datum < toISO(new Date());
+
   const [te, setTe]       = useState<TrainingUnit>('Team');
   const [time, setTime]   = useState('');
   const [dauer, setDauer] = useState(DEFAULT_DURATIONS['Team']);
   const [note, setNote]   = useState('');
+  const [rpe, setRpe]     = useState(7);
 
   function handleTeChange(unit: TrainingUnit) {
     setTe(unit);
     setDauer(DEFAULT_DURATIONS[unit] ?? 60);
   }
 
-  const color = TE_COLORS[te];
-  const emoji = TE_EMOJI[te];
+  const color    = TE_COLORS[te];
+  const emoji    = TE_EMOJI[te];
+  const rpeColor = rpe <= 3 ? '#4ade80' : rpe <= 6 ? '#facc15' : '#f87171';
 
   function handleCreate() {
+    const id = `planned-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     onAdd({
-      id: `planned-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id,
       datum,
       te,
       uhrzeit: time || undefined,
@@ -112,6 +118,10 @@ function CreateSessionModal({
       reminderScheduled: false,
       confirmed: false,
     });
+    // For past dates: immediately confirm with RPE so it becomes a real session
+    if (isPast && onConfirmDirect) {
+      onConfirmDirect(id, rpe, dauer);
+    }
     onClose();
   }
 
@@ -124,7 +134,9 @@ function CreateSessionModal({
         {/* Header */}
         <div className="px-5 pt-5 pb-3 flex items-center gap-3 border-b border-gray-800">
           <div className="flex-1">
-            <div className="text-sm font-bold text-white">Neue Einheit</div>
+            <div className="text-sm font-bold text-white">
+              {isPast ? 'Einheit nachtragen' : 'Neue Einheit'}
+            </div>
             <div className="text-xs text-gray-400">
               {new Date(datum + 'T00:00').toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
             </div>
@@ -169,8 +181,15 @@ function CreateSessionModal({
               <div className="text-sm font-semibold text-white">{te}</div>
               <div className="text-xs text-gray-500">
                 {time ? `${time} Uhr · ` : ''}{dauer} Min
+                {isPast && <span className="ml-1" style={{ color: rpeColor }}>· RPE {rpe}</span>}
               </div>
             </div>
+            {isPast && (
+              <div className="ml-auto text-right">
+                <div className="text-xs font-bold text-orange-400">{rpe * dauer} AU</div>
+                <div className="text-xs text-gray-600">TL</div>
+              </div>
+            )}
           </div>
 
           {/* Uhrzeit + Dauer */}
@@ -188,6 +207,22 @@ function CreateSessionModal({
             </div>
           </div>
 
+          {/* RPE — nur für vergangene Daten */}
+          {isPast && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-gray-500">Empfundene Belastung (RPE)</label>
+                <span className="font-bold text-lg leading-none" style={{ color: rpeColor }}>{rpe}</span>
+              </div>
+              <input type="range" min={1} max={10} step={1} value={rpe}
+                onChange={e => setRpe(Number(e.target.value))}
+                className="w-full accent-violet-500" />
+              <div className="flex justify-between text-xs text-gray-600">
+                <span>1 Sehr leicht</span><span>5 Schwer</span><span>10 Maximal</span>
+              </div>
+            </div>
+          )}
+
           {/* Notiz */}
           <div>
             <label className="text-xs text-gray-500 block mb-1.5">Notiz (optional)</label>
@@ -201,7 +236,7 @@ function CreateSessionModal({
             className="w-full py-2.5 rounded-2xl font-semibold text-sm text-white transition-colors"
             style={{ backgroundColor: color }}
           >
-            {emoji} Einheit planen
+            {isPast ? `${emoji} Einheit eintragen` : `${emoji} Einheit planen`}
           </button>
         </div>
       </div>
@@ -736,6 +771,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           datum={createForDay}
           onClose={() => setCreateForDay(null)}
           onAdd={s => { onAddPlanned([s]); setCreateForDay(null); }}
+          onConfirmDirect={onConfirm}
         />
       )}
     </>

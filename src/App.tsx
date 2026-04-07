@@ -72,12 +72,22 @@ function App() {
   const today = new Date().toISOString().split('T')[0];
   const todayEntries = foodLog.filter(e => e.date === today);
 
+  // Auto-calculate weeklyTrainings from last 28 days of actual sessions
+  const autoWeeklyTrainings = Math.max(1, Math.round(
+    sessions.filter(s => {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 28);
+      return new Date(s.datum) >= cutoff;
+    }).length / 4
+  ));
+  const profileWithAutoFreq = { ...profile, weeklyTrainings: autoWeeklyTrainings };
+
   const acwrDataPoints = sessions.length > 0 ? calculateACWR(sessions) : [];
   const currentACWRPoint = acwrDataPoints.length > 0 ? getCurrentACWR(acwrDataPoints) : null;
   const acwr = currentACWRPoint?.acwr ?? null;
 
-  const tdee   = calcTDEE(profile, acwr);
-  const macros = calcMacros(profile, tdee);
+  const tdee   = calcTDEE(profileWithAutoFreq, acwr);
+  const macros = calcMacros(profileWithAutoFreq, tdee);
 
   // ── Auth setup ─────────────────────────────────────────────────────────────
 
@@ -349,7 +359,7 @@ function App() {
               acwrHistory={acwrDataPoints}
               baseTDEE={tdee}
               baseProtein={macros.protein}
-              profile={profile}
+              profile={profileWithAutoFreq}
               acwr={acwr}
               outdated={forecastOutdated}
               forecast={forecast}
@@ -361,7 +371,7 @@ function App() {
               goal={trainingGoals[0]}
               activities={[]}
               onPlanGenerated={handlePlanGenerated}
-              profile={profile}
+              profile={profileWithAutoFreq}
               acwr={acwr}
               forecast={forecast}
             />

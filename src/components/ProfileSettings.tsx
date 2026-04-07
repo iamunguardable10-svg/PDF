@@ -149,17 +149,6 @@ export function ProfileSettings({ profile: initial, onSave, onClose }: Props) {
             </div>
           </section>
 
-          {/* Weekly trainings */}
-          <section className="space-y-3">
-            <h3 className="text-xs text-gray-500 uppercase tracking-wide font-semibold">
-              Training pro Woche: <span className="text-white font-bold">{profile.weeklyTrainings}×</span>
-            </h3>
-            <input type="range" min={1} max={14} value={profile.weeklyTrainings}
-              onChange={e => set('weeklyTrainings', Number(e.target.value))}
-              className="w-full accent-violet-500" />
-            <div className="flex justify-between text-xs text-gray-600"><span>1×</span><span>7×</span><span>14×</span></div>
-          </section>
-
           {/* Dietary */}
           <section className="space-y-3">
             <h3 className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Ernährungspräferenzen</h3>
