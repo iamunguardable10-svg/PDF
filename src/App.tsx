@@ -19,7 +19,7 @@ import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
 import { loadSessions, saveSessions, loadPlannedSessions, savePlannedSessions } from './lib/trainingStorage';
 import { calculateACWR, getCurrentACWR } from './lib/acwrCalculations';
 import { calcTDEE, calcMacros } from './types/profile';
-import { supabase } from './lib/supabase';
+import { supabase, CLOUD_ENABLED } from './lib/supabase';
 import {
   pullAllData,
   pushProfile, pushSessions, pushPlannedSessions, pushFoodLog,
@@ -33,11 +33,6 @@ import type { NutritionForecast as NutritionForecastData } from './lib/foodApi';
 import type { User } from '@supabase/supabase-js';
 
 type Tab = 'dashboard' | 'tagebuch' | 'acwr';
-
-// Is Supabase configured?
-const CLOUD_ENABLED = !!(
-  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
