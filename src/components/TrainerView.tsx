@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import type { TrainerShareData } from '../lib/trainerShare';
+import { fetchLiveTrainerData } from '../lib/trainerShare';
 import type { ACWRDataPoint } from '../types/acwr';
 import { TE_EMOJI, TE_COLORS } from '../types/acwr';
 import { getACWRZoneLabel } from '../lib/acwrCalculations';
@@ -8,91 +9,153 @@ import { ACWRChart } from './ACWRChart';
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
 interface Props {
-  data: TrainerShareData;
+  data?: TrainerShareData;      // legacy base64
+  token?: string;               // live Supabase token
 }
 
-export function TrainerView({ data }: Props) {
+export function TrainerView({ data: staticData, token }: Props) {
+  const [liveData, setLiveData]   = useState<TrainerShareData | null>(null);
+  const [loading, setLoading]     = useState(!!token);
+  const [error, setError]         = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(false);
+    const result = await fetchLiveTrainerData(token);
+    if (result) {
+      setLiveData(result);
+      setLastRefresh(new Date());
+    } else {
+      setError(true);
+    }
+    setLoading(false);
+  }, [token]);
+
+  useEffect(() => {
+    fetchData();
+    // Auto-refresh every 5 minutes
+    if (token) {
+      const interval = setInterval(fetchData, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [fetchData, token]);
+
+  const data = liveData ?? staticData ?? null;
+  const isLive = !!token;
+
   const today = new Date().toISOString().split('T')[0];
 
-  // ACWR-History zu ACWRDataPoint konvertieren (für Chart)
   const acwrData: ACWRDataPoint[] = useMemo(() =>
-    data.acwrHistory.map(p => ({
-      datum: p.d,
-      taeglLoad: 0,
-      acuteLoad: p.a,
-      chronicLoad: p.c,
-      acwr: p.v,
+    (data?.acwrHistory ?? []).map(p => ({
+      datum: p.d, taeglLoad: 0, acuteLoad: p.a, chronicLoad: p.c, acwr: p.v,
     })),
-  [data.acwrHistory]);
+  [data]);
 
-  // Aktuellster ACWR-Wert
   const currentPoint = useMemo(() => {
-    const active = [...data.acwrHistory].reverse().find(p => p.v !== null);
+    const active = [...(data?.acwrHistory ?? [])].reverse().find(p => p.v !== null);
     return active ?? null;
-  }, [data.acwrHistory]);
+  }, [data]);
 
   const acwr = currentPoint?.v ?? null;
   const zone = acwr !== null ? getACWRZoneLabel(acwr) : null;
 
-  // Nächste 14 Tage als Grid
-  const next14Days = useMemo(() => {
-    return Array.from({ length: 14 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      return d.toISOString().split('T')[0];
-    });
-  }, []);
+  const next14Days = useMemo(() => Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() + i);
+    return d.toISOString().split('T')[0];
+  }), []);
 
-  // Geplante Sessions in nächsten 14 Tagen, nach Datum gruppiert
   const plannedByDay = useMemo(() => {
     const map = new Map<string, typeof data.planned>();
     for (const iso of next14Days) map.set(iso, []);
-    for (const s of data.planned) {
+    for (const s of (data?.planned ?? [])) {
       if (map.has(s.d)) map.get(s.d)!.push(s);
     }
     return map;
-  }, [data.planned, next14Days]);
+  }, [data, next14Days]);
 
-  // Letzte 14 Sessions für die Liste
   const recentSessions = useMemo(() =>
-    [...data.sessions28]
+    [...(data?.sessions28 ?? [])]
       .sort((a, b) => b.d.localeCompare(a.d))
       .slice(0, 10),
-  [data.sessions28]);
+  [data]);
 
   function fmtDate(iso: string) {
-    const d = new Date(iso);
+    const d = new Date(iso + 'T00:00');
     return `${WEEKDAYS[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}`;
   }
 
-  const daysSinceGenerated = Math.floor(
-    (Date.now() - new Date(data.generatedAt).getTime()) / (1000 * 60 * 60 * 24)
-  );
+  const daysSinceGenerated = data
+    ? Math.floor((Date.now() - new Date(data.generatedAt).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+
+  // ── Loading / Error states ────────────────────────────────────────────────
+
+  if (loading && !data) {
+    return (
+      <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-gray-400 text-sm">Athletendaten laden…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || (!loading && !data)) {
+    return (
+      <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center p-4">
+        <div className="text-center space-y-3 max-w-sm">
+          <div className="text-4xl">🔒</div>
+          <h2 className="text-white font-bold text-lg">Link ungültig</h2>
+          <p className="text-gray-500 text-sm">
+            Dieser Trainer-Link ist abgelaufen oder wurde vom Athleten widerrufen.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0b0f] text-white">
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-700 rounded-xl flex items-center justify-center text-sm">
               📊
             </div>
             <div>
               <h1 className="text-sm font-bold text-white leading-none">
-                ACWR · {data.athleteName}
+                ACWR · {data!.athleteName}
               </h1>
-              <p className="text-xs text-gray-500">{data.sport}</p>
+              <p className="text-xs text-gray-500">{data!.sport}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-2.5 py-1 rounded-full border border-amber-700/60 bg-amber-900/20 text-amber-300">
-              👁 Trainer-Ansicht
-            </span>
-            {daysSinceGenerated > 0 && (
-              <span className="text-xs text-gray-600">
-                Stand: vor {daysSinceGenerated}d
+          <div className="flex items-center gap-2 flex-wrap">
+            {isLive ? (
+              <span className="text-xs px-2.5 py-1 rounded-full border border-green-700/60 bg-green-900/20 text-green-300 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse inline-block" />
+                Live · Trainer-Ansicht
               </span>
+            ) : (
+              <span className="text-xs px-2.5 py-1 rounded-full border border-amber-700/60 bg-amber-900/20 text-amber-300">
+                👁 Trainer-Ansicht
+              </span>
+            )}
+            {isLive && lastRefresh && (
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                className="text-xs text-gray-600 hover:text-gray-400 transition-colors disabled:opacity-50"
+                title="Daten aktualisieren"
+              >
+                {loading ? '…' : '↻ ' + lastRefresh.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+              </button>
+            )}
+            {!isLive && daysSinceGenerated > 0 && (
+              <span className="text-xs text-gray-600">Stand: vor {daysSinceGenerated}d</span>
             )}
           </div>
         </div>
@@ -109,7 +172,6 @@ export function TrainerView({ data }: Props) {
 
           {acwr !== null && zone ? (
             <>
-              {/* Gauge */}
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-16 h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border border-gray-700"
                   style={{ backgroundColor: zone.color + '22' }}>
@@ -128,7 +190,6 @@ export function TrainerView({ data }: Props) {
                 </div>
               </div>
 
-              {/* Gauge-Leiste */}
               <div className="relative h-4 rounded-full overflow-hidden mb-1"
                 style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 32%, #4ade80 40%, #4ade80 72%, #f87171 82%, #f87171 100%)' }}>
                 <div className="absolute top-0 bottom-0 flex items-center"
@@ -137,14 +198,10 @@ export function TrainerView({ data }: Props) {
                 </div>
               </div>
               <div className="flex justify-between text-xs text-gray-500 px-0.5">
-                <span>0</span>
-                <span className="text-blue-400">0.8</span>
-                <span className="text-green-400">1.0</span>
-                <span className="text-red-400">1.3</span>
-                <span>2.0</span>
+                <span>0</span><span className="text-blue-400">0.8</span>
+                <span className="text-green-400">1.0</span><span className="text-red-400">1.3</span><span>2.0</span>
               </div>
 
-              {/* Kennzahlen */}
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div className="bg-gray-900 rounded-2xl p-3 border border-gray-800">
                   <div className="text-xs text-gray-500 mb-1">Acute Load (7d Ø)</div>
@@ -176,8 +233,7 @@ export function TrainerView({ data }: Props) {
         {/* Nächste 14 Tage */}
         <div className="bg-gray-900/50 rounded-3xl p-5 border border-gray-800">
           <h3 className="text-sm font-semibold text-white mb-3">Geplante Einheiten – nächste 14 Tage</h3>
-
-          {data.planned.length === 0 ? (
+          {(data?.planned ?? []).length === 0 ? (
             <p className="text-sm text-gray-600 text-center py-4">Keine geplanten Einheiten geteilt.</p>
           ) : (
             <div className="space-y-1.5">
@@ -238,9 +294,11 @@ export function TrainerView({ data }: Props) {
           </div>
         )}
 
-        {/* Footer */}
         <div className="text-center text-xs text-gray-700 pb-6">
-          Schreibgeschützte Trainer-Ansicht · Geteilt am {data.generatedAt} · FitFuel
+          {isLive
+            ? `Live Trainer-Ansicht · aktualisiert ${lastRefresh?.toLocaleString('de-DE') ?? '…'} · FitFuel`
+            : `Schreibgeschützte Trainer-Ansicht · Geteilt am ${data!.generatedAt} · FitFuel`
+          }
         </div>
       </main>
     </div>

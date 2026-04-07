@@ -20,6 +20,7 @@ import { loadSessions, saveSessions, loadPlannedSessions, savePlannedSessions } 
 import { calculateACWR, getCurrentACWR } from './lib/acwrCalculations';
 import { calcTDEE, calcMacros } from './types/profile';
 import { supabase, CLOUD_ENABLED } from './lib/supabase';
+import { isLiveToken } from './lib/trainerShare';
 import {
   pullAllData,
   pushProfile, pushSessions, pushPlannedSessions, pushFoodLog,
@@ -250,9 +251,12 @@ function App() {
   };
 
   /* ── Trainer-Ansicht gate ── */
-  const trainerEncoded = window.location.hash.match(/^#trainer\/(.+)$/)?.[1];
-  const trainerData = trainerEncoded ? decodeShareData(trainerEncoded) : null;
-  if (trainerData) return <TrainerView data={trainerData} />;
+  const trainerHash = window.location.hash.match(/^#trainer\/(.+)$/)?.[1];
+  if (trainerHash) {
+    if (isLiveToken(trainerHash)) return <TrainerView token={trainerHash} />;
+    const trainerData = decodeShareData(trainerHash);
+    if (trainerData) return <TrainerView data={trainerData} />;
+  }
 
   /* ── Auth gate ── */
   if (CLOUD_ENABLED && !isGuest && (user === 'loading' || user === null)) {
@@ -421,6 +425,7 @@ function App() {
             onLoadMockData={handleLoadMockData}
             playerName={profile.name}
             playerSport={profile.sport}
+            userId={loggedInUser?.id}
           />
         )}
       </main>

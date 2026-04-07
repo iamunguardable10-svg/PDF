@@ -2,7 +2,8 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import type { Session, PlannedSession, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
 import { calculateACWR, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel, projectFutureACWR } from '../lib/acwrCalculations';
-import { encodeShareData } from '../lib/trainerShare';
+import { CLOUD_ENABLED } from '../lib/supabase';
+import { encodeShareData, createLiveShare, revokeLiveShare, getActiveShare } from '../lib/trainerShare';
 import {
   requestNotificationPermission, getNotificationPermission,
   scheduleSessionReminder, cancelReminder, sendTestNotification,
@@ -25,16 +26,19 @@ interface Props {
   onLoadMockData?: () => void;
   playerName: string;
   playerSport?: string;
+  userId?: string;
 }
-
 
 export function ACWRSection({
   sessions, plannedSessions, onAddSession, onAddPlanned,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onSessionConfirmed, onLoadMockData, playerName, playerSport = 'Sport',
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onSessionConfirmed,
+  onLoadMockData, playerName, playerSport = 'Sport', userId,
 }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [shareToast, setShareToast] = useState<'copied' | 'error' | null>(null);
+  const [activeToken, setActiveToken] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
   const notifPerm = getNotificationPermission();
 
   // Reminder-Timeouts: id → timeoutId
@@ -102,11 +106,18 @@ export function ACWRSection({
     return `${d}.${m}.${y.slice(2)}`;
   }
 
-  function handleGenerateTrainerLink() {
-    if (sessions.length === 0) return;
-    const encoded = encodeShareData(playerName, playerSport, acwrData, plannedSessions, sessions);
-    if (!encoded) { setShareToast('error'); setTimeout(() => setShareToast(null), 2500); return; }
-    const url = `${window.location.origin}${window.location.pathname}#trainer/${encoded}`;
+  // Load existing active share on mount
+  useEffect(() => {
+    if (userId && CLOUD_ENABLED) {
+      getActiveShare(userId).then(token => setActiveToken(token));
+    }
+  }, [userId]);
+
+  function buildShareUrl(token: string) {
+    return `${window.location.origin}${window.location.pathname}#trainer/${token}`;
+  }
+
+  function copyToClipboard(url: string) {
     navigator.clipboard.writeText(url).then(() => {
       setShareToast('copied');
       setTimeout(() => setShareToast(null), 2500);
@@ -114,6 +125,30 @@ export function ACWRSection({
       setShareToast('error');
       setTimeout(() => setShareToast(null), 2500);
     });
+  }
+
+  async function handleCreateLiveShare() {
+    if (!userId || sessions.length === 0) return;
+    setShareLoading(true);
+    const token = await createLiveShare(userId);
+    setShareLoading(false);
+    if (!token) { setShareToast('error'); setTimeout(() => setShareToast(null), 2500); return; }
+    setActiveToken(token);
+    copyToClipboard(buildShareUrl(token));
+  }
+
+  async function handleRevokeShare() {
+    if (!activeToken) return;
+    await revokeLiveShare(activeToken);
+    setActiveToken(null);
+  }
+
+  function handleGenerateTrainerLink() {
+    // Fallback: legacy base64 link (guest mode / no cloud)
+    if (sessions.length === 0) return;
+    const encoded = encodeShareData(playerName, playerSport, acwrData, plannedSessions, sessions);
+    if (!encoded) { setShareToast('error'); setTimeout(() => setShareToast(null), 2500); return; }
+    copyToClipboard(`${window.location.origin}${window.location.pathname}#trainer/${encoded}`);
   }
 
   const recentDays: DayLoad[] = [...dailyLoads]
@@ -219,13 +254,43 @@ export function ACWRSection({
           <div className="flex items-center gap-2">
             {/* Trainer-Link */}
             {sessions.length > 0 && (
-              <button
-                onClick={handleGenerateTrainerLink}
-                className="text-xs px-3 py-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors flex items-center gap-1.5"
-                title="Schreibgeschützten Trainer-Link generieren"
-              >
-                🔗 Trainer-Link
-              </button>
+              CLOUD_ENABLED && userId ? (
+                activeToken ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-green-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse inline-block" />
+                      Live-Link aktiv
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(buildShareUrl(activeToken))}
+                      className="text-xs px-2 py-1 rounded-lg border border-gray-700 text-gray-400 hover:text-white transition-colors"
+                    >
+                      Kopieren
+                    </button>
+                    <button
+                      onClick={handleRevokeShare}
+                      className="text-xs px-2 py-1 rounded-lg border border-red-900/60 text-red-500 hover:text-red-300 transition-colors"
+                    >
+                      Widerrufen
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleCreateLiveShare}
+                    disabled={shareLoading}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    🔗 {shareLoading ? '…' : 'Live-Link erstellen'}
+                  </button>
+                )
+              ) : (
+                <button
+                  onClick={handleGenerateTrainerLink}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors flex items-center gap-1.5"
+                >
+                  🔗 Trainer-Link
+                </button>
+              )
             )}
             {/* Benachrichtigungs-Button */}
             {notifPerm !== 'granted' && notifPerm !== 'unsupported' && (

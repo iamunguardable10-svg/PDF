@@ -147,6 +147,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) 
   cutoffDate.setDate(cutoffDate.getDate() - 60);
   const cutoff = localISO(cutoffDate);
 
+
   const filtered = useMemo(() => data.filter(d => d.datum >= cutoff), [data, cutoff]);
 
   // ── Simple chart data ──────────────────────────────────────────────────────
@@ -262,28 +263,32 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) 
             <Tooltip content={<DetailTooltip />} />
             <Legend wrapperStyle={{ fontSize: '11px', color: '#9ca3af', paddingTop: '8px' }} />
 
-            {/* Bars per TE type */}
+            {/* Stacked bars per TE type — matches Excel */}
             {TE_TYPES.map(te => (
               <Bar key={te} yAxisId="left" dataKey={te} stackId="tl"
                 fill={TE_COLORS[te as keyof typeof TE_COLORS]}
-                maxBarSize={16} />
+                maxBarSize={20} isAnimationActive={false} />
             ))}
 
-            {/* Chronic rolling average */}
+            {/* Chronic rolling average (gray dashed, left axis) */}
             <Line yAxisId="left" type="monotone" dataKey="chronicLoad" name="Chronic (28d)"
-              stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
+              stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="5 3" dot={false}
+              isAnimationActive={false} />
 
-            {/* Thresholds: chronic × 1.3 (red) and chronic × 0.8 (black) */}
+            {/* Thresholds on left axis */}
             <Line yAxisId="left" type="monotone" dataKey="highThreshold" name="Obere Grenze (×1.3)"
-              stroke="#ef4444" strokeWidth={2} dot={false} legendType="plainline" />
+              stroke="#ef4444" strokeWidth={2} dot={false} legendType="plainline"
+              isAnimationActive={false} />
             <Line yAxisId="left" type="monotone" dataKey="lowThreshold" name="Untere Grenze (×0.8)"
-              stroke="#d1d5db" strokeWidth={2} dot={false} legendType="plainline" />
+              stroke="#e5e7eb" strokeWidth={2} dot={false} legendType="plainline"
+              isAnimationActive={false} />
 
-            {/* ACWR ratio on right axis */}
+            {/* ACWR ratio — right axis, prominent dashed line */}
             <Line yAxisId="right" type="monotone" dataKey="acwr" name="ACWR"
-              stroke="#93c5fd" strokeWidth={2} strokeDasharray="6 3"
-              dot={false} connectNulls={false}
-              activeDot={{ r: 5, fill: '#93c5fd' }} />
+              stroke="#38bdf8" strokeWidth={2.5} strokeDasharray="7 3"
+              dot={{ r: 2, fill: '#38bdf8', strokeWidth: 0 }}
+              connectNulls={false} isAnimationActive={false}
+              activeDot={{ r: 5, fill: '#38bdf8' }} />
           </ComposedChart>
         </ResponsiveContainer>
       )}

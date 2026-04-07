@@ -95,37 +95,47 @@ const PROJECTED_RPE: Record<string, number> = {
 export function projectFutureACWR(
   sessions: Session[],
   plannedSessions: PlannedSession[],
-  daysAhead = 21,
 ): ACWRDataPoint[] {
   const today = localISO(new Date());
   const historicalDays = fillMissingDays(aggregateDailyLoads(sessions));
   if (historicalDays.length === 0) return [];
 
-  // Geplanten Load pro Tag berechnen (nur zukünftig, unbestätigt)
+  // Future unconfirmed planned sessions
+  const futurePlanned = plannedSessions.filter(ps => !ps.confirmed && ps.datum > today);
+  if (futurePlanned.length === 0) return [];
+
+  // Load per future date
   const plannedMap = new Map<string, number>();
-  for (const ps of plannedSessions) {
-    if (ps.confirmed || ps.datum <= today) continue;
+  for (const ps of futurePlanned) {
     const rpe = PROJECTED_RPE[ps.te] ?? 6;
     const dur = ps.geschaetzteDauer ?? 90;
     plannedMap.set(ps.datum, (plannedMap.get(ps.datum) ?? 0) + rpe * dur);
   }
 
-  // Basis-Load-Array aus History
+  // End projection 7 days after last planned session (one acute window)
+  const lastPlannedDate = [...futurePlanned].sort((a, b) => b.datum.localeCompare(a.datum))[0].datum;
+  const endDate = new Date(lastPlannedDate + 'T00:00');
+  endDate.setDate(endDate.getDate() + 7);
+  const endISO = localISO(endDate);
+
   const extLoads = historicalDays.map(d => d.taeglLoad);
   const lastDate = historicalDays[historicalDays.length - 1].datum;
 
   const projected: ACWRDataPoint[] = [];
+  let current = new Date(lastDate + 'T00:00');
 
-  for (let i = 1; i <= daysAhead; i++) {
-    const d = new Date(lastDate + 'T00:00');
-    d.setDate(d.getDate() + i);
-    const iso = localISO(d);
+  while (true) {
+    current.setDate(current.getDate() + 1);
+    const iso = localISO(current);
+    if (iso > endISO) break;
     const load = plannedMap.get(iso) ?? 0;
     extLoads.push(load);
     const idx = extLoads.length - 1;
     const acute   = rollingAvg(extLoads, idx, 7);
     const chronic = rollingAvg(extLoads, idx, 28);
-    const acwr    = chronic > 0 ? acute / chronic : null;
+    // Only show ACWR when we have enough history (28 days total)
+    const totalDays = historicalDays.length + projected.length + 1;
+    const acwr = (chronic > 0 && totalDays >= 28) ? acute / chronic : null;
     projected.push({
       datum:       iso,
       taeglLoad:   load,
