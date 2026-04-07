@@ -8,25 +8,28 @@ import { ACWRSection } from './components/ACWRSection';
 import { Onboarding } from './components/Onboarding';
 import { ProfileSettings } from './components/ProfileSettings';
 import { AppTour } from './components/AppTour';
+import { FoodLog } from './components/FoodLog';
+import { NutritionForecast } from './components/NutritionForecast';
 import { wearableData as mockWearable, trainingGoals, recentActivities } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { loadProfile, saveProfile } from './lib/profileStorage';
+import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
 import { calculateACWR, getCurrentACWR } from './lib/acwrCalculations';
+import { calcTDEE, calcMacros } from './types/profile';
 import type { DayMealPlan, ShoppingItem, TrainingGoal, WearableData } from './types/health';
 import type { Session, PlannedSession } from './types/acwr';
 import type { AthleteProfile } from './types/profile';
+import type { FoodEntry } from './types/food';
 
-type Tab = 'dashboard' | 'acwr';
+type Tab = 'dashboard' | 'tagebuch' | 'acwr';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [showSettings, setShowSettings] = useState(false);
 
-  // Profile — load from localStorage, show onboarding if not completed
   const [profile, setProfile] = useState<AthleteProfile>(() => loadProfile());
   const [showTour, setShowTour] = useState(() => !localStorage.getItem('fitfuel_tour_done'));
 
-  // Wearable data (starts as mock, editable by user)
   const [wearable, setWearable] = useState<WearableData>(mockWearable);
 
   // Dashboard state
@@ -39,19 +42,32 @@ function App() {
   const [sessions, setSessions] = useState<Session[]>(initialSessions);
   const [plannedSessions, setPlannedSessions] = useState<PlannedSession[]>(initialPlannedSessions);
 
-  const pendingCount = plannedSessions.filter(s => !s.confirmed).length;
+  // Food log state
+  const [foodLog, setFoodLog] = useState<FoodEntry[]>(() => loadFoodLog());
 
-  // Current ACWR value (for meal plan personalization)
+  const pendingCount = plannedSessions.filter(s => !s.confirmed).length;
+  const today = new Date().toISOString().split('T')[0];
+  const todayEntries = foodLog.filter(e => e.date === today);
+
+  // Current ACWR
   const acwrDataPoints = sessions.length > 0 ? calculateACWR(sessions) : [];
   const currentACWRPoint = acwrDataPoints.length > 0 ? getCurrentACWR(acwrDataPoints) : null;
   const acwr = currentACWRPoint?.acwr ?? null;
 
-  // Persist profile whenever it changes (but only after onboarding)
+  // Personalized targets
+  const tdee = calcTDEE(profile, acwr);
+  const macros = calcMacros(profile, tdee);
+
   useEffect(() => {
     if (profile.onboardingCompleted) saveProfile(profile);
   }, [profile]);
 
-  /* ── Onboarding ── */
+  useEffect(() => {
+    saveFoodLog(foodLog);
+  }, [foodLog]);
+
+  /* ── Handlers ── */
+
   const handleTourDone = () => {
     localStorage.setItem('fitfuel_tour_done', '1');
     setShowTour(false);
@@ -66,8 +82,6 @@ function App() {
     setProfile({ ...p, onboardingCompleted: true });
   };
 
-  /* ── ACWR handlers ── */
-
   const handleAddSession = (s: Session) => setSessions(prev => [...prev, s]);
 
   const handleAddPlanned = (newSessions: PlannedSession[]) =>
@@ -80,18 +94,13 @@ function App() {
   const handleConfirmPlanned = (id: string, rpe: number, dauer: number) => {
     const ps = plannedSessions.find(s => s.id === id);
     if (!ps) return;
-
-    const newSession: Session = {
+    setSessions(prev => [...prev, {
       id: `confirmed-${id}`,
       name: profile.name,
       datum: ps.datum,
       te: ps.te,
-      rpe,
-      dauer,
-      tl: rpe * dauer,
-    };
-
-    setSessions(prev => [...prev, newSession]);
+      rpe, dauer, tl: rpe * dauer,
+    }]);
     setPlannedSessions(prev =>
       prev.map(s => s.id === id ? { ...s, confirmed: true, rpe, actualDauer: dauer } : s)
     );
@@ -103,8 +112,6 @@ function App() {
   const handleDismissPlanned = (id: string) =>
     setPlannedSessions(prev => prev.filter(s => s.id !== id));
 
-  /* ── Meal plan handlers ── */
-
   const handlePlanGenerated = (plan: DayMealPlan[], shopping: ShoppingItem[], tipText: string) => {
     setMealPlan(plan); setShoppingList(shopping); setTips(tipText);
   };
@@ -113,6 +120,12 @@ function App() {
     setShoppingList(prev => prev.map((item, i) =>
       i === index ? { ...item, checked: !item.checked } : item
     ));
+
+  const handleAddFood = (entry: FoodEntry) =>
+    setFoodLog(prev => [...prev, entry]);
+
+  const handleDeleteFood = (id: string) =>
+    setFoodLog(prev => prev.filter(e => e.id !== id));
 
   /* ── Onboarding gate ── */
   if (!profile.onboardingCompleted) {
@@ -138,15 +151,23 @@ function App() {
           <div className="flex gap-1 ml-4 bg-gray-900 rounded-xl p-1 border border-gray-800">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'dashboard' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
               }`}
             >
               🥗 Ernährung
             </button>
             <button
+              onClick={() => setActiveTab('tagebuch')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'tagebuch' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              📒 Tagebuch
+            </button>
+            <button
               onClick={() => setActiveTab('acwr')}
-              className={`relative px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              className={`relative px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'acwr' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
               }`}
             >
@@ -172,6 +193,7 @@ function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
         {/* ── ERNÄHRUNG ── */}
         {activeTab === 'dashboard' && (
           <>
@@ -184,6 +206,12 @@ function App() {
                 activities={recentActivities}
               />
             </div>
+            <NutritionForecast
+              plannedSessions={plannedSessions}
+              baseTDEE={tdee}
+              baseProtein={macros.protein}
+              acwr={acwr}
+            />
             <MealPlanGenerator
               wearable={wearable}
               goal={selectedGoal}
@@ -195,22 +223,33 @@ function App() {
             {mealPlan.length > 0 ? (
               <div className="grid lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2"><MealPlanView plan={mealPlan} tips={tips} /></div>
-                <div>
-                  <ShoppingList
-                    items={shoppingList}
-                    onItemToggle={handleItemToggle}
-                    onOrder={() => console.log('Knuspr order')}
-                  />
-                </div>
+                <ShoppingList
+                  items={shoppingList}
+                  onItemToggle={handleItemToggle}
+                  onOrder={() => console.log('Knuspr order')}
+                />
               </div>
             ) : (
-              <div className="text-center py-16 text-gray-600">
+              <div className="text-center py-12 text-gray-600">
                 <div className="text-5xl mb-4">🍽️</div>
-                <p className="text-lg">Generiere deinen ersten KI-Ernährungsplan</p>
+                <p className="text-lg">Generiere deinen KI-Ernährungsplan</p>
                 <p className="text-sm mt-2">Personalisiert auf dein Profil, ACWR & Trainingsziele</p>
               </div>
             )}
           </>
+        )}
+
+        {/* ── TAGEBUCH ── */}
+        {activeTab === 'tagebuch' && (
+          <FoodLog
+            entries={todayEntries}
+            targetCalories={tdee}
+            targetProtein={macros.protein}
+            targetCarbs={macros.carbs}
+            targetFat={macros.fat}
+            onAdd={handleAddFood}
+            onDelete={handleDeleteFood}
+          />
         )}
 
         {/* ── ACWR ── */}
@@ -228,7 +267,6 @@ function App() {
         )}
       </main>
 
-      {/* Profile settings drawer */}
       {showSettings && (
         <ProfileSettings
           profile={profile}
@@ -237,7 +275,6 @@ function App() {
         />
       )}
 
-      {/* App tour — shown once on first launch */}
       {showTour && <AppTour onDone={handleTourDone} />}
     </div>
   );
