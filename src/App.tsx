@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { WearableDashboard } from './components/WearableDashboard';
 import { MealPlanGenerator } from './components/MealPlanGenerator';
 import { MealPlanView } from './components/MealPlanView';
@@ -9,6 +9,7 @@ import { ProfileSettings } from './components/ProfileSettings';
 import { AppTour } from './components/AppTour';
 import { FoodLog } from './components/FoodLog';
 import { NutritionForecast } from './components/NutritionForecast';
+import { AuthScreen } from './components/AuthScreen';
 import { wearableData as mockWearable, trainingGoals } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { decodeShareData } from './lib/trainerShare';
@@ -18,17 +19,34 @@ import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
 import { loadSessions, saveSessions, loadPlannedSessions, savePlannedSessions } from './lib/trainingStorage';
 import { calculateACWR, getCurrentACWR } from './lib/acwrCalculations';
 import { calcTDEE, calcMacros } from './types/profile';
+import { supabase } from './lib/supabase';
+import {
+  pullAllData,
+  pushProfile, pushSessions, pushPlannedSessions, pushFoodLog,
+  deletePlannedSession, deleteFoodEntry,
+} from './lib/cloudSync';
 import type { DayMealPlan, ShoppingItem, WearableData } from './types/health';
 import type { Session, PlannedSession } from './types/acwr';
 import type { AthleteProfile } from './types/profile';
 import type { FoodEntry } from './types/food';
 import type { NutritionForecast as NutritionForecastData } from './lib/foodApi';
+import type { User } from '@supabase/supabase-js';
 
 type Tab = 'dashboard' | 'tagebuch' | 'acwr';
+
+// Is Supabase configured?
+const CLOUD_ENABLED = !!(
+  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [showSettings, setShowSettings] = useState(false);
+
+  // Auth state
+  const [user, setUser]           = useState<User | null | 'loading'>('loading');
+  const [isGuest, setIsGuest]     = useState(() => !CLOUD_ENABLED || !!localStorage.getItem('fitfuel_guest'));
+  const [cloudReady, setCloudReady] = useState(false);
 
   const [profile, setProfile] = useState<AthleteProfile>(() => loadProfile());
   const [showTour, setShowTour] = useState(() => !localStorage.getItem('fitfuel_tour_done'));
@@ -40,39 +58,99 @@ function App() {
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [tips, setTips] = useState('');
 
-  // ACWR state – aus localStorage laden, leer wenn noch nichts gespeichert
+  // ACWR state
   const [sessions, setSessions] = useState<Session[]>(() => loadSessions());
   const [plannedSessions, setPlannedSessions] = useState<PlannedSession[]>(() => loadPlannedSessions());
 
   // Food log state
   const [foodLog, setFoodLog] = useState<FoodEntry[]>(() => loadFoodLog());
 
-  // Forecast state — lifted from NutritionForecast so MealPlanGenerator can use it
+  // Forecast state
   const [forecast, setForecast] = useState<NutritionForecastData | null>(null);
-
-  // Forecast outdated flag — set true when a session is confirmed
   const [forecastOutdated, setForecastOutdated] = useState(false);
+
+  // Track which planned/food items were deleted so we can remove from cloud too
+  const deletedPlanned = useRef<Set<string>>(new Set());
+  const deletedFood    = useRef<Set<string>>(new Set());
 
   const pendingCount = plannedSessions.filter(s => !s.confirmed).length;
   const today = new Date().toISOString().split('T')[0];
   const todayEntries = foodLog.filter(e => e.date === today);
 
-  // Current ACWR
   const acwrDataPoints = sessions.length > 0 ? calculateACWR(sessions) : [];
   const currentACWRPoint = acwrDataPoints.length > 0 ? getCurrentACWR(acwrDataPoints) : null;
   const acwr = currentACWRPoint?.acwr ?? null;
 
-  // Personalized targets
-  const tdee = calcTDEE(profile, acwr);
+  const tdee   = calcTDEE(profile, acwr);
   const macros = calcMacros(profile, tdee);
 
-  useEffect(() => {
-    if (profile.onboardingCompleted) saveProfile(profile);
-  }, [profile]);
+  // ── Auth setup ─────────────────────────────────────────────────────────────
 
-  useEffect(() => { saveFoodLog(foodLog); }, [foodLog]);
-  useEffect(() => { saveSessions(sessions); }, [sessions]);
-  useEffect(() => { savePlannedSessions(plannedSessions); }, [plannedSessions]);
+  useEffect(() => {
+    if (!CLOUD_ENABLED) { setUser(null); return; }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Load cloud data after login ────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!user || user === 'loading' || isGuest || cloudReady) return;
+
+    pullAllData((user as User).id).then(({ profile: cloudProfile, sessions: cloudSessions, plannedSessions: cloudPlanned, foodLog: cloudFood }) => {
+      if (cloudProfile) {
+        setProfile(cloudProfile);
+        saveProfile(cloudProfile);
+      }
+      if (cloudSessions.length > 0) {
+        setSessions(cloudSessions);
+        saveSessions(cloudSessions);
+      }
+      if (cloudPlanned.length > 0) {
+        setPlannedSessions(cloudPlanned);
+        savePlannedSessions(cloudPlanned);
+      }
+      if (cloudFood.length > 0) {
+        setFoodLog(cloudFood);
+        saveFoodLog(cloudFood);
+      }
+      setCloudReady(true);
+    });
+  }, [user, isGuest, cloudReady]);
+
+  // ── Persist locally + sync to cloud ───────────────────────────────────────
+
+  const userId = user && user !== 'loading' && !isGuest ? (user as User).id : null;
+
+  useEffect(() => {
+    if (profile.onboardingCompleted) {
+      saveProfile(profile);
+      if (userId) pushProfile(userId, profile);
+    }
+  }, [profile, userId]);
+
+  useEffect(() => {
+    saveFoodLog(foodLog);
+    if (userId && cloudReady) pushFoodLog(userId, foodLog);
+  }, [foodLog, userId, cloudReady]);
+
+  useEffect(() => {
+    saveSessions(sessions);
+    if (userId && cloudReady) pushSessions(userId, sessions);
+  }, [sessions, userId, cloudReady]);
+
+  useEffect(() => {
+    savePlannedSessions(plannedSessions);
+    if (userId && cloudReady) pushPlannedSessions(userId, plannedSessions);
+  }, [plannedSessions, userId, cloudReady]);
 
   /* ── Handlers ── */
 
@@ -103,7 +181,7 @@ function App() {
 
   const handleConfirmPlanned = (id: string, rpe: number, dauer: number) => {
     const ps = plannedSessions.find(s => s.id === id);
-    if (!ps || ps.confirmed) return; // Guard: verhindert Doppel-Bestätigung
+    if (!ps || ps.confirmed) return;
     setSessions(prev => [...prev, {
       id: `confirmed-${id}`,
       name: profile.name,
@@ -119,11 +197,13 @@ function App() {
   const handleUpdatePlanned = (id: string, updates: Partial<PlannedSession>) =>
     setPlannedSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
 
-  const handleDismissPlanned = (id: string) =>
+  const handleDismissPlanned = (id: string) => {
+    deletedPlanned.current.add(id);
     setPlannedSessions(prev => prev.filter(s => s.id !== id));
+    if (userId) deletePlannedSession(id);
+  };
 
   const handleLoadMockData = () => {
-    // Setzt alles zurück auf die Testdaten (ersetzt, nicht anhängen)
     setSessions(initialSessions);
     setPlannedSessions(initialPlannedSessions);
     setForecast(null);
@@ -142,18 +222,51 @@ function App() {
   const handleAddFood = (entry: FoodEntry) =>
     setFoodLog(prev => [...prev, entry]);
 
-  const handleDeleteFood = (id: string) =>
+  const handleDeleteFood = (id: string) => {
+    deletedFood.current.add(id);
     setFoodLog(prev => prev.filter(e => e.id !== id));
+    if (userId) deleteFoodEntry(id);
+  };
 
-  /* ── Trainer-Ansicht gate (Hash #trainer/<encoded>) ── */
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setCloudReady(false);
+  };
+
+  const handleGuestMode = () => {
+    localStorage.setItem('fitfuel_guest', '1');
+    setIsGuest(true);
+  };
+
+  const handleLoggedIn = () => {
+    localStorage.removeItem('fitfuel_guest');
+    setIsGuest(false);
+    setCloudReady(false);
+  };
+
+  /* ── Trainer-Ansicht gate ── */
   const trainerEncoded = window.location.hash.match(/^#trainer\/(.+)$/)?.[1];
   const trainerData = trainerEncoded ? decodeShareData(trainerEncoded) : null;
   if (trainerData) return <TrainerView data={trainerData} />;
+
+  /* ── Auth gate ── */
+  if (CLOUD_ENABLED && !isGuest && (user === 'loading' || user === null)) {
+    if (user === 'loading') {
+      return (
+        <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
+          <div className="text-gray-600 text-sm">…</div>
+        </div>
+      );
+    }
+    return <AuthScreen onGuest={handleGuestMode} onLoggedIn={handleLoggedIn} />;
+  }
 
   /* ── Onboarding gate ── */
   if (!profile.onboardingCompleted) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
+
+  const loggedInUser = user && user !== 'loading' ? user as User : null;
 
   return (
     <div className="min-h-screen bg-[#0a0b0f] text-white">
@@ -210,8 +323,22 @@ function App() {
           >
             <span className="text-base">👤</span>
             <span className="hidden sm:inline">{profile.name}</span>
+            {loggedInUser && (
+              <span className="hidden sm:inline text-xs text-violet-400">☁</span>
+            )}
             <span className="text-xs text-gray-600">⚙</span>
           </button>
+
+          {/* Sign out (only when logged in with account) */}
+          {loggedInUser && !isGuest && (
+            <button
+              onClick={handleSignOut}
+              className="text-xs text-gray-600 hover:text-gray-400 transition-colors shrink-0"
+              title="Abmelden"
+            >
+              Abmelden
+            </button>
+          )}
         </div>
       </header>
 
