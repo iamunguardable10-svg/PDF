@@ -43,7 +43,10 @@ function getWeekStart(offsetWeeks = 0): Date {
 }
 
 function toISO(d: Date): string {
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function getISOWeek(d: Date): number {
@@ -416,7 +419,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
   const [droppedId, setDroppedId]             = useState<string | null>(null);
   const [dropInitialTab, setDropInitialTab]   = useState<'confirm' | 'edit' | null>(null);
   const dragHappened = useRef(false); // verhindert Modal-Öffnung nach Drag
-  const today = new Date().toISOString().split('T')[0];
+  const today = toISO(new Date());
 
   const weekDays = useMemo<string[]>(() => {
     const start = getWeekStart(weekOffset);
@@ -547,7 +550,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
       sessions.some(s => s.datum === date) ||
       plannedSessions.some(s => !s.confirmed && s.datum === date);
     for (const iso of weekDays) {
-      const prevDate = new Date(iso);
+      const prevDate = new Date(iso + 'T00:00');
       prevDate.setDate(prevDate.getDate() - 1);
       const prev = prevDate.toISOString().split('T')[0];
       if (hasSpiel(iso)) map.set(iso, 'loading');
