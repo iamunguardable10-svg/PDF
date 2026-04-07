@@ -1,4 +1,5 @@
 export type MealType = 'fruehstueck' | 'mittagessen' | 'abendessen' | 'snack';
+export type DrinkType = 'wasser' | 'sportgetraenk' | 'saft' | 'milch' | 'kaffee_tee' | 'sonstiges';
 
 export const MEAL_LABELS: Record<MealType, string> = {
   fruehstueck: 'Frühstück',
@@ -14,16 +15,36 @@ export const MEAL_EMOJI: Record<MealType, string> = {
   snack:        '🍎',
 };
 
+export const DRINK_LABELS: Record<DrinkType, string> = {
+  wasser:        'Wasser',
+  sportgetraenk: 'Sportgetränk',
+  saft:          'Saft / Smoothie',
+  milch:         'Milch / Shake',
+  kaffee_tee:    'Kaffee / Tee',
+  sonstiges:     'Sonstiges',
+};
+
+export const DRINK_EMOJI: Record<DrinkType, string> = {
+  wasser:        '💧',
+  sportgetraenk: '⚡',
+  saft:          '🧃',
+  milch:         '🥛',
+  kaffee_tee:    '☕',
+  sonstiges:     '🥤',
+};
+
 export interface FoodEntry {
   id: string;
-  date: string;       // YYYY-MM-DD
-  mealType: MealType;
+  date: string;
+  isDrink: boolean;
+  mealType?: MealType;
+  drinkType?: DrinkType;
   name: string;
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
-  amount?: string;    // z.B. "200g"
+  amount?: string;
   source: 'manual' | 'barcode' | 'photo';
   barcode?: string;
 }

@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
-import type { FoodEntry, MealType } from '../types/food';
-import { MEAL_LABELS, MEAL_EMOJI, sumEntries } from '../types/food';
+import { useState, useRef, useEffect } from 'react';
+import type { FoodEntry, MealType, DrinkType } from '../types/food';
+import { MEAL_LABELS, MEAL_EMOJI, DRINK_LABELS, DRINK_EMOJI, sumEntries } from '../types/food';
 import { lookupBarcode, analyzeFoodPhoto } from '../lib/foodApi';
 
 interface Props {
@@ -15,70 +15,108 @@ interface Props {
 
 type InputMode = 'manual' | 'barcode' | 'photo';
 
-const EMPTY_FORM = {
-  name: '', calories: 0, protein: 0, carbs: 0, fat: 0, amount: '100g',
-};
+const EMPTY_FORM = { name: '', calories: 0, protein: 0, carbs: 0, fat: 0, amount: '' };
+
+// EAN-8 or EAN-13
+const isCompleteBarcode = (v: string) => /^\d{8}$/.test(v) || /^\d{13}$/.test(v);
 
 function MacroBar({ label, value, target, color }: { label: string; value: number; target: number; color: string }) {
   const pct = Math.min(100, target > 0 ? (value / target) * 100 : 0);
-  const over = value > target;
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-gray-400">{label}</span>
-        <span className={over ? 'text-red-400' : 'text-gray-300'}>
+        <span className={value > target ? 'text-red-400' : 'text-gray-300'}>
           {value}g <span className="text-gray-600">/ {target}g</span>
         </span>
       </div>
       <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${over ? 'bg-red-500' : color}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div className={`h-full rounded-full transition-all ${value > target ? 'bg-red-500' : color}`}
+          style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
 }
 
+function EntryRow({ entry, onDelete }: { entry: FoodEntry; onDelete: () => void }) {
+  const emoji = entry.isDrink
+    ? DRINK_EMOJI[entry.drinkType ?? 'sonstiges']
+    : entry.source === 'barcode' ? '🔖' : entry.source === 'photo' ? '📷' : '✏️';
+  return (
+    <div className="flex items-center gap-3 bg-gray-900 rounded-xl px-4 py-2.5 border border-gray-800">
+      <span className="text-base shrink-0">{emoji}</span>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm text-white truncate">{entry.name}</div>
+        <div className="text-xs text-gray-500">
+          {entry.amount && `${entry.amount} · `}
+          {entry.isDrink ? (
+            <span className="text-blue-400">{entry.calories} kcal</span>
+          ) : (
+            <>P {entry.protein}g · KH {entry.carbs}g · F {entry.fat}g</>
+          )}
+        </div>
+      </div>
+      <div className="text-sm font-semibold text-orange-400 shrink-0">{entry.calories} kcal</div>
+      <button onClick={onDelete} className="text-gray-700 hover:text-red-400 transition-colors text-xl leading-none">×</button>
+    </div>
+  );
+}
+
 export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, targetFat, onAdd, onDelete }: Props) {
-  const [mode, setMode] = useState<InputMode>('manual');
+  const [tab, setTab] = useState<'essen' | 'trinken'>('essen');
   const [showForm, setShowForm] = useState(false);
+  const [mode, setMode] = useState<InputMode>('manual');
   const [mealType, setMealType] = useState<MealType>('mittagessen');
+  const [drinkType, setDrinkType] = useState<DrinkType>('wasser');
   const [form, setForm] = useState(EMPTY_FORM);
+  const [barcode, setBarcode] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
   const [error, setError] = useState('');
-  const [barcode, setBarcode] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
+
+  const isDrink = tab === 'trinken';
+  const foodEntries = entries.filter(e => !e.isDrink);
+  const drinkEntries = entries.filter(e => e.isDrink);
 
   const totals = sumEntries(entries);
   const calPct = Math.min(100, targetCalories > 0 ? (totals.totalCalories / targetCalories) * 100 : 0);
   const calOver = totals.totalCalories > targetCalories;
 
-  const grouped = (Object.keys(MEAL_LABELS) as MealType[]).map(mt => ({
-    type: mt,
-    entries: entries.filter(e => e.mealType === mt),
-  })).filter(g => g.entries.length > 0);
+  const resetForm = () => { setForm(EMPTY_FORM); setBarcode(''); setError(''); setLoadingMsg(''); };
 
-  const resetForm = () => {
-    setForm(EMPTY_FORM);
-    setBarcode('');
-    setError('');
-    setLoadingMsg('');
-  };
+  // Auto-lookup when barcode is complete (EAN-8 or EAN-13)
+  useEffect(() => {
+    if (!isCompleteBarcode(barcode)) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setLoadingMsg(`Suche Produkt für ${barcode}…`);
+      setError('');
+      const r = await lookupBarcode(barcode);
+      if (cancelled) return;
+      setLoading(false);
+      setLoadingMsg('');
+      if (r) setForm({ name: r.name, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat, amount: r.amount });
+      else setError('Produkt nicht gefunden. Bitte manuell eintragen.');
+    })();
+    return () => { cancelled = true; };
+  }, [barcode]);
 
   const handleAdd = () => {
     if (!form.name.trim()) { setError('Name fehlt'); return; }
     onAdd({
       id: `food-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       date: new Date().toISOString().split('T')[0],
-      mealType,
+      isDrink,
+      mealType: isDrink ? undefined : mealType,
+      drinkType: isDrink ? drinkType : undefined,
       name: form.name,
       calories: form.calories,
-      protein: form.protein,
-      carbs: form.carbs,
-      fat: form.fat,
+      protein: isDrink ? 0 : form.protein,
+      carbs: isDrink ? 0 : form.carbs,
+      fat: isDrink ? 0 : form.fat,
       amount: form.amount || undefined,
       source: mode,
       barcode: mode === 'barcode' ? barcode : undefined,
@@ -88,11 +126,8 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
   };
 
   const handleBarcodeFile = async (file: File) => {
-    setLoading(true);
-    setLoadingMsg('Barcode wird gescannt…');
-    setError('');
+    setLoading(true); setLoadingMsg('Barcode wird gescannt…'); setError('');
     try {
-      // Try BarcodeDetector API first (Chrome/Edge)
       let barcodeValue = '';
       if ('BarcodeDetector' in window) {
         const img = await createImageBitmap(file);
@@ -101,33 +136,13 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
         const codes = await detector.detect(img);
         if (codes.length > 0) barcodeValue = codes[0].rawValue;
       }
-
-      if (!barcodeValue) {
-        setError('Kein Barcode erkannt. Gib den Code manuell ein.');
-        setLoading(false);
-        return;
-      }
-
-      setBarcode(barcodeValue);
-      setLoadingMsg(`Barcode ${barcodeValue} — suche in Open Food Facts…`);
-      const result = await lookupBarcode(barcodeValue);
-      if (!result) {
-        setError('Produkt nicht gefunden. Bitte manuell eintragen.');
-        setLoading(false);
-        return;
-      }
-      setForm({ name: result.name, calories: result.calories, protein: result.protein, carbs: result.carbs, fat: result.fat, amount: result.amount });
-    } catch (e) {
-      setError('Fehler beim Scannen. Bitte manuell eintragen.');
-    }
-    setLoading(false);
-    setLoadingMsg('');
+      if (!barcodeValue) { setError('Kein Barcode erkannt. Code manuell eingeben.'); setLoading(false); return; }
+      setBarcode(barcodeValue); // triggers auto-lookup via useEffect
+    } catch { setError('Fehler beim Scannen.'); setLoading(false); }
   };
 
   const handlePhotoFile = async (file: File) => {
-    setLoading(true);
-    setLoadingMsg('KI analysiert dein Essen…');
-    setError('');
+    setLoading(true); setLoadingMsg('KI analysiert dein Essen…'); setError('');
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -136,21 +151,22 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
         reader.readAsDataURL(file);
       });
       const result = await analyzeFoodPhoto(base64, file.type);
-      if (!result) {
-        setError('Essen konnte nicht erkannt werden. Bitte manuell eintragen.');
-        setLoading(false);
-        return;
-      }
+      if (!result) { setError('Nicht erkannt. Bitte manuell eintragen.'); setLoading(false); return; }
       setForm({ name: result.name, calories: result.calories, protein: result.protein, carbs: result.carbs, fat: result.fat, amount: result.amount });
-      if (result.confidence === 'gering') {
-        setError(`⚠️ Geringe Erkennungssicherheit — bitte Werte prüfen.`);
-      }
-    } catch {
-      setError('Fehler bei der Analyse. Bitte manuell eintragen.');
-    }
-    setLoading(false);
-    setLoadingMsg('');
+      if (result.confidence === 'gering') setError('⚠️ Geringe Erkennungssicherheit — bitte Werte prüfen.');
+    } catch { setError('Fehler bei der Analyse.'); }
+    setLoading(false); setLoadingMsg('');
   };
+
+  // Group food by meal type
+  const foodGrouped = (Object.keys(MEAL_LABELS) as MealType[])
+    .map(mt => ({ type: mt, entries: foodEntries.filter(e => e.mealType === mt) }))
+    .filter(g => g.entries.length > 0);
+
+  // Group drinks by drink type
+  const drinkGrouped = (Object.keys(DRINK_LABELS) as DrinkType[])
+    .map(dt => ({ type: dt, entries: drinkEntries.filter(e => e.drinkType === dt) }))
+    .filter(g => g.entries.length > 0);
 
   return (
     <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800 space-y-5">
@@ -161,29 +177,23 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
           <h2 className="text-lg font-semibold text-white">Ernährungstagebuch</h2>
           <p className="text-sm text-gray-400">Heute</p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowForm(true); }}
-          className="ml-auto px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-sm font-semibold transition-colors"
-        >
+        <button onClick={() => { resetForm(); setShowForm(true); }}
+          className="ml-auto px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-sm font-semibold transition-colors">
           + Eintrag
         </button>
       </div>
 
-      {/* Calorie ring summary */}
+      {/* Daily summary */}
       <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
         <div className="flex items-center gap-4 mb-3">
           <div className="text-center">
-            <div className={`text-3xl font-bold ${calOver ? 'text-red-400' : 'text-white'}`}>
-              {totals.totalCalories}
-            </div>
+            <div className={`text-3xl font-bold ${calOver ? 'text-red-400' : 'text-white'}`}>{totals.totalCalories}</div>
             <div className="text-xs text-gray-500">von {targetCalories} kcal</div>
           </div>
           <div className="flex-1">
             <div className="h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
-              <div
-                className={`h-full rounded-full transition-all ${calOver ? 'bg-red-500' : 'bg-violet-500'}`}
-                style={{ width: `${calPct}%` }}
-              />
+              <div className={`h-full rounded-full transition-all ${calOver ? 'bg-red-500' : 'bg-violet-500'}`}
+                style={{ width: `${calPct}%` }} />
             </div>
             <div className="space-y-1.5">
               <MacroBar label="Protein" value={totals.totalProtein} target={targetProtein} color="bg-orange-500" />
@@ -194,72 +204,119 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
         </div>
       </div>
 
-      {/* Entries grouped by meal */}
-      {grouped.length === 0 ? (
-        <div className="text-center py-8 text-gray-600">
-          <div className="text-4xl mb-2">🍽️</div>
-          <p className="text-sm">Noch keine Einträge für heute</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {grouped.map(({ type, entries: groupEntries }) => (
-            <div key={type}>
-              <div className="flex items-center gap-2 text-xs text-gray-500 uppercase tracking-wide mb-2">
-                <span>{MEAL_EMOJI[type]}</span>
-                <span>{MEAL_LABELS[type]}</span>
-                <span className="ml-auto text-gray-600">
-                  {groupEntries.reduce((s, e) => s + e.calories, 0)} kcal
-                </span>
+      {/* Essen / Trinken tabs */}
+      <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
+        <button onClick={() => setTab('essen')}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${tab === 'essen' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+          🍽️ Essen
+          {foodEntries.length > 0 && <span className="bg-white/20 rounded-full text-xs px-1.5">{foodEntries.length}</span>}
+        </button>
+        <button onClick={() => setTab('trinken')}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${tab === 'trinken' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+          💧 Trinken
+          {drinkEntries.length > 0 && <span className="bg-white/20 rounded-full text-xs px-1.5">{drinkEntries.length}</span>}
+        </button>
+      </div>
+
+      {/* Essen entries */}
+      {tab === 'essen' && (
+        foodGrouped.length === 0 ? (
+          <div className="text-center py-8 text-gray-600">
+            <div className="text-4xl mb-2">🍽️</div>
+            <p className="text-sm">Noch keine Mahlzeiten heute</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {foodGrouped.map(({ type, entries: g }) => (
+              <div key={type}>
+                <div className="flex items-center gap-2 text-xs text-gray-500 uppercase tracking-wide mb-2">
+                  <span>{MEAL_EMOJI[type]}</span>
+                  <span>{MEAL_LABELS[type]}</span>
+                  <span className="ml-auto text-gray-600">{g.reduce((s, e) => s + e.calories, 0)} kcal</span>
+                </div>
+                <div className="space-y-1.5">
+                  {g.map(e => <EntryRow key={e.id} entry={e} onDelete={() => onDelete(e.id)} />)}
+                </div>
               </div>
-              <div className="space-y-1.5">
-                {groupEntries.map(entry => (
-                  <div key={entry.id} className="flex items-center gap-3 bg-gray-900 rounded-xl px-4 py-2.5 border border-gray-800">
-                    <div className="text-sm">
-                      {entry.source === 'barcode' ? '🔖' : entry.source === 'photo' ? '📷' : '✏️'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-white truncate">{entry.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {entry.amount && `${entry.amount} · `}
-                        P {entry.protein}g · KH {entry.carbs}g · F {entry.fat}g
-                      </div>
-                    </div>
-                    <div className="text-sm font-semibold text-orange-400 shrink-0">{entry.calories} kcal</div>
-                    <button onClick={() => onDelete(entry.id)} className="text-gray-700 hover:text-red-400 transition-colors text-lg leading-none">×</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )
       )}
 
-      {/* Add food modal */}
+      {/* Trinken entries */}
+      {tab === 'trinken' && (
+        drinkGrouped.length === 0 ? (
+          <div className="text-center py-8 text-gray-600">
+            <div className="text-4xl mb-2">💧</div>
+            <p className="text-sm">Noch keine Getränke heute</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {drinkGrouped.map(({ type, entries: g }) => (
+              <div key={type}>
+                <div className="flex items-center gap-2 text-xs text-gray-500 uppercase tracking-wide mb-2">
+                  <span>{DRINK_EMOJI[type]}</span>
+                  <span>{DRINK_LABELS[type]}</span>
+                  <span className="ml-auto text-gray-600">{g.reduce((s, e) => s + e.calories, 0)} kcal</span>
+                </div>
+                <div className="space-y-1.5">
+                  {g.map(e => <EntryRow key={e.id} entry={e} onDelete={() => onDelete(e.id)} />)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* Add modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="w-full max-w-md bg-gray-900 rounded-3xl border border-gray-800 shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-              <h3 className="text-lg font-bold text-white">Essen eintragen</h3>
+          <div className="w-full max-w-md bg-gray-900 rounded-3xl border border-gray-800 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 sticky top-0 bg-gray-900 z-10">
+              <h3 className="text-lg font-bold text-white">Eintrag hinzufügen</h3>
               <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-white text-xl">✕</button>
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Meal type */}
-              <div className="grid grid-cols-4 gap-1.5">
-                {(Object.keys(MEAL_LABELS) as MealType[]).map(mt => (
-                  <button key={mt} onClick={() => setMealType(mt)}
-                    className={`py-2 rounded-xl text-xs font-medium border transition-all ${mealType === mt ? 'border-violet-500 bg-violet-900/30 text-white' : 'border-gray-700 text-gray-400 hover:border-gray-600'}`}>
-                    {MEAL_EMOJI[mt]}<br />{MEAL_LABELS[mt].split('essen')[0] || MEAL_LABELS[mt]}
-                  </button>
-                ))}
+              {/* Essen / Trinken toggle */}
+              <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
+                <button onClick={() => { setTab('essen'); }}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${!isDrink ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  🍽️ Essen
+                </button>
+                <button onClick={() => { setTab('trinken'); }}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${isDrink ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  💧 Trinken
+                </button>
               </div>
 
-              {/* Input mode tabs */}
+              {/* Category selector */}
+              {!isDrink ? (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(Object.keys(MEAL_LABELS) as MealType[]).map(mt => (
+                    <button key={mt} onClick={() => setMealType(mt)}
+                      className={`py-2 rounded-xl text-xs font-medium border transition-all text-center ${mealType === mt ? 'border-violet-500 bg-violet-900/30 text-white' : 'border-gray-700 text-gray-400 hover:border-gray-600'}`}>
+                      {MEAL_EMOJI[mt]}<br />{MEAL_LABELS[mt]}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(Object.keys(DRINK_LABELS) as DrinkType[]).map(dt => (
+                    <button key={dt} onClick={() => setDrinkType(dt)}
+                      className={`py-2 px-2 rounded-xl text-xs font-medium border transition-all text-center ${drinkType === dt ? 'border-blue-500 bg-blue-900/30 text-white' : 'border-gray-700 text-gray-400 hover:border-gray-600'}`}>
+                      {DRINK_EMOJI[dt]}<br />{DRINK_LABELS[dt]}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Input mode — hide barcode/photo for drinks if desired, but let's keep it */}
               <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
-                {([['manual', '✏️ Manuell'], ['barcode', '🔖 Barcode'], ['photo', '📷 Foto']] as [InputMode, string][]).map(([m, label]) => (
+                {(['manual', 'barcode', 'photo'] as InputMode[]).map(m => (
                   <button key={m} onClick={() => { setMode(m); resetForm(); }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === m ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
-                    {label}
+                    {m === 'manual' ? '✏️ Manuell' : m === 'barcode' ? '🔖 Barcode' : '📷 Foto'}
                   </button>
                 ))}
               </div>
@@ -267,51 +324,40 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
               {/* Barcode mode */}
               {mode === 'barcode' && (
                 <div className="space-y-3">
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    className="w-full py-3 rounded-xl border-2 border-dashed border-gray-700 hover:border-violet-500 text-gray-400 hover:text-white text-sm transition-all"
-                  >
+                  <button onClick={() => fileRef.current?.click()}
+                    className="w-full py-3 rounded-xl border-2 border-dashed border-gray-700 hover:border-violet-500 text-gray-400 hover:text-white text-sm transition-all">
                     📸 Barcode-Foto hochladen
                   </button>
                   <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
                     onChange={e => e.target.files?.[0] && handleBarcodeFile(e.target.files[0])} />
-                  <div className="flex gap-2">
-                    <input
-                      type="text" placeholder="Oder Barcode manuell eingeben (EAN)"
-                      value={barcode} onChange={e => setBarcode(e.target.value)}
-                      className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500"
-                    />
-                    <button
-                      onClick={async () => {
-                        if (!barcode) return;
-                        setLoading(true);
-                        setLoadingMsg('Suche Produkt…');
-                        const r = await lookupBarcode(barcode);
-                        setLoading(false);
-                        setLoadingMsg('');
-                        if (r) setForm({ name: r.name, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat, amount: r.amount });
-                        else setError('Produkt nicht gefunden.');
-                      }}
-                      className="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-sm transition-colors"
-                    >
-                      Suchen
-                    </button>
+                  <div className="relative">
+                    <input type="text" placeholder="EAN-Code eingeben (8 oder 13 Stellen)"
+                      value={barcode} onChange={e => { setBarcode(e.target.value.replace(/\D/g, '')); setError(''); }}
+                      maxLength={13}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 font-mono tracking-widest pr-10" />
+                    {loading && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <svg className="animate-spin w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      </div>
+                    )}
                   </div>
+                  {barcode.length > 0 && !isCompleteBarcode(barcode) && (
+                    <p className="text-xs text-gray-600">{barcode.length}/13 Stellen — wird automatisch gesucht bei 8 oder 13</p>
+                  )}
                 </div>
               )}
 
               {/* Photo mode */}
               {mode === 'photo' && (
                 <div>
-                  <button
-                    onClick={() => photoRef.current?.click()}
-                    className="w-full py-6 rounded-xl border-2 border-dashed border-gray-700 hover:border-violet-500 text-center transition-all group"
-                  >
+                  <button onClick={() => photoRef.current?.click()}
+                    className="w-full py-6 rounded-xl border-2 border-dashed border-gray-700 hover:border-violet-500 text-center transition-all group">
                     <div className="text-4xl mb-2">📷</div>
-                    <div className="text-sm text-gray-400 group-hover:text-white transition-colors">
-                      Foto machen oder hochladen
-                    </div>
-                    <div className="text-xs text-gray-600 mt-1">KI erkennt Essen und schätzt Nährwerte</div>
+                    <div className="text-sm text-gray-400 group-hover:text-white">Foto aufnehmen oder hochladen</div>
+                    <div className="text-xs text-gray-600 mt-1">KI schätzt Nährwerte automatisch</div>
                   </button>
                   <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden"
                     onChange={e => e.target.files?.[0] && handlePhotoFile(e.target.files[0])} />
@@ -319,7 +365,7 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
               )}
 
               {/* Loading */}
-              {loading && (
+              {loading && loadingMsg && (
                 <div className="flex items-center gap-3 bg-gray-800 rounded-xl p-3 text-sm text-gray-300">
                   <svg className="animate-spin w-4 h-4 text-violet-400 shrink-0" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -329,19 +375,15 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
                 </div>
               )}
 
-              {error && (
-                <div className="bg-red-900/30 border border-red-800 rounded-xl p-3 text-red-400 text-sm">{error}</div>
-              )}
+              {error && <div className="bg-red-900/30 border border-red-800 rounded-xl p-3 text-red-400 text-sm">{error}</div>}
 
-              {/* Manual fields (also shown after barcode/photo lookup) */}
+              {/* Fields */}
               <div className="space-y-3">
-                <input
-                  type="text" placeholder="Name des Essens"
+                <input type="text" placeholder={isDrink ? 'Name des Getränks' : 'Name des Essens'}
                   value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
-                />
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500" />
                 <div className="grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="Menge (z.B. 200g)"
+                  <input type="text" placeholder={isDrink ? 'Menge (z.B. 500ml)' : 'Menge (z.B. 200g)'}
                     value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                     className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
                   <div className="relative">
@@ -351,24 +393,23 @@ export function FoodLog({ entries, targetCalories, targetProtein, targetCarbs, t
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">kcal</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {([['Protein', 'protein', 'g'], ['Kohlenhydr.', 'carbs', 'g'], ['Fett', 'fat', 'g']] as [string, keyof typeof form, string][]).map(([label, key, unit]) => (
-                    <div key={key} className="relative">
-                      <input type="number" placeholder={label}
-                        value={(form[key] as number) || ''}
-                        onChange={e => setForm(f => ({ ...f, [key]: Number(e.target.value) }))}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 pr-6" />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">{unit}</span>
-                    </div>
-                  ))}
-                </div>
+                {!isDrink && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['protein', 'carbs', 'fat'] as const).map(key => (
+                      <div key={key} className="relative">
+                        <input type="number" placeholder={key === 'protein' ? 'Protein' : key === 'carbs' ? 'KH' : 'Fett'}
+                          value={form[key] || ''}
+                          onChange={e => setForm(f => ({ ...f, [key]: Number(e.target.value) }))}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 pr-6" />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">g</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <button
-                onClick={handleAdd}
-                disabled={!form.name.trim() || loading}
-                className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${form.name.trim() && !loading ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
-              >
+              <button onClick={handleAdd} disabled={!form.name.trim() || loading}
+                className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${form.name.trim() && !loading ? `${isDrink ? 'bg-blue-600 hover:bg-blue-500' : 'bg-violet-600 hover:bg-violet-500'} text-white` : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}>
                 Hinzufügen
               </button>
             </div>
