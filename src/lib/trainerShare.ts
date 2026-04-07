@@ -1,4 +1,4 @@
-import type { Session, PlannedSession, ACWRDataPoint } from '../types/acwr';
+import type { Session, PlannedSession, ACWRDataPoint, TrainingUnit } from '../types/acwr';
 import { calculateACWR } from './acwrCalculations';
 import { supabase, CLOUD_ENABLED } from './supabase';
 
@@ -89,7 +89,7 @@ export async function fetchLiveTrainerData(token: string): Promise<TrainerShareD
 
   const sessions: Session[] = (raw.sessions ?? []).map(s => ({
     id: s.id, name: s.name ?? '', datum: s.datum,
-    te: s.te, rpe: s.rpe, dauer: s.dauer, tl: s.tl,
+    te: s.te as TrainingUnit, rpe: s.rpe, dauer: s.dauer, tl: s.tl,
   }));
 
   const acwrPoints: ACWRDataPoint[] = calculateACWR(sessions);

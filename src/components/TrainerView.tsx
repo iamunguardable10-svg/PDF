@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import type { TrainerShareData } from '../lib/trainerShare';
+type PlannedEntry = TrainerShareData['planned'];
 import { fetchLiveTrainerData } from '../lib/trainerShare';
 import type { ACWRDataPoint } from '../types/acwr';
 import { TE_EMOJI, TE_COLORS } from '../types/acwr';
@@ -67,7 +68,7 @@ export function TrainerView({ data: staticData, token }: Props) {
   }), []);
 
   const plannedByDay = useMemo(() => {
-    const map = new Map<string, typeof data.planned>();
+    const map = new Map<string, PlannedEntry>();
     for (const iso of next14Days) map.set(iso, []);
     for (const s of (data?.planned ?? [])) {
       if (map.has(s.d)) map.get(s.d)!.push(s);
