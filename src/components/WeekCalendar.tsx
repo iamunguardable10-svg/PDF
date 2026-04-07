@@ -414,7 +414,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
   const [draggingId, setDraggingId]           = useState<string | null>(null);
   const [dragOverDay, setDragOverDay]         = useState<string | null>(null);
   const [droppedId, setDroppedId]             = useState<string | null>(null);
-  const [dropInitialTab, setDropInitialTab]   = useState<'confirm' | 'edit'>('edit');
+  const [dropInitialTab, setDropInitialTab]   = useState<'confirm' | 'edit' | null>(null);
   const dragHappened = useRef(false); // verhindert Modal-Öffnung nach Drag
   const today = new Date().toISOString().split('T')[0];
 
@@ -719,11 +719,11 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
       {selectedSession && (
         <SessionModal
           session={selectedSession}
-          onClose={() => { setSelectedSession(null); setDropInitialTab('edit'); }}
+          onClose={() => { setSelectedSession(null); setDropInitialTab(null); }}
           onConfirm={onConfirm}
           onUpdate={onUpdate}
           onDismiss={onDismiss}
-          initialTab={dropInitialTab}
+          initialTab={dropInitialTab ?? undefined}
         />
       )}
 
