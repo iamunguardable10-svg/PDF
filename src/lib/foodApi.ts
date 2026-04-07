@@ -299,11 +299,18 @@ Erstelle eine datenbasierte, vorausschauende Ernährungsplanung. Antworte NUR mi
 Regeln:
 - focus MUSS exakt dem Label im Trainingsplan entsprechen: [SPIELTAG]→"loading", [RECOVERY]→"recovery", [TRAINING]→"normal", [RUHETAG]→"rest"
 - NIEMALS "loading" für Tage mit nur Team/S&C — nur wenn "Spiel" explizit vorhanden
-- Kalorien: [SPIELTAG] +10-15% KH, [RECOVERY] +8% kcal +Protein, [RUHETAG] -10% kcal
-- Mahlzeiten müssen zum focus passen (Spieltag: mehr KH; Recovery: mehr Protein + Antioxidantien)
-- tips: IMMER mit konkreten Mengen und Uhrzeiten
+- Kalorien-Targets pro focus (Basis = ${baseTDEE} kcal):
+  [SPIELTAG]: ${Math.round(baseTDEE * 1.13)} kcal (+13%), KH-Anteil erhöhen auf ~55%
+  [RECOVERY]: ${Math.round(baseTDEE * 1.08)} kcal (+8%), Protein erhöhen auf ~35%, Antioxidantien
+  [TRAINING]:  ${baseTDEE} kcal, ausgewogene Makros
+  [RUHETAG]:  ${Math.round(baseTDEE * 0.90)} kcal (-10%), weniger KH
+- Mahlzeiten-Kalorien MÜSSEN sich zum calorieTarget summieren (±5% Toleranz):
+  Frühstück ≈ 25% | Mittagessen ≈ 35% | Abendessen ≈ 30% | Snack ≈ 10%
+- Bei Trainingstagen (normal/loading): pre-training Mahlzeit 2-3h vorher (KH-reich), post-training Snack innerhalb 45min (Protein+KH)
+- tips: IMMER konkret mit Uhrzeit und Menge (z.B. "17:00 Uhr – 60g Haferflocken + 30g Whey vor dem Training")
+- ingredients: Komma-getrennte Liste mit konkreten Mengen ("180g Hähnchenbrust, 150g Basmatireis, ...")
 - Alle Zahlen ganzzahlig
-- ${dietaryPreferences ? `Beachte: ${dietaryPreferences}` : 'Keine Einschränkungen'}`;
+- ${dietaryPreferences ? `Ernährungspräferenzen beachten: ${dietaryPreferences}` : 'Keine Einschränkungen'}`;
 
   const stream = await client.chat.completions.create({
     model: 'llama-3.3-70b-versatile',

@@ -11,6 +11,8 @@ import { FoodLog } from './components/FoodLog';
 import { NutritionForecast } from './components/NutritionForecast';
 import { wearableData as mockWearable, trainingGoals } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
+import { decodeShareData } from './lib/trainerShare';
+import { TrainerView } from './components/TrainerView';
 import { loadProfile, saveProfile } from './lib/profileStorage';
 import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
 import { loadSessions, saveSessions, loadPlannedSessions, savePlannedSessions } from './lib/trainingStorage';
@@ -142,6 +144,11 @@ function App() {
 
   const handleDeleteFood = (id: string) =>
     setFoodLog(prev => prev.filter(e => e.id !== id));
+
+  /* ── Trainer-Ansicht gate (Hash #trainer/<encoded>) ── */
+  const trainerEncoded = window.location.hash.match(/^#trainer\/(.+)$/)?.[1];
+  const trainerData = trainerEncoded ? decodeShareData(trainerEncoded) : null;
+  if (trainerData) return <TrainerView data={trainerData} />;
 
   /* ── Onboarding gate ── */
   if (!profile.onboardingCompleted) {
@@ -281,6 +288,7 @@ function App() {
             onSessionConfirmed={handleSessionConfirmed}
             onLoadMockData={handleLoadMockData}
             playerName={profile.name}
+            playerSport={profile.sport}
           />
         )}
       </main>

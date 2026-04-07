@@ -1,0 +1,248 @@
+import { useMemo } from 'react';
+import type { TrainerShareData } from '../lib/trainerShare';
+import type { ACWRDataPoint } from '../types/acwr';
+import { TE_EMOJI, TE_COLORS } from '../types/acwr';
+import { getACWRZoneLabel } from '../lib/acwrCalculations';
+import { ACWRChart } from './ACWRChart';
+
+const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+interface Props {
+  data: TrainerShareData;
+}
+
+export function TrainerView({ data }: Props) {
+  const today = new Date().toISOString().split('T')[0];
+
+  // ACWR-History zu ACWRDataPoint konvertieren (für Chart)
+  const acwrData: ACWRDataPoint[] = useMemo(() =>
+    data.acwrHistory.map(p => ({
+      datum: p.d,
+      taeglLoad: 0,
+      acuteLoad: p.a,
+      chronicLoad: p.c,
+      acwr: p.v,
+    })),
+  [data.acwrHistory]);
+
+  // Aktuellster ACWR-Wert
+  const currentPoint = useMemo(() => {
+    const active = [...data.acwrHistory].reverse().find(p => p.v !== null);
+    return active ?? null;
+  }, [data.acwrHistory]);
+
+  const acwr = currentPoint?.v ?? null;
+  const zone = acwr !== null ? getACWRZoneLabel(acwr) : null;
+
+  // Nächste 14 Tage als Grid
+  const next14Days = useMemo(() => {
+    return Array.from({ length: 14 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      return d.toISOString().split('T')[0];
+    });
+  }, []);
+
+  // Geplante Sessions in nächsten 14 Tagen, nach Datum gruppiert
+  const plannedByDay = useMemo(() => {
+    const map = new Map<string, typeof data.planned>();
+    for (const iso of next14Days) map.set(iso, []);
+    for (const s of data.planned) {
+      if (map.has(s.d)) map.get(s.d)!.push(s);
+    }
+    return map;
+  }, [data.planned, next14Days]);
+
+  // Letzte 14 Sessions für die Liste
+  const recentSessions = useMemo(() =>
+    [...data.sessions28]
+      .sort((a, b) => b.d.localeCompare(a.d))
+      .slice(0, 10),
+  [data.sessions28]);
+
+  function fmtDate(iso: string) {
+    const d = new Date(iso);
+    return `${WEEKDAYS[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}`;
+  }
+
+  const daysSinceGenerated = Math.floor(
+    (Date.now() - new Date(data.generatedAt).getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  return (
+    <div className="min-h-screen bg-[#0a0b0f] text-white">
+      {/* Header */}
+      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-700 rounded-xl flex items-center justify-center text-sm">
+              📊
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-white leading-none">
+                ACWR · {data.athleteName}
+              </h1>
+              <p className="text-xs text-gray-500">{data.sport}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2.5 py-1 rounded-full border border-amber-700/60 bg-amber-900/20 text-amber-300">
+              👁 Trainer-Ansicht
+            </span>
+            {daysSinceGenerated > 0 && (
+              <span className="text-xs text-gray-600">
+                Stand: vor {daysSinceGenerated}d
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-6 space-y-5">
+
+        {/* ACWR Status */}
+        <div className="bg-gray-900/50 rounded-3xl p-5 border border-gray-800">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-lg">📊</span>
+            <h2 className="text-sm font-semibold text-white">Akute:Chronische Belastungsquotient</h2>
+          </div>
+
+          {acwr !== null && zone ? (
+            <>
+              {/* Gauge */}
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border border-gray-700"
+                  style={{ backgroundColor: zone.color + '22' }}>
+                  <span className="text-xl font-black leading-none" style={{ color: zone.color }}>
+                    {acwr.toFixed(2)}
+                  </span>
+                  <span className="text-xs text-gray-400 mt-0.5">ACWR</span>
+                </div>
+                <div>
+                  <div className="font-semibold text-white text-sm">{zone.label}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {acwr < 0.8 && 'Unterbelastung – Verletzungsrisiko durch mangelnde Adaptation.'}
+                    {acwr >= 0.8 && acwr <= 1.3 && 'Optimale Zone – gute Balance zwischen Belastung und Erholung.'}
+                    {acwr > 1.3 && 'Überbelastung – erhöhtes Verletzungsrisiko, Recovery priorisieren.'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Gauge-Leiste */}
+              <div className="relative h-4 rounded-full overflow-hidden mb-1"
+                style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 32%, #4ade80 40%, #4ade80 72%, #f87171 82%, #f87171 100%)' }}>
+                <div className="absolute top-0 bottom-0 flex items-center"
+                  style={{ left: `${Math.min(100, Math.max(0, (acwr / 2) * 100))}%`, transform: 'translateX(-50%)' }}>
+                  <div className="w-3 h-3 bg-white rounded-full border-2 border-gray-900 shadow" />
+                </div>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500 px-0.5">
+                <span>0</span>
+                <span className="text-blue-400">0.8</span>
+                <span className="text-green-400">1.0</span>
+                <span className="text-red-400">1.3</span>
+                <span>2.0</span>
+              </div>
+
+              {/* Kennzahlen */}
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="bg-gray-900 rounded-2xl p-3 border border-gray-800">
+                  <div className="text-xs text-gray-500 mb-1">Acute Load (7d Ø)</div>
+                  <div className="text-lg font-bold text-blue-400">
+                    {currentPoint?.a ?? '—'} <span className="text-xs font-normal text-gray-500">AU</span>
+                  </div>
+                </div>
+                <div className="bg-gray-900 rounded-2xl p-3 border border-gray-800">
+                  <div className="text-xs text-gray-500 mb-1">Chronic Load (28d Ø)</div>
+                  <div className="text-lg font-bold text-amber-400">
+                    {currentPoint?.c ?? '—'} <span className="text-xs font-normal text-gray-500">AU</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-600 text-center py-4">Keine ACWR-Daten vorhanden.</p>
+          )}
+        </div>
+
+        {/* ACWR Chart */}
+        {acwrData.length > 0 && (
+          <div className="bg-gray-900/50 rounded-3xl p-5 border border-gray-800">
+            <h3 className="text-sm font-semibold text-white mb-3">ACWR Verlauf (letzte 60 Tage)</h3>
+            <ACWRChart data={acwrData} />
+          </div>
+        )}
+
+        {/* Nächste 14 Tage */}
+        <div className="bg-gray-900/50 rounded-3xl p-5 border border-gray-800">
+          <h3 className="text-sm font-semibold text-white mb-3">Geplante Einheiten – nächste 14 Tage</h3>
+
+          {data.planned.length === 0 ? (
+            <p className="text-sm text-gray-600 text-center py-4">Keine geplanten Einheiten geteilt.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {next14Days.map(iso => {
+                const sessions = plannedByDay.get(iso) ?? [];
+                if (sessions.length === 0) return null;
+                const isToday = iso === today;
+                return (
+                  <div key={iso} className={`flex items-start gap-3 rounded-xl px-3 py-2.5 border ${
+                    isToday ? 'border-violet-700/60 bg-violet-900/10' : 'border-gray-800 bg-gray-900/50'
+                  }`}>
+                    <div className="shrink-0 w-16 text-xs text-gray-500 pt-0.5">{fmtDate(iso)}</div>
+                    <div className="flex flex-wrap gap-1.5 flex-1">
+                      {sessions.map((s, i) => {
+                        const color = TE_COLORS[s.t as keyof typeof TE_COLORS] ?? '#6b7280';
+                        const emoji = TE_EMOJI[s.t as keyof typeof TE_EMOJI] ?? '💪';
+                        return (
+                          <span key={i} className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs border border-dashed"
+                            style={{ borderColor: color + '80', backgroundColor: color + '11', color }}>
+                            {emoji} {s.t}
+                            {s.u && <span className="text-gray-500 ml-1">{s.u}</span>}
+                            {s.dur && <span className="text-gray-600 ml-1">{s.dur}′</span>}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {isToday && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-violet-900/50 text-violet-300 border border-violet-700/50 shrink-0">
+                        Heute
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Letzte Sessions */}
+        {recentSessions.length > 0 && (
+          <div className="bg-gray-900/50 rounded-3xl p-5 border border-gray-800">
+            <h3 className="text-sm font-semibold text-white mb-3">Letzte Einheiten (28 Tage)</h3>
+            <div className="space-y-1.5">
+              {recentSessions.map((s, i) => {
+                const emoji = TE_EMOJI[s.te as keyof typeof TE_EMOJI] ?? '💪';
+                const rpeColor = s.rpe <= 3 ? '#4ade80' : s.rpe <= 6 ? '#facc15' : '#f87171';
+                return (
+                  <div key={i} className="flex items-center gap-3 bg-gray-900/60 rounded-xl px-3 py-2 border border-gray-800">
+                    <span>{emoji}</span>
+                    <span className="text-sm text-gray-300 flex-1">{s.te}</span>
+                    <span className="text-xs text-gray-500">{fmtDate(s.d)}</span>
+                    <span className="text-xs font-medium" style={{ color: rpeColor }}>RPE {s.rpe}</span>
+                    <span className="text-xs font-semibold text-orange-400">{s.tl} AU</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="text-center text-xs text-gray-700 pb-6">
+          Schreibgeschützte Trainer-Ansicht · Geteilt am {data.generatedAt} · FitFuel
+        </div>
+      </main>
+    </div>
+  );
+}

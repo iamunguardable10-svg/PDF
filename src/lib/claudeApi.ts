@@ -75,16 +75,30 @@ ${profile.dietaryPreferences ? `- Ernährungspräferenzen: ${profile.dietaryPref
     normal: 'TRAINING',
   };
 
-  const forecastContext = forecast?.days?.length
+  // Per-Tag Ziele aus Forecast wenn verfügbar, sonst einheitliches Tagesziel
+  const perDayTargets = forecast?.days?.length
+    ? forecast.days.slice(0, days).map(d => ({
+        label: d.dayLabel,
+        focus: d.focus,
+        kcal: d.calorieTarget,
+        protein: d.proteinTarget,
+        carbs: d.carbTarget,
+        fat: d.fatTarget,
+        msg: d.keyMessage,
+      }))
+    : null;
+
+  const forecastContext = perDayTargets
     ? [
         '',
-        '=== Vorausschauende Ernährungsprognose (nutze diese als Basis) ===',
-        `Wochenstrategie: ${forecast.weekStrategy}`,
-        forecast.days.slice(0, days).map(d =>
-          `${d.dayLabel} [${focusLabel[d.focus] ?? d.focus}]: ${d.calorieTarget} kcal | P ${d.proteinTarget}g | KH ${d.carbTarget}g | F ${d.fatTarget}g — ${d.keyMessage}`
+        '=== Vorausschauende Ernährungsprognose – NUTZE DIESE PRO TAG ===',
+        `Wochenstrategie: ${forecast!.weekStrategy}`,
+        perDayTargets.map((d, i) =>
+          `Tag ${i + 1} (${d.label}) [${focusLabel[d.focus] ?? d.focus}]: ` +
+          `${d.kcal} kcal | P ${d.protein}g | KH ${d.carbs}g | F ${d.fat}g — ${d.msg}`
         ).join('\n'),
-        forecast.topWarnings?.length ? `Warnungen: ${forecast.topWarnings.join(' | ')}` : '',
-        '=== Ende Prognose ===',
+        forecast!.topWarnings?.length ? `⚠ Warnungen: ${forecast!.topWarnings.join(' | ')}` : '',
+        '=== WICHTIG: Mahlzeiten-Kalorien pro Tag müssen zum obigen Tagesziel passen ===',
       ].filter(Boolean).join('\n')
     : '';
 
@@ -135,10 +149,15 @@ Antworte NUR mit diesem JSON (kein Text davor oder danach):
 }
 
 Regeln:
-- 3-4 Mahlzeiten pro Tag, Makros möglichst nah am Tagesziel
-- Zutaten die bei Rewe/Edeka erhältlich sind
-- Kategorien: "Obst & Gemüse", "Fleisch & Fisch", "Milchprodukte", "Getreide & Hülsenfrüchte", "Snacks & Sonstiges"
-- Tipps auf den ACWR-Wert und das Sportler-Niveau eingehen`;
+- Exakt 4 Mahlzeiten pro Tag: Frühstück, Mittagessen, Abendessen, Snack
+- Kalorien-Verteilung PRO TAG (muss sich auf das jeweilige Tagesziel summieren):
+  Frühstück ≈ 25% | Mittagessen ≈ 35% | Abendessen ≈ 30% | Snack ≈ 10%
+${perDayTargets ? '- KRITISCH: Nutze die per-Tag Kalorien aus der Prognose oben — NICHT das allgemeine Tagesziel für alle Tage gleich' : '- Kalorien pro Tag: ' + targetCalories + ' kcal aufgeteilt nach obiger Verteilung'}
+- Zutaten bei Rewe/Edeka erhältlich, konkrete Mengenangaben (z.B. "180g Hähnchenbrust")
+- Kategorien Einkaufsliste: "Obst & Gemüse", "Fleisch & Fisch", "Milchprodukte", "Getreide & Hülsenfrüchte", "Snacks & Sonstiges"
+- Bei Trainingstagen: kohlenhydratreiche Mahlzeit 2-3h vor Training, proteinreiche Mahlzeit innerhalb 45min nach Training
+- Tipps müssen konkret sein (Uhrzeit + Menge), nicht allgemein
+- Alle Makro-Summen müssen zum Tagesziel passen (±5% Toleranz)`;
 
   const stream = await client.chat.completions.create({
     model: MODEL,

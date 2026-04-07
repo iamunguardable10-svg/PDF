@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import type { Session, PlannedSession, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
 import { calculateACWR, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel, projectFutureACWR } from '../lib/acwrCalculations';
+import { encodeShareData } from '../lib/trainerShare';
 import {
   requestNotificationPermission, getNotificationPermission,
   scheduleSessionReminder, cancelReminder, sendTestNotification,
@@ -23,15 +24,17 @@ interface Props {
   onSessionConfirmed?: () => void;
   onLoadMockData?: () => void;
   playerName: string;
+  playerSport?: string;
 }
 
 
 export function ACWRSection({
   sessions, plannedSessions, onAddSession, onAddPlanned,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onSessionConfirmed, onLoadMockData, playerName,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onSessionConfirmed, onLoadMockData, playerName, playerSport = 'Sport',
 }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  const [shareToast, setShareToast] = useState<'copied' | 'error' | null>(null);
   const notifPerm = getNotificationPermission();
 
   // Reminder-Timeouts: id → timeoutId
@@ -99,6 +102,20 @@ export function ACWRSection({
     return `${d}.${m}.${y.slice(2)}`;
   }
 
+  function handleGenerateTrainerLink() {
+    if (sessions.length === 0) return;
+    const encoded = encodeShareData(playerName, playerSport, acwrData, plannedSessions, sessions);
+    if (!encoded) { setShareToast('error'); setTimeout(() => setShareToast(null), 2500); return; }
+    const url = `${window.location.origin}${window.location.pathname}#trainer/${encoded}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShareToast('copied');
+      setTimeout(() => setShareToast(null), 2500);
+    }).catch(() => {
+      setShareToast('error');
+      setTimeout(() => setShareToast(null), 2500);
+    });
+  }
+
   const recentDays: DayLoad[] = [...dailyLoads]
     .sort((a, b) => b.datum.localeCompare(a.datum))
     .slice(0, 14);
@@ -131,6 +148,17 @@ export function ACWRSection({
         />
       )}
 
+      {/* Toast */}
+      {shareToast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl text-sm font-medium shadow-xl border transition-all ${
+          shareToast === 'copied'
+            ? 'bg-green-900/90 border-green-700 text-green-200'
+            : 'bg-red-900/90 border-red-700 text-red-200'
+        }`}>
+          {shareToast === 'copied' ? '✓ Trainer-Link in Zwischenablage kopiert' : '✕ Link konnte nicht erstellt werden'}
+        </div>
+      )}
+
       {/* ACWR Status */}
       <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800">
         <div className="flex items-center justify-between mb-5">
@@ -142,6 +170,16 @@ export function ACWRSection({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Trainer-Link */}
+            {sessions.length > 0 && (
+              <button
+                onClick={handleGenerateTrainerLink}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors flex items-center gap-1.5"
+                title="Schreibgeschützten Trainer-Link generieren"
+              >
+                🔗 Trainer-Link
+              </button>
+            )}
             {/* Benachrichtigungs-Button */}
             {notifPerm !== 'granted' && notifPerm !== 'unsupported' && (
               <button
