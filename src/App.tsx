@@ -281,88 +281,69 @@ function App() {
   return (
     <div className="min-h-screen bg-[#0a0b0f] text-white">
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-purple-700 rounded-xl flex items-center justify-center text-lg">
+      <header className="border-b border-white/5 bg-[#0a0b0f]/80 backdrop-blur-xl sticky top-0 z-20">
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 flex-1">
+            <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-700 rounded-xl flex items-center justify-center text-base shadow-lg shadow-violet-900/40">
               🥗
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white leading-none">FitFuel</h1>
-              <p className="text-xs text-gray-500">KI-Gesundheitsassistent</p>
-            </div>
+            <span className="text-base font-bold text-white tracking-tight">FitFuel</span>
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 ml-4 bg-gray-900 rounded-xl p-1 border border-gray-800">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'dashboard' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              🥗 Ernährung
-            </button>
-            <button
-              onClick={() => setActiveTab('tagebuch')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'tagebuch' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              📒 Tagebuch
-            </button>
-            <button
-              onClick={() => setActiveTab('acwr')}
-              className={`relative px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'acwr' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              📊 ACWR
-              {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-          </div>
+          {/* Desktop tabs (hidden on mobile) */}
+          <nav className="hidden sm:flex gap-0.5 bg-white/5 rounded-xl p-1">
+            {([
+              { id: 'dashboard', label: 'Ernährung', icon: '🥗', badge: 0 },
+              { id: 'tagebuch',  label: 'Tagebuch',  icon: '📒', badge: 0 },
+              { id: 'acwr',      label: 'ACWR',       icon: '📊', badge: pendingCount },
+            ] as const).map(t => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`relative px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === t.id
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {t.label}
+                {t.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                    {t.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
 
-          {/* Profile button */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="ml-auto flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-xl border border-gray-800 hover:border-gray-600"
-          >
-            <span className="text-base">👤</span>
-            <span className="hidden sm:inline">{profile.name}</span>
-            {loggedInUser && (
-              <span className="hidden sm:inline text-xs text-violet-400">☁</span>
+          {/* Right actions */}
+          <div className="flex items-center gap-2">
+            {CLOUD_ENABLED && !loggedInUser && (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="text-xs px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition-all shadow-sm shadow-violet-900/50"
+              >
+                Anmelden
+              </button>
             )}
-            <span className="text-xs text-gray-600">⚙</span>
-          </button>
-
-          {/* Anmelden-Button (Gast-Modus, Cloud verfügbar) */}
-          {CLOUD_ENABLED && !loggedInUser && (
+            {loggedInUser && !isGuest && (
+              <button onClick={handleSignOut} className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                Abmelden
+              </button>
+            )}
             <button
-              onClick={() => setShowAuthModal(true)}
-              className="text-xs px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors shrink-0"
+              onClick={() => setShowSettings(true)}
+              className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all"
+              title="Einstellungen"
             >
-              Anmelden
+              {loggedInUser ? <span className="text-violet-400 text-xs">☁</span> : <span className="text-sm">👤</span>}
             </button>
-          )}
-
-          {/* Sign out (only when logged in with account) */}
-          {loggedInUser && !isGuest && (
-            <button
-              onClick={handleSignOut}
-              className="text-xs text-gray-600 hover:text-gray-400 transition-colors shrink-0"
-              title="Abmelden"
-            >
-              Abmelden
-            </button>
-          )}
+          </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-6xl mx-auto px-4 py-4 pb-24 sm:pb-6 space-y-4">
 
         {/* ── ERNÄHRUNG ── */}
         {activeTab === 'dashboard' && (
@@ -400,10 +381,10 @@ function App() {
                 />
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-600">
-                <div className="text-5xl mb-4">🍽️</div>
-                <p className="text-lg">Generiere deinen KI-Ernährungsplan</p>
-                <p className="text-sm mt-2">Personalisiert auf dein Profil, ACWR & Trainingsziele</p>
+              <div className="text-center py-16 text-gray-600">
+                <div className="text-6xl mb-5 opacity-60">🍽️</div>
+                <p className="text-base font-semibold text-gray-500">Noch kein Ernährungsplan</p>
+                <p className="text-sm mt-1 text-gray-700">Tippe auf "Plan generieren" um zu starten</p>
               </div>
             )}
           </>
@@ -450,6 +431,40 @@ function App() {
       )}
 
       {showTour && <AppTour onDone={handleTourDone} />}
+
+      {/* Bottom navigation — mobile only */}
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-[#0d0e14]/95 backdrop-blur-xl border-t border-white/5">
+        <div className="flex items-stretch h-16">
+          {([
+            { id: 'dashboard', label: 'Ernährung', icon: '🥗', badge: 0 },
+            { id: 'tagebuch',  label: 'Tagebuch',  icon: '📒', badge: 0 },
+            { id: 'acwr',      label: 'ACWR',       icon: '📊', badge: pendingCount },
+          ] as const).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-all ${
+                activeTab === t.id ? 'text-violet-400' : 'text-gray-600'
+              }`}
+            >
+              <span className={`text-xl transition-transform ${activeTab === t.id ? 'scale-110' : ''}`}>{t.icon}</span>
+              <span className={`text-[10px] font-medium ${activeTab === t.id ? 'text-violet-400' : 'text-gray-600'}`}>
+                {t.label}
+              </span>
+              {t.badge > 0 && (
+                <span className="absolute top-2 right-[calc(50%-14px)] w-4 h-4 bg-orange-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                  {t.badge}
+                </span>
+              )}
+              {activeTab === t.id && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-violet-500 rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
+        {/* iOS safe area */}
+        <div className="h-safe-bottom bg-[#0d0e14]/95" />
+      </nav>
 
       {showAuthModal && CLOUD_ENABLED && (
         <AuthScreen
