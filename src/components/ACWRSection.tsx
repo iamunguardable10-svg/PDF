@@ -215,6 +215,7 @@ export function ACWRSection({
         onUpdatePlanned={onUpdatePlanned}
         onDismissPlanned={handleDismiss}
         onAddPlanned={onAddPlanned}
+        onAddSessionDirect={s => { onAddSession(s); onSessionConfirmed?.(); }}
       />
 
       {/* Trainer-Plan Import */}

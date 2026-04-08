@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Session, PlannedSession } from '../types/acwr';
+
 import { TRAINING_UNITS, TE_COLORS, TE_EMOJI } from '../types/acwr';
 import { WeekCalendar } from './WeekCalendar';
 
@@ -10,6 +11,7 @@ interface Props {
   onUpdatePlanned?: (id: string, updates: Partial<PlannedSession>) => void;
   onDismissPlanned?: (id: string) => void;
   onAddPlanned?: (sessions: PlannedSession[]) => void;
+  onAddSessionDirect?: (session: Session) => void;
 }
 
 function isoWeekStart(offset = 0): string {
@@ -22,7 +24,7 @@ function isoWeekStart(offset = 0): string {
 
 export function TrainingOverview({
   sessions, plannedSessions,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onAddPlanned,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onAddPlanned, onAddSessionDirect,
 }: Props) {
   const [view, setView] = useState<'kalender' | 'woche' | 'verlauf'>('kalender');
 
@@ -106,6 +108,7 @@ export function TrainingOverview({
           onUpdate={onUpdatePlanned}
           onDismiss={onDismissPlanned}
           onAddPlanned={onAddPlanned}
+          onAddSessionDirect={onAddSessionDirect}
         />
       )}
 

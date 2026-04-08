@@ -9,6 +9,7 @@ interface Props {
   onUpdate?: (id: string, updates: Partial<PlannedSession>) => void;
   onDismiss?: (id: string) => void;
   onAddPlanned?: (sessions: PlannedSession[]) => void;
+  onAddSessionDirect?: (session: Session) => void;
 }
 
 const WEEKDAYS_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -82,12 +83,12 @@ interface DayEntry {
 // ─── Create Session Modal ─────────────────────────────────────────────────────
 
 function CreateSessionModal({
-  datum, onClose, onAdd, onConfirmDirect,
+  datum, onClose, onAdd, onAddSessionDirect,
 }: {
   datum: string;
   onClose: () => void;
   onAdd: (s: PlannedSession) => void;
-  onConfirmDirect?: (id: string, rpe: number, dauer: number) => void;
+  onAddSessionDirect?: (session: Session) => void;
 }) {
   const isPast = datum < toISO(new Date());
 
@@ -107,20 +108,28 @@ function CreateSessionModal({
   const rpeColor = rpe <= 3 ? '#4ade80' : rpe <= 6 ? '#facc15' : '#f87171';
 
   function handleCreate() {
-    const id = `planned-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    onAdd({
-      id,
-      datum,
-      te,
-      uhrzeit: time || undefined,
-      geschaetzteDauer: dauer,
-      notiz: note || undefined,
-      reminderScheduled: false,
-      confirmed: false,
-    });
-    // For past dates: immediately confirm with RPE so it becomes a real session
-    if (isPast && onConfirmDirect) {
-      onConfirmDirect(id, rpe, dauer);
+    if (isPast && onAddSessionDirect) {
+      // Directly create a real Session — no planned-session intermediate state
+      onAddSessionDirect({
+        id: `direct-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: '',
+        datum,
+        te,
+        rpe,
+        dauer,
+        tl: rpe * dauer,
+      });
+    } else {
+      onAdd({
+        id: `planned-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        datum,
+        te,
+        uhrzeit: time || undefined,
+        geschaetzteDauer: dauer,
+        notiz: note || undefined,
+        reminderScheduled: false,
+        confirmed: false,
+      });
     }
     onClose();
   }
@@ -445,7 +454,7 @@ function SessionModal({
 
 // ─── Haupt-Komponente ──────────────────────────────────────────────────────────
 
-export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned }: Props) {
+export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned, onAddSessionDirect }: Props) {
   const [weekOffset, setWeekOffset]           = useState(0);
   const [selectedSession, setSelectedSession] = useState<PlannedSession | null>(null);
   const [createForDay, setCreateForDay]       = useState<string | null>(null);
@@ -771,7 +780,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           datum={createForDay}
           onClose={() => setCreateForDay(null)}
           onAdd={s => { onAddPlanned([s]); setCreateForDay(null); }}
-          onConfirmDirect={onConfirm}
+          onAddSessionDirect={onAddSessionDirect}
         />
       )}
     </>
