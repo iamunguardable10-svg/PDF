@@ -34,16 +34,41 @@ export function MealPlanView({ plan, tips }: Props) {
 
       <div className="p-6 space-y-4">
         {/* Day summary */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-white">{day.day}</h3>
-            <p className="text-sm text-gray-400">{day.meals?.length || 0} Mahlzeiten</p>
-          </div>
-          <div className="text-right">
-            <div className="text-lg font-bold text-orange-400">{day.totalCalories} kcal</div>
-            <div className="text-xs text-gray-500">Tagesgesamt</div>
-          </div>
-        </div>
+        {(() => {
+          const meals = day.meals || [];
+          const totalKcal = meals.reduce((s, m) => s + (m.calories || 0), 0);
+          const totalP    = meals.reduce((s, m) => s + (m.protein  || 0), 0);
+          const totalC    = meals.reduce((s, m) => s + (m.carbs    || 0), 0);
+          const totalF    = meals.reduce((s, m) => s + (m.fat      || 0), 0);
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-white">{day.day}</h3>
+                  <p className="text-sm text-gray-400">{meals.length} Mahlzeiten</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-orange-400">{totalKcal} kcal</div>
+                  <div className="text-xs text-gray-500">Tagesgesamt</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-gray-900 rounded-xl py-2 px-3 border border-gray-800">
+                  <div className="text-sm font-bold text-blue-400">{totalP}g</div>
+                  <div className="text-xs text-gray-500">Protein</div>
+                </div>
+                <div className="bg-gray-900 rounded-xl py-2 px-3 border border-gray-800">
+                  <div className="text-sm font-bold text-yellow-400">{totalC}g</div>
+                  <div className="text-xs text-gray-500">Kohlenhydrate</div>
+                </div>
+                <div className="bg-gray-900 rounded-xl py-2 px-3 border border-gray-800">
+                  <div className="text-sm font-bold text-green-400">{totalF}g</div>
+                  <div className="text-xs text-gray-500">Fett</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Meals */}
         <div className="space-y-3">

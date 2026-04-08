@@ -4,7 +4,7 @@ import { TE_COLORS } from '../types/acwr';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, Legend,
-  ComposedChart, Bar, YAxis as YAxisType,
+  ComposedChart, Bar, YAxis as YAxisType, // eslint-disable-line @typescript-eslint/no-unused-vars
 } from 'recharts';
 
 // suppress unused import warning — YAxisType is the same as YAxis, just aliased
@@ -91,8 +91,7 @@ type DetailPoint = {
   Team: number; 'S&C': number; Spiel: number; Aufwärmen: number;
   Indi: number; Schulsport: number; Prävention: number;
   chronicLoad: number;
-  highThreshold: number;
-  lowThreshold: number;
+  acuteLoad: number;
   acwr: number | null;
 };
 
@@ -103,10 +102,11 @@ function DetailTooltip({ active, payload, label }: any) {
   const totalTL = TE_TYPES.reduce((s, te) => s + (d[te] ?? 0), 0);
   const acwr    = d.acwr;
   const zoneCol = acwr == null ? '#9ca3af' : acwr < 0.8 ? '#60a5fa' : acwr <= 1.3 ? '#4ade80' : '#f87171';
+  const zone    = acwr == null ? null : acwr < 0.8 ? 'Niedrig' : acwr <= 1.3 ? 'Optimal' : 'Hoch';
   const teEntries = TE_TYPES.filter(te => d[te] > 0);
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-sm shadow-xl min-w-[180px]">
-      <div className="font-semibold text-white mb-2">{label}</div>
+    <div className="bg-gray-900/95 border border-gray-700 rounded-xl p-3 text-sm shadow-xl min-w-[180px] backdrop-blur-sm">
+      <div className="font-semibold text-white mb-2 text-sm">{label}</div>
       <div className="space-y-1 text-gray-300">
         {teEntries.map(te => (
           <div key={te} className="flex justify-between gap-4">
@@ -116,17 +116,19 @@ function DetailTooltip({ active, payload, label }: any) {
         ))}
         {totalTL > 0 && (
           <div className="flex justify-between border-t border-gray-700 pt-1 mt-1">
-            <span>Gesamt</span><span className="text-orange-400 font-bold">{totalTL} AU</span>
+            <span className="text-gray-400">Gesamt</span><span className="text-orange-400 font-bold">{totalTL} AU</span>
           </div>
         )}
         <div className="border-t border-gray-700 pt-1 mt-1 space-y-0.5">
-          <div className="flex justify-between"><span className="text-gray-500">Chronic (28d)</span><span>{d.chronicLoad} AU</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Obere Grenze</span><span className="text-red-400">{d.highThreshold} AU</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Untere Grenze</span><span className="text-gray-300">{d.lowThreshold} AU</span></div>
+          <div className="flex justify-between gap-4"><span className="text-gray-500">Acute (7d)</span><span className="text-sky-300">{d.acuteLoad} AU</span></div>
+          <div className="flex justify-between gap-4"><span className="text-gray-500">Chronic (28d)</span><span className="text-gray-300">{d.chronicLoad} AU</span></div>
         </div>
         {acwr != null && (
-          <div className="flex justify-between border-t border-gray-700 pt-1 mt-1">
-            <span>ACWR</span><span style={{ color: zoneCol }} className="font-bold">{acwr.toFixed(2)}</span>
+          <div className="flex items-center justify-between border-t border-gray-700 pt-1.5 mt-1 gap-4">
+            <span className="text-gray-400">ACWR</span>
+            <span style={{ color: zoneCol }} className="font-bold text-base">
+              {acwr.toFixed(2)} <span className="text-xs font-normal">({zone})</span>
+            </span>
           </div>
         )}
       </div>
@@ -172,18 +174,17 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) 
     return filtered.map(pt => {
       const day = loadMap.get(pt.datum);
       return {
-        datum:         formatDatum(pt.datum),
-        Team:          day?.loads['Team']       ?? 0,
-        'S&C':         day?.loads['S&C']        ?? 0,
-        Spiel:         day?.loads['Spiel']       ?? 0,
-        Aufwärmen:     day?.loads['Aufwärmen']   ?? 0,
-        Indi:          day?.loads['Indi']        ?? 0,
-        Schulsport:    day?.loads['Schulsport']  ?? 0,
-        Prävention:    day?.loads['Prävention']  ?? 0,
-        chronicLoad:   pt.chronicLoad,
-        highThreshold: Math.round(pt.chronicLoad * 1.3),
-        lowThreshold:  Math.round(pt.chronicLoad * 0.8),
-        acwr:          pt.acwr,
+        datum:       formatDatum(pt.datum),
+        Team:        day?.loads['Team']       ?? 0,
+        'S&C':       day?.loads['S&C']        ?? 0,
+        Spiel:       day?.loads['Spiel']       ?? 0,
+        Aufwärmen:   day?.loads['Aufwärmen']   ?? 0,
+        Indi:        day?.loads['Indi']        ?? 0,
+        Schulsport:  day?.loads['Schulsport']  ?? 0,
+        Prävention:  day?.loads['Prävention']  ?? 0,
+        chronicLoad: pt.chronicLoad,
+        acuteLoad:   pt.acuteLoad,
+        acwr:        pt.acwr,
       };
     });
   }, [filtered, dailyLoads]);
@@ -249,46 +250,51 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) 
       {/* Detail view — matches Excel layout */}
       {view === 'detail' && (
         <ResponsiveContainer width="100%" height={340}>
-          <ComposedChart data={detailData} margin={{ top: 10, right: 40, left: -10, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+          <ComposedChart data={detailData} margin={{ top: 10, right: 44, left: -10, bottom: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
             <XAxis {...xAxisProps} />
             {/* Left axis: TL in AU */}
             <YAxis yAxisId="left" tick={{ fill: '#6b7280', fontSize: 10 }}
-              label={{ value: 'TL (AU)', angle: -90, position: 'insideLeft', fill: '#6b7280', fontSize: 10, dy: 30 }} />
+              tickLine={false} axisLine={false}
+              label={{ value: 'AU', angle: -90, position: 'insideLeft', fill: '#4b5563', fontSize: 10, dy: 20 }} />
             {/* Right axis: ACWR ratio */}
             <YAxis yAxisId="right" orientation="right" domain={[0, 2.5]}
-              ticks={[0, 0.5, 0.8, 1.0, 1.3, 1.5, 2.0, 2.5]}
+              ticks={[0.8, 1.0, 1.3, 2.0]}
               tick={{ fill: '#6b7280', fontSize: 10 }}
+              tickLine={false} axisLine={false}
               tickFormatter={v => v.toFixed(1)} />
             <Tooltip content={<DetailTooltip />} />
-            <Legend wrapperStyle={{ fontSize: '11px', color: '#9ca3af', paddingTop: '8px' }} />
+            <Legend
+              wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
+              formatter={(value) => <span style={{ color: '#9ca3af' }}>{value}</span>}
+            />
 
             {/* Stacked bars per TE type — matches Excel */}
             {TE_TYPES.map(te => (
-              <Bar key={te} yAxisId="left" dataKey={te} stackId="tl"
+              <Bar key={te} yAxisId="left" dataKey={te} stackId="tl" name={te}
                 fill={TE_COLORS[te as keyof typeof TE_COLORS]}
-                maxBarSize={20} isAnimationActive={false} />
+                maxBarSize={18} isAnimationActive={false} radius={[0, 0, 0, 0]} />
             ))}
 
             {/* Chronic rolling average (gray dashed, left axis) */}
             <Line yAxisId="left" type="monotone" dataKey="chronicLoad" name="Chronic (28d)"
-              stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="5 3" dot={false}
-              isAnimationActive={false} />
+              stroke="#6b7280" strokeWidth={1.5} strokeDasharray="5 3" dot={false}
+              isAnimationActive={false} legendType="plainline" />
 
-            {/* Thresholds on left axis */}
-            <Line yAxisId="left" type="monotone" dataKey="highThreshold" name="Obere Grenze (×1.3)"
-              stroke="#ef4444" strokeWidth={2} dot={false} legendType="plainline"
-              isAnimationActive={false} />
-            <Line yAxisId="left" type="monotone" dataKey="lowThreshold" name="Untere Grenze (×0.8)"
-              stroke="#e5e7eb" strokeWidth={2} dot={false} legendType="plainline"
-              isAnimationActive={false} />
+            {/* Flat ACWR threshold reference lines on right axis */}
+            <ReferenceLine yAxisId="right" y={1.3} stroke="#ef4444" strokeWidth={1.5}
+              strokeDasharray="0" opacity={0.7}
+              label={{ value: 'High 1.3', position: 'right', fill: '#ef4444', fontSize: 10, dx: 4 }} />
+            <ReferenceLine yAxisId="right" y={0.8} stroke="#94a3b8" strokeWidth={1.5}
+              strokeDasharray="0" opacity={0.7}
+              label={{ value: 'Low 0.8', position: 'right', fill: '#94a3b8', fontSize: 10, dx: 4 }} />
 
             {/* ACWR ratio — right axis, prominent dashed line */}
             <Line yAxisId="right" type="monotone" dataKey="acwr" name="ACWR"
               stroke="#38bdf8" strokeWidth={2.5} strokeDasharray="7 3"
-              dot={{ r: 2, fill: '#38bdf8', strokeWidth: 0 }}
+              dot={{ r: 2.5, fill: '#38bdf8', strokeWidth: 0 }}
               connectNulls={false} isAnimationActive={false}
-              activeDot={{ r: 5, fill: '#38bdf8' }} />
+              activeDot={{ r: 5, fill: '#38bdf8', stroke: '#0ea5e9', strokeWidth: 2 }} />
           </ComposedChart>
         </ResponsiveContainer>
       )}

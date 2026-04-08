@@ -104,20 +104,24 @@ function App() {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      // Already logged in → skip landing page
+      // Already logged in → skip landing page + tour
       if (session?.user) {
         localStorage.setItem('fitfuel_seen_landing', '1');
+        localStorage.setItem('fitfuel_tour_done', '1');
         setShowLanding(false);
+        setShowTour(false);
         setIsGuest(false);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      // Email confirmation or login → skip landing page + auth screen
+      // Email confirmation or login → skip landing page + auth screen + tour
       if (session?.user) {
         localStorage.setItem('fitfuel_seen_landing', '1');
+        localStorage.setItem('fitfuel_tour_done', '1');
         setShowLanding(false);
+        setShowTour(false);
         localStorage.removeItem('fitfuel_guest');
         setIsGuest(false);
       }
@@ -466,7 +470,7 @@ function App() {
         />
       )}
 
-      {showTour && <AppTour onDone={handleTourDone} />}
+      {showTour && !userId && <AppTour onDone={handleTourDone} />}
 
       {/* Bottom navigation — mobile only */}
       <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-[#0d0e14]/95 backdrop-blur-xl border-t border-white/5">

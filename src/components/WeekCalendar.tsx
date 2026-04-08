@@ -83,15 +83,30 @@ interface DayEntry {
 
 // ─── Create Session Modal ─────────────────────────────────────────────────────
 
+/** Subtract minutes from a "HH:MM" string, returns "HH:MM" */
+function subtractMinutes(timeStr: string, mins: number): string {
+  const [h, m] = timeStr.split(':').map(Number);
+  let total = h * 60 + m - mins;
+  if (total < 0) total += 24 * 60;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
 function CreateSessionModal({
-  datum, onClose, onAdd, onAddSessionDirect,
+  datum, onClose, onAdd, onAddSessionDirect, plannedSessions, onUpdate,
 }: {
   datum: string;
   onClose: () => void;
   onAdd: (s: PlannedSession) => void;
   onAddSessionDirect?: (session: Session) => void;
+  plannedSessions?: PlannedSession[];
+  onUpdate?: (id: string, updates: Partial<PlannedSession>) => void;
 }) {
   const isPast = datum < toISO(new Date());
+
+  // Find an unconfirmed Spiel on the same day with a time set
+  const sameDaySpiel = plannedSessions?.find(
+    ps => !ps.confirmed && ps.datum === datum && ps.te === 'Spiel' && ps.uhrzeit,
+  );
 
   const [te, setTe]       = useState<TrainingUnit>('Team');
   const [time, setTime]   = useState('');
@@ -102,6 +117,10 @@ function CreateSessionModal({
   function handleTeChange(unit: TrainingUnit) {
     setTe(unit);
     setDauer(DEFAULT_DURATIONS[unit] ?? 60);
+    // Auto-fill warmup time if there's a Spiel with a time on the same day
+    if (unit === 'Aufwärmen' && sameDaySpiel?.uhrzeit) {
+      setTime(subtractMinutes(sameDaySpiel.uhrzeit, 75));
+    }
   }
 
   const color    = TE_COLORS[te];
@@ -131,6 +150,16 @@ function CreateSessionModal({
         reminderScheduled: false,
         confirmed: false,
       });
+
+      // If creating a Spiel with a time, auto-update any existing Aufwärmen on the same day
+      if (te === 'Spiel' && time && onUpdate && plannedSessions) {
+        const warmupTime = subtractMinutes(time, 75);
+        for (const ps of plannedSessions) {
+          if (!ps.confirmed && ps.datum === datum && ps.te === 'Aufwärmen') {
+            onUpdate(ps.id, { uhrzeit: warmupTime });
+          }
+        }
+      }
     }
     onClose();
   }
@@ -205,7 +234,15 @@ function CreateSessionModal({
           {/* Uhrzeit + Dauer */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500 block mb-1.5">Uhrzeit (optional)</label>
+              <label className="text-xs text-gray-500 block mb-1.5">
+                Uhrzeit (optional)
+                {te === 'Aufwärmen' && sameDaySpiel?.uhrzeit && (
+                  <span className="ml-1.5 text-violet-400">· Auto</span>
+                )}
+                {te === 'Spiel' && time && plannedSessions?.some(ps => !ps.confirmed && ps.datum === datum && ps.te === 'Aufwärmen') && (
+                  <span className="ml-1.5 text-orange-400">· Warmup wird angepasst</span>
+                )}
+              </label>
               <input type="time" value={time} onChange={e => setTime(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
             </div>
@@ -257,7 +294,7 @@ function CreateSessionModal({
 // ─── Session Detail Modal ──────────────────────────────────────────────────────
 
 function SessionModal({
-  session, onClose, onConfirm, onUpdate, onDismiss, initialTab,
+  session, onClose, onConfirm, onUpdate, onDismiss, initialTab, plannedSessions,
 }: {
   session: PlannedSession;
   onClose: () => void;
@@ -265,6 +302,7 @@ function SessionModal({
   onUpdate?: (id: string, updates: Partial<PlannedSession>) => void;
   onDismiss?: (id: string) => void;
   initialTab?: 'confirm' | 'edit';
+  plannedSessions?: PlannedSession[];
 }) {
   const today   = toISO(new Date());
   const isPast  = session.datum < today;
@@ -290,6 +328,15 @@ function SessionModal({
 
   function handleSaveEdit() {
     onUpdate?.(session.id, { uhrzeit: time || undefined, notiz: note || undefined });
+    // When saving a Spiel with a new time, auto-sync existing Aufwärmen on the same day
+    if (session.te === 'Spiel' && time && onUpdate && plannedSessions) {
+      const warmupTime = subtractMinutes(time, 75);
+      for (const ps of plannedSessions) {
+        if (!ps.confirmed && ps.datum === session.datum && ps.te === 'Aufwärmen' && ps.id !== session.id) {
+          onUpdate(ps.id, { uhrzeit: warmupTime });
+        }
+      }
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }
@@ -793,6 +840,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           onUpdate={onUpdate}
           onDismiss={onDismiss}
           initialTab={dropInitialTab ?? undefined}
+          plannedSessions={plannedSessions}
         />
       )}
 
@@ -803,6 +851,8 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           onClose={() => setCreateForDay(null)}
           onAdd={s => { onAddPlanned([s]); setCreateForDay(null); }}
           onAddSessionDirect={onAddSessionDirect}
+          plannedSessions={plannedSessions}
+          onUpdate={onUpdate}
         />
       )}
     </>

@@ -38,13 +38,16 @@ function localISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Gleitender Durchschnitt über window-Tage (inkl. Nulltage) */
+/**
+ * Gleitender Durchschnitt über window-Tage.
+ * Entspricht Excel-MITTELWERTWENNS: Divisor = tatsächliche Anzahl verfügbarer Tage,
+ * nicht fixer Window-Wert. Damit kein künstliches ACWR-Spike bei wenig Daten.
+ */
 function rollingAvg(loads: number[], index: number, window: number): number {
   const start = Math.max(0, index - window + 1);
   const slice = loads.slice(start, index + 1);
-  // Pad mit 0 wenn weniger als window Tage verfügbar (Standard ACWR)
   const sum = slice.reduce((a, b) => a + b, 0);
-  return sum / window;
+  return sum / slice.length; // wie AVERAGEIFS: Teile durch echte Tagesanzahl
 }
 
 /** Berechnet vollständige ACWR-Zeitreihe aus Sessions */
@@ -55,8 +58,8 @@ export function calculateACWR(sessions: Session[]): ACWRDataPoint[] {
   return days.map((day, i) => {
     const acute   = rollingAvg(loads, i, 7);
     const chronic = rollingAvg(loads, i, 28);
-    // Ab 7 Tagen anzeigen (1 Acute-Window); Chronic baut sich über 28 Tage auf
-    const acwr = (acute > 0 && i >= 6) ? acute / chronic : null;
+    // Zeige ACWR sobald Daten vorhanden (AVERAGEIFS-Methode: kein cold-start Spike)
+    const acwr = (acute > 0 && chronic > 0) ? acute / chronic : null;
 
     return {
       datum:       day.datum,
@@ -133,9 +136,7 @@ export function projectFutureACWR(
     const idx = extLoads.length - 1;
     const acute   = rollingAvg(extLoads, idx, 7);
     const chronic = rollingAvg(extLoads, idx, 28);
-    // Only show ACWR when we have enough history (28 days total)
-    const totalDays = historicalDays.length + projected.length + 1;
-    const acwr = (chronic > 0 && totalDays >= 28) ? acute / chronic : null;
+    const acwr = chronic > 0 ? acute / chronic : null;
     projected.push({
       datum:       iso,
       taeglLoad:   load,

@@ -102,9 +102,27 @@ ${profile.dietaryPreferences ? `- Ernährungspräferenzen: ${profile.dietaryPref
       ].filter(Boolean).join('\n')
     : '';
 
+  // Build explicit per-day calorie targets for the prompt
+  const perDayLines = perDayTargets
+    ? perDayTargets.map((d, i) => {
+        const breakfast = Math.round(d.kcal * 0.25);
+        const lunch     = Math.round(d.kcal * 0.35);
+        const dinner    = Math.round(d.kcal * 0.30);
+        const snack     = d.kcal - breakfast - lunch - dinner;
+        return `Tag ${i + 1} (${d.label}, ${focusLabel[d.focus] ?? d.focus}): Tagesziel ${d.kcal} kcal = Frühstück ${breakfast} + Mittagessen ${lunch} + Abendessen ${dinner} + Snack ${snack} kcal | P ${d.protein}g | KH ${d.carbs}g | F ${d.fat}g`;
+      }).join('\n')
+    : (() => {
+        const breakfast = Math.round(targetCalories * 0.25);
+        const lunch     = Math.round(targetCalories * 0.35);
+        const dinner    = Math.round(targetCalories * 0.30);
+        const snack     = targetCalories - breakfast - lunch - dinner;
+        return Array.from({ length: days }, (_, i) =>
+          `Tag ${i + 1}: Tagesziel ${targetCalories} kcal = Frühstück ${breakfast} + Mittagessen ${lunch} + Abendessen ${dinner} + Snack ${snack} kcal | P ${proteinTarget}g | KH ${carbTarget}g | F ${fatTarget}g`
+        ).join('\n');
+      })();
+
   const prompt = `Du bist ein Ernährungsberater und Fitness-Coach für Leistungssportler. Erstelle einen detaillierten Ernährungsplan für ${days} Tage.
 ${profileContext}
-${forecastContext}
 
 Heutige Aktivitätsdaten (Wearable):
 - Schritte: ${wearable.steps.toLocaleString('de-DE')}
@@ -115,11 +133,18 @@ Heutige Aktivitätsdaten (Wearable):
 
 Letzte Aktivitäten:
 ${recentActivitySummary}
-
-Tagesziele (berechnet auf Basis Profil + ACWR):
-- Kalorien: ${targetCalories} kcal
-- Protein: ${proteinTarget}g | KH: ${carbTarget}g | Fett: ${fatTarget}g
 ${preferences ? `\nZusätzliche Präferenzen: ${preferences}` : ''}
+
+=== KALORIENVERTEILUNG PRO TAG — BINDEND ===
+${perDayLines}
+${forecastContext}
+
+KRITISCHE RECHENREGELN — PFLICHT:
+1. Die Kalorien jeder einzelnen Mahlzeit MÜSSEN sich auf exakt das Tagesziel summieren (±2%).
+   Beispiel Tag 1: wenn Frühstück=480, Mittagessen=680, Abendessen=580, Snack=160 → Summe=1900 kcal ✓
+2. Das Feld "totalCalories" MUSS = Summe aller meal.calories dieses Tages sein. Niemals ein anderer Wert.
+3. Berechne zuerst die 4 Mahlzeiten-Kalorien, summiere sie, dann schreibe totalCalories = diese Summe.
+4. Makros (Protein, KH, Fett) der Mahlzeiten müssen sich auch auf das Tagesziel summieren (±5%).
 
 Antworte NUR mit diesem JSON (kein Text davor oder danach):
 
@@ -127,7 +152,7 @@ Antworte NUR mit diesem JSON (kein Text davor oder danach):
   "days": [
     {
       "day": "Tag 1 - Montag",
-      "totalCalories": ${targetCalories},
+      "totalCalories": 1900,
       "meals": [
         {
           "name": "Haferflocken mit Früchten",
@@ -148,16 +173,12 @@ Antworte NUR mit diesem JSON (kein Text davor oder danach):
   "tips": "Personalisierte Ernährungstipps hier"
 }
 
-Regeln:
+Weitere Regeln:
 - Exakt 4 Mahlzeiten pro Tag: Frühstück, Mittagessen, Abendessen, Snack
-- Kalorien-Verteilung PRO TAG (muss sich auf das jeweilige Tagesziel summieren):
-  Frühstück ≈ 25% | Mittagessen ≈ 35% | Abendessen ≈ 30% | Snack ≈ 10%
-${perDayTargets ? '- KRITISCH: Nutze die per-Tag Kalorien aus der Prognose oben — NICHT das allgemeine Tagesziel für alle Tage gleich' : '- Kalorien pro Tag: ' + targetCalories + ' kcal aufgeteilt nach obiger Verteilung'}
 - Zutaten bei Rewe/Edeka erhältlich, konkrete Mengenangaben (z.B. "180g Hähnchenbrust")
 - Kategorien Einkaufsliste: "Obst & Gemüse", "Fleisch & Fisch", "Milchprodukte", "Getreide & Hülsenfrüchte", "Snacks & Sonstiges"
 - Bei Trainingstagen: kohlenhydratreiche Mahlzeit 2-3h vor Training, proteinreiche Mahlzeit innerhalb 45min nach Training
-- Tipps müssen konkret sein (Uhrzeit + Menge), nicht allgemein
-- Alle Makro-Summen müssen zum Tagesziel passen (±5% Toleranz)`;
+- Tipps müssen konkret sein (Uhrzeit + Menge), nicht allgemein`;
 
   const stream = await client.chat.completions.create({
     model: MODEL,

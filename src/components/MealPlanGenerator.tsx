@@ -52,7 +52,21 @@ export function MealPlanGenerator({ wearable, goal, activities, onPlanGenerated,
             const jsonStr = jsonMatch ? jsonMatch[1] : accumulated;
             const parsed = JSON.parse(jsonStr);
 
-            const mealPlans: DayMealPlan[] = parsed.days || [];
+            // Always recompute totals from meal data — never trust LLM-provided totals
+            const mealPlans: DayMealPlan[] = (parsed.days || []).map((day: DayMealPlan) => {
+              const meals = day.meals || [];
+              return {
+                ...day,
+                totalCalories: meals.reduce((s, m) => s + (m.calories || 0), 0),
+                meals: meals.map(m => ({
+                  ...m,
+                  calories: m.calories || 0,
+                  protein: m.protein || 0,
+                  carbs: m.carbs || 0,
+                  fat: m.fat || 0,
+                })),
+              };
+            });
             const shoppingList: ShoppingItem[] = (parsed.shoppingList || []).map((item: { name: string; amount: string; category: string }) => ({
               ...item,
               checked: false,
