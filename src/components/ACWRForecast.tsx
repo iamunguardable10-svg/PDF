@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ACWRDataPoint } from '../types/acwr';
 
 interface Props {
@@ -20,6 +21,8 @@ function zoneOf(v: number) {
 }
 
 export function ACWRForecast({ projected, currentAcwr, currentAcute, currentChronic, plannedCount = 0 }: Props) {
+  const [open, setOpen] = useState(false);
+
   if (projected.length === 0) return null;
 
   // Days with actual ACWR values (need 28-day history)
@@ -40,21 +43,51 @@ export function ACWRForecast({ projected, currentAcwr, currentAcute, currentChro
     ? day7.acwr! - currentAcwr
     : null;
 
-  return (
-    <div className="bg-gray-900/50 rounded-3xl p-4 sm:p-5 border border-gray-800 space-y-4">
+  const highCount = projected.filter(p => p.acwr != null && p.acwr > 1.3).length;
 
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <span className="text-xl shrink-0">📈</span>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-white leading-tight">Belastungsprognose</h3>
-          <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-            Projektion basierend auf {plannedCount} geplanten Einheit{plannedCount !== 1 ? 'en' : ''}.
-            Der ACWR-Wert gibt das Verhältnis von Acute Load (7-Tage-Ø) zu Chronic Load (28-Tage-Ø) an —
-            optimale Zone 0.8–1.3.
-          </p>
+  return (
+    <div className="bg-gray-900/50 rounded-3xl border border-gray-800 overflow-hidden">
+
+      {/* Collapsible header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="text-base shrink-0">📈</span>
+          <span className="text-sm font-semibold text-white">Belastungsprognose</span>
+          {day7?.acwr != null && (() => {
+            const z = zoneOf(day7.acwr!);
+            return (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
+                style={{ backgroundColor: z.bg + '80', color: z.color }}>
+                ACWR in 7d: {day7.acwr!.toFixed(2)}
+              </span>
+            );
+          })()}
+          {highCount > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-red-900/40 text-red-400 border border-red-800/40 shrink-0">
+              ⚠ {highCount}d Überbelastung
+            </span>
+          )}
         </div>
-      </div>
+        <span className={`text-gray-500 text-xs transition-transform shrink-0 ${open ? 'rotate-180' : ''}`}>▼</span>
+      </button>
+
+      {!open && (
+        <div className="px-4 sm:px-5 pb-3 text-xs text-gray-600">
+          Basiert auf {plannedCount} geplanten Einheit{plannedCount !== 1 ? 'en' : ''} — aufklappen für Details
+        </div>
+      )}
+
+      {open && (
+      <div className="px-4 sm:px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+
+      {/* Explanation */}
+      <p className="text-xs text-gray-500 leading-relaxed">
+        Projektion basierend auf {plannedCount} geplanten Einheit{plannedCount !== 1 ? 'en' : ''}.
+        ACWR = Acute Load (7d-Ø) ÷ Chronic Load (28d-Ø) — optimale Zone 0.8–1.3.
+      </p>
 
       {/* Current → Projected summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -176,5 +209,7 @@ export function ACWRForecast({ projected, currentAcwr, currentAcute, currentChro
         </div>
       )}
     </div>
-  );
+      )}
+  </div>
+);
 }

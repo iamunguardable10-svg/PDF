@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import type { ACWRDataPoint, DayLoad, Session } from '../types/acwr';
-import { TE_COLORS, TE_EMOJI } from '../types/acwr';
+import type { ACWRDataPoint, DayLoad } from '../types/acwr';
+import { TE_COLORS } from '../types/acwr';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, Legend,
@@ -14,7 +14,6 @@ interface Props {
   data: ACWRDataPoint[];
   projectedData?: ACWRDataPoint[];
   dailyLoads?: DayLoad[];
-  sessions?: Session[];
 }
 
 function localISO(d: Date): string {
@@ -139,9 +138,8 @@ function DetailTooltip({ active, payload, label }: any) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function ACWRChart({ data, projectedData = [], dailyLoads = [], sessions = [] }: Props) {
-  const [view, setView]               = useState<'simple' | 'detail'>('simple');
-  const [showSessions, setShowSessions] = useState(false);
+export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) {
+  const [view, setView] = useState<'simple' | 'detail'>('simple');
 
   const todayISO       = localISO(new Date());
   const todayFormatted = formatDatum(todayISO);
@@ -301,46 +299,6 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], sessions 
         </ResponsiveContainer>
       )}
 
-      {/* Sessions toggle */}
-      {sessions.length > 0 && (
-        <div className="border-t border-gray-800 pt-2">
-          <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-            <input
-              type="checkbox"
-              checked={showSessions}
-              onChange={e => setShowSessions(e.target.checked)}
-              className="accent-violet-500 w-3.5 h-3.5"
-            />
-            <span className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-              Einheiten einblenden ({sessions.filter(s => s.datum >= cutoff).length})
-            </span>
-          </label>
-
-          {showSessions && (() => {
-            const visible = sessions
-              .filter(s => s.datum >= cutoff)
-              .sort((a, b) => b.datum.localeCompare(a.datum));
-            return (
-              <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
-                {visible.map(s => {
-                  const color = TE_COLORS[s.te as keyof typeof TE_COLORS] ?? '#6b7280';
-                  const emoji = TE_EMOJI[s.te as keyof typeof TE_EMOJI] ?? '💪';
-                  const rpeColor = s.rpe <= 3 ? '#4ade80' : s.rpe <= 6 ? '#facc15' : '#f87171';
-                  return (
-                    <div key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-900/60 border border-gray-800/50">
-                      <span style={{ color }} className="text-sm shrink-0">{emoji}</span>
-                      <span className="text-xs text-gray-300 flex-1 truncate">{s.te}</span>
-                      <span className="text-xs text-gray-600 shrink-0">{formatDatum(s.datum)}</span>
-                      <span className="text-xs font-medium shrink-0" style={{ color: rpeColor }}>RPE {s.rpe}</span>
-                      <span className="text-xs text-orange-400 font-semibold shrink-0">{s.tl} AU</span>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </div>
-      )}
     </div>
   );
 }

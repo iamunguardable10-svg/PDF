@@ -4,7 +4,8 @@ type PlannedEntry = TrainerShareData['planned'];
 import { fetchLiveTrainerData } from '../lib/trainerShare';
 import type { ACWRDataPoint, Session, PlannedSession, TrainingUnit } from '../types/acwr';
 import { TE_EMOJI, TE_COLORS } from '../types/acwr';
-import { getACWRZoneLabel, projectFutureACWR } from '../lib/acwrCalculations';
+import { getACWRZoneLabel, projectFutureACWR, aggregateDailyLoads } from '../lib/acwrCalculations';
+import type { DayLoad } from '../types/acwr';
 import { ACWRChart } from './ACWRChart';
 import { ACWRForecast } from './ACWRForecast';
 
@@ -111,6 +112,10 @@ export function TrainerView({ data: staticData, token }: Props) {
   const projectedData = useMemo(() =>
     projectFutureACWR(sessions28AsSessions, plannedAsPS),
   [sessions28AsSessions, plannedAsPS]);
+
+  const trainerDailyLoads = useMemo<DayLoad[]>(() =>
+    aggregateDailyLoads(sessions28AsSessions),
+  [sessions28AsSessions]);
 
   function fmtDate(iso: string) {
     const d = new Date(iso + 'T00:00');
@@ -260,7 +265,7 @@ export function TrainerView({ data: staticData, token }: Props) {
             <ACWRChart
               data={acwrData}
               projectedData={projectedData}
-              sessions={sessions28AsSessions}
+              dailyLoads={trainerDailyLoads}
             />
           </div>
         )}
