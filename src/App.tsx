@@ -104,10 +104,23 @@ function App() {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      // Already logged in → skip landing page
+      if (session?.user) {
+        localStorage.setItem('fitfuel_seen_landing', '1');
+        setShowLanding(false);
+        setIsGuest(false);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      // Email confirmation or login → skip landing page + auth screen
+      if (session?.user) {
+        localStorage.setItem('fitfuel_seen_landing', '1');
+        setShowLanding(false);
+        localStorage.removeItem('fitfuel_guest');
+        setIsGuest(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -266,7 +279,7 @@ function App() {
   }
 
   /* ── Landing page ── */
-  if (showLanding) {
+  if (showLanding && !user) {
     const dismiss = () => {
       localStorage.setItem('fitfuel_seen_landing', '1');
       setShowLanding(false);
