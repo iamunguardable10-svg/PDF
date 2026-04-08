@@ -57,7 +57,9 @@ export function calculateACWR(sessions: Session[]): ACWRDataPoint[] {
   return days.map((day, i) => {
     const acute   = rollingAvg(loads, i, 7);
     const chronic = rollingAvg(loads, i, 28);
-    const acwr = (acute > 0 && chronic > 0) ? acute / chronic : null;
+    // ACWR erst ab Tag 8 (i>=7): vorher sind Acute- und Chronic-Fenster identisch → ACWR wäre immer 1.0
+    // Ab Tag 29 (i>=28): volles 7/28-Fenster (Option C)
+    const acwr = (i >= 7 && acute > 0 && chronic > 0) ? acute / chronic : null;
 
     return {
       datum:       day.datum,
@@ -109,7 +111,8 @@ export function calculateEWMA(sessions: Session[]): ACWRDataPoint[] {
       ewmaAcute   = lambdaA * day.taeglLoad + (1 - lambdaA) * ewmaAcute;
       ewmaChronic = lambdaC * day.taeglLoad + (1 - lambdaC) * ewmaChronic;
     }
-    const acwr = (ewmaAcute > 0 && ewmaChronic > 0) ? ewmaAcute / ewmaChronic : null;
+    // Gleicher Gate wie Rolling Avg: erst ab Tag 8 sinnvoll
+    const acwr = (i >= 7 && ewmaAcute > 0 && ewmaChronic > 0) ? ewmaAcute / ewmaChronic : null;
     return {
       datum:       day.datum,
       taeglLoad:   day.taeglLoad,
