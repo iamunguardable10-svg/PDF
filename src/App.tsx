@@ -284,15 +284,24 @@ function App() {
 
   /* ── Landing page ── */
   if (showLanding && !user) {
-    const dismiss = () => {
+    const dismissLanding = () => {
       localStorage.setItem('fitfuel_seen_landing', '1');
       setShowLanding(false);
     };
     return (
-      <LandingPage
-        onStart={() => { dismiss(); setShowAuthModal(true); }}
-        onGuest={() => { dismiss(); handleGuestMode(); }}
-      />
+      <>
+        <LandingPage
+          onStart={() => setShowAuthModal(true)}
+          onGuest={() => { dismissLanding(); handleGuestMode(); }}
+        />
+        {showAuthModal && CLOUD_ENABLED && (
+          <AuthScreen
+            onClose={() => setShowAuthModal(false)}
+            onGuest={() => { dismissLanding(); handleGuestMode(); setShowAuthModal(false); }}
+            onLoggedIn={() => { handleLoggedIn(); setShowAuthModal(false); }}
+          />
+        )}
+      </>
     );
   }
 
