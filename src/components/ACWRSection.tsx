@@ -347,20 +347,6 @@ export function ACWRSection({
           </div>
         )}
 
-        {/* ACWR aufbauend — < 28 Tage */}
-        {acwr === null && acwrData.length > 0 && (
-          <div className="mb-5 flex items-start gap-3 bg-blue-900/20 border border-blue-800/40 rounded-2xl p-4">
-            <span className="text-xl shrink-0">📈</span>
-            <div>
-              <div className="text-sm font-semibold text-blue-300">ACWR wird aufgebaut</div>
-              <div className="text-xs text-gray-400 mt-1 leading-relaxed">
-                Für einen aussagekräftigen ACWR-Wert werden <strong className="text-white">28 Tage</strong> Trainingsdaten benötigt.
-                Du hast aktuell {acwrData.length} {acwrData.length === 1 ? 'Tag' : 'Tage'} — noch {Math.max(0, 28 - acwrData.length)} weitere nötig.
-                Acute & Chronic Load sind im Graphen bereits sichtbar.
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ACWR Gauge */}
         {acwr !== null && zone && (

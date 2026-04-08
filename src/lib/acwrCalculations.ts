@@ -39,15 +39,16 @@ function localISO(d: Date): string {
 }
 
 /**
- * Gleitender Durchschnitt über window-Tage mit fixem Nenner (wie Excel MITTELWERTWENNS
- * wenn tägl. Load auch Ruhetage mit 0 enthält). Damit ist ACWR stabil sobald 28 Tage
- * Daten vorliegen.
+ * Gleitender Durchschnitt — nur Trainingstage zählen (wie Excel MITTELWERTWENNS).
+ * Ruhetage (Load=0) sind nicht in der Load-Tabelle → werden nicht gemittelt.
+ * Damit ist ACWR sofort ab dem 1. Trainingstag sinnvoll (kein 28-Tage-Gate nötig).
  */
 function rollingAvg(loads: number[], index: number, window: number): number {
   const start = Math.max(0, index - window + 1);
   const slice = loads.slice(start, index + 1);
-  const sum = slice.reduce((a, b) => a + b, 0);
-  return sum / window; // fixer Nenner — Ruhetage zählen als 0 (wie Excel)
+  const activeDays = slice.filter(x => x > 0);
+  if (activeDays.length === 0) return 0;
+  return activeDays.reduce((a, b) => a + b, 0) / activeDays.length;
 }
 
 /** Berechnet vollständige ACWR-Zeitreihe aus Sessions */
@@ -58,8 +59,8 @@ export function calculateACWR(sessions: Session[]): ACWRDataPoint[] {
   return days.map((day, i) => {
     const acute   = rollingAvg(loads, i, 7);
     const chronic = rollingAvg(loads, i, 28);
-    // ACWR erst ab 28 Tagen sinnvoll (sonst Chronic-Fenster nicht gefüllt → Spike)
-    const acwr = (acute > 0 && chronic > 0 && i >= 27) ? acute / chronic : null;
+    // ACWR sobald beide Mittelwerte > 0 (AVERAGEIFS-Logik: kein 28-Tage-Gate)
+    const acwr = (acute > 0 && chronic > 0) ? acute / chronic : null;
 
     return {
       datum:       day.datum,
@@ -136,7 +137,7 @@ export function projectFutureACWR(
     const idx = extLoads.length - 1;
     const acute   = rollingAvg(extLoads, idx, 7);
     const chronic = rollingAvg(extLoads, idx, 28);
-    const acwr = (chronic > 0 && historicalDays.length + projected.length >= 27) ? acute / chronic : null;
+    const acwr = (acute > 0 && chronic > 0) ? acute / chronic : null;
     projected.push({
       datum:       iso,
       taeglLoad:   load,
