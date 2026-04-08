@@ -317,12 +317,15 @@ function App() {
       <header className="border-b border-white/5 bg-[#0a0b0f]/80 backdrop-blur-xl sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
           {/* Logo */}
-          <div className="flex items-center gap-2.5 flex-1">
+          <button
+            onClick={() => { localStorage.removeItem('fitfuel_seen_landing'); setShowLanding(true); }}
+            className="flex items-center gap-2.5 flex-1 hover:opacity-80 transition-opacity"
+          >
             <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-700 rounded-xl flex items-center justify-center text-base shadow-lg shadow-violet-900/40">
               🥗
             </div>
             <span className="text-base font-bold text-white tracking-tight">FitFuel</span>
-          </div>
+          </button>
 
           {/* Desktop tabs (hidden on mobile) */}
           <nav className="hidden sm:flex gap-0.5 bg-white/5 rounded-xl p-1">
