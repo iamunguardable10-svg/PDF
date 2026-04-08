@@ -93,6 +93,8 @@ type DetailPoint = {
   chronicLoad: number;
   acuteLoad: number;
   acwr: number | null;
+  highThreshold: number;
+  lowThreshold: number;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -182,9 +184,11 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) 
         Indi:        day?.loads['Indi']        ?? 0,
         Schulsport:  day?.loads['Schulsport']  ?? 0,
         Prävention:  day?.loads['Prävention']  ?? 0,
-        chronicLoad: pt.chronicLoad,
-        acuteLoad:   pt.acuteLoad,
-        acwr:        pt.acwr,
+        chronicLoad:    pt.chronicLoad,
+        acuteLoad:      pt.acuteLoad,
+        acwr:           pt.acwr,
+        highThreshold:  1.3,
+        lowThreshold:   0.8,
       };
     });
   }, [filtered, dailyLoads]);
@@ -281,13 +285,13 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) 
               stroke="#6b7280" strokeWidth={1.5} strokeDasharray="5 3" dot={false}
               isAnimationActive={false} legendType="plainline" />
 
-            {/* Flat ACWR threshold reference lines on right axis */}
-            <ReferenceLine yAxisId="right" y={1.3} stroke="#ef4444" strokeWidth={1.5}
-              strokeDasharray="0" opacity={0.7}
-              label={{ value: 'High 1.3', position: 'right', fill: '#ef4444', fontSize: 10, dx: 4 }} />
-            <ReferenceLine yAxisId="right" y={0.8} stroke="#94a3b8" strokeWidth={1.5}
-              strokeDasharray="0" opacity={0.7}
-              label={{ value: 'Low 0.8', position: 'right', fill: '#94a3b8', fontSize: 10, dx: 4 }} />
+            {/* Flat ACWR threshold lines — use Line with constant data so right axis is always active */}
+            <Line yAxisId="right" type="monotone" dataKey="highThreshold" name="High 1.3"
+              stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.7} dot={false}
+              legendType="plainline" isAnimationActive={false} connectNulls />
+            <Line yAxisId="right" type="monotone" dataKey="lowThreshold" name="Low 0.8"
+              stroke="#94a3b8" strokeWidth={1.5} strokeOpacity={0.7} dot={false}
+              legendType="plainline" isAnimationActive={false} connectNulls />
 
             {/* ACWR ratio — right axis, prominent dashed line */}
             <Line yAxisId="right" type="monotone" dataKey="acwr" name="ACWR"
