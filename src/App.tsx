@@ -292,15 +292,15 @@ function App() {
     );
   }
 
-  /* ── Auth gate ── */
-  if (CLOUD_ENABLED && !isGuest && (user === 'loading' || user === null)) {
-    if (user === 'loading') {
-      return (
-        <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
-          <div className="text-gray-600 text-sm">…</div>
-        </div>
-      );
-    }
+  /* ── Auth gate — skip when modal is open or still loading ── */
+  if (CLOUD_ENABLED && !isGuest && !showAuthModal && user === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (CLOUD_ENABLED && !isGuest && !showAuthModal && user === null) {
     return <AuthScreen onGuest={handleGuestMode} onLoggedIn={handleLoggedIn} />;
   }
 

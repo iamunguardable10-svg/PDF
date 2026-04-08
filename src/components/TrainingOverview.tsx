@@ -12,6 +12,7 @@ interface Props {
   onDismissPlanned?: (id: string) => void;
   onAddPlanned?: (sessions: PlannedSession[]) => void;
   onAddSessionDirect?: (session: Session) => void;
+  jumpToDate?: string;
 }
 
 function isoWeekStart(offset = 0): string {
@@ -24,7 +25,7 @@ function isoWeekStart(offset = 0): string {
 
 export function TrainingOverview({
   sessions, plannedSessions,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onAddPlanned, onAddSessionDirect,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onAddPlanned, onAddSessionDirect, jumpToDate,
 }: Props) {
   const [view, setView] = useState<'kalender' | 'woche' | 'verlauf'>('kalender');
 
@@ -111,6 +112,7 @@ export function TrainingOverview({
           onDismiss={onDismissPlanned}
           onAddPlanned={onAddPlanned}
           onAddSessionDirect={onAddSessionDirect}
+          jumpToDate={jumpToDate}
         />
       )}
 

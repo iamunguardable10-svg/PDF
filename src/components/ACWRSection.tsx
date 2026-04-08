@@ -37,6 +37,7 @@ export function ACWRSection({
   const [showForm, setShowForm] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [shareToast, setShareToast] = useState<'copied' | 'error' | null>(null);
+  const [calendarJumpDate, setCalendarJumpDate] = useState<string | undefined>();
   const [activeToken, setActiveToken] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const notifPerm = getNotificationPermission();
@@ -216,10 +217,18 @@ export function ACWRSection({
         onDismissPlanned={handleDismiss}
         onAddPlanned={onAddPlanned}
         onAddSessionDirect={s => { onAddSession(s); onSessionConfirmed?.(); }}
+        jumpToDate={calendarJumpDate}
       />
 
       {/* Trainer-Plan Import */}
-      <TrainerPlanUpload onSessionsAdded={onAddPlanned} />
+      <TrainerPlanUpload
+        onSessionsAdded={sessions => {
+          onAddPlanned(sessions);
+          // Auto-navigate calendar to first imported session
+          const first = sessions.sort((a, b) => a.datum.localeCompare(b.datum))[0];
+          if (first) setCalendarJumpDate(first.datum + '-' + Date.now()); // suffix forces re-trigger
+        }}
+      />
 
       {/* Ausstehende Sessions */}
       {pendingCount > 0 && (

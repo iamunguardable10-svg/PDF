@@ -10,6 +10,7 @@ interface Props {
   onDismiss?: (id: string) => void;
   onAddPlanned?: (sessions: PlannedSession[]) => void;
   onAddSessionDirect?: (session: Session) => void;
+  jumpToDate?: string; // ISO date — calendar navigates to the week containing this date
 }
 
 const WEEKDAYS_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -454,7 +455,7 @@ function SessionModal({
 
 // ─── Haupt-Komponente ──────────────────────────────────────────────────────────
 
-export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned, onAddSessionDirect }: Props) {
+export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned, onAddSessionDirect, jumpToDate }: Props) {
   const [weekOffset, setWeekOffset]           = useState(0);
   const [selectedSession, setSelectedSession] = useState<PlannedSession | null>(null);
   const [createForDay, setCreateForDay]       = useState<string | null>(null);
@@ -464,6 +465,27 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
   const [dropInitialTab, setDropInitialTab]   = useState<'confirm' | 'edit' | null>(null);
   const dragHappened = useRef(false); // verhindert Modal-Öffnung nach Drag
   const today = toISO(new Date());
+
+  // Jump to the week containing jumpToDate when it changes
+  useEffect(() => {
+    if (!jumpToDate) return;
+    const isoDate = jumpToDate.slice(0, 10); // strip any suffix used as cache-buster
+    const target = new Date(isoDate + 'T00:00');
+    const now = new Date();
+    // Find monday of current week
+    const nowMonday = new Date(now);
+    const nowDay = nowMonday.getDay() || 7;
+    nowMonday.setDate(nowMonday.getDate() - nowDay + 1);
+    nowMonday.setHours(0, 0, 0, 0);
+    // Find monday of target week
+    const targetMonday = new Date(target);
+    const targetDay = targetMonday.getDay() || 7;
+    targetMonday.setDate(targetMonday.getDate() - targetDay + 1);
+    targetMonday.setHours(0, 0, 0, 0);
+    const diffMs = targetMonday.getTime() - nowMonday.getTime();
+    const diffWeeks = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+    setWeekOffset(diffWeeks);
+  }, [jumpToDate]);
 
   const weekDays = useMemo<string[]>(() => {
     const start = getWeekStart(weekOffset);
