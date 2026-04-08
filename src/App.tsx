@@ -10,6 +10,7 @@ import { AppTour } from './components/AppTour';
 import { FoodLog } from './components/FoodLog';
 import { NutritionForecast } from './components/NutritionForecast';
 import { AuthScreen } from './components/AuthScreen';
+import { LandingPage } from './components/LandingPage';
 import { wearableData as mockWearable, trainingGoals } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { decodeShareData } from './lib/trainerShare';
@@ -38,6 +39,11 @@ type Tab = 'dashboard' | 'tagebuch' | 'acwr';
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [showSettings, setShowSettings] = useState(false);
+
+  // Landing page — show once to new visitors
+  const [showLanding, setShowLanding] = useState(
+    () => !localStorage.getItem('fitfuel_seen_landing')
+  );
 
   // Auth state
   const [user, setUser]           = useState<User | null | 'loading'>('loading');
@@ -257,6 +263,20 @@ function App() {
     if (isLiveToken(trainerHash)) return <TrainerView token={trainerHash} />;
     const trainerData = decodeShareData(trainerHash);
     if (trainerData) return <TrainerView data={trainerData} />;
+  }
+
+  /* ── Landing page ── */
+  if (showLanding) {
+    const dismiss = () => {
+      localStorage.setItem('fitfuel_seen_landing', '1');
+      setShowLanding(false);
+    };
+    return (
+      <LandingPage
+        onStart={() => { dismiss(); setShowAuthModal(true); }}
+        onGuest={() => { dismiss(); handleGuestMode(); }}
+      />
+    );
   }
 
   /* ── Auth gate ── */
