@@ -39,14 +39,16 @@ function localISO(d: Date): string {
 }
 
 /**
- * Gleitender Durchschnitt mit festem Nenner (÷7 bzw. ÷28).
- * Ruhetage zählen als 0 und senken den Durchschnitt — korrekte Detraining-Abbildung.
- * Chronic baut sich von ~0 über 28 Tage auf (scientifisch korrekt).
+ * Gleitender Durchschnitt — Nenner = tatsächlich verfügbare Tage im Fenster.
+ * Ruhetage (Load=0) werden mitgezählt. Kein Gate nötig, kein Spike:
+ * - < 7/28 Tage: teilt durch vorhandene Tage (baut sich sauber auf)
+ * - ≥ 7/28 Tage: klassisches ÷7 / ÷28
  */
 function rollingAvg(loads: number[], index: number, window: number): number {
   const start = Math.max(0, index - window + 1);
   const slice = loads.slice(start, index + 1);
-  return slice.reduce((a, b) => a + b, 0) / window;
+  if (slice.length === 0) return 0;
+  return slice.reduce((a, b) => a + b, 0) / slice.length;
 }
 
 /** Berechnet vollständige ACWR-Zeitreihe aus Sessions */
@@ -57,8 +59,7 @@ export function calculateACWR(sessions: Session[]): ACWRDataPoint[] {
   return days.map((day, i) => {
     const acute   = rollingAvg(loads, i, 7);
     const chronic = rollingAvg(loads, i, 28);
-    // ACWR erst ab Tag 28 (davor wäre Nenner ÷28 viel kleiner als Zähler ÷7 → Spike ~4.0)
-    const acwr = (i >= 27 && acute > 0 && chronic > 0) ? acute / chronic : null;
+    const acwr = (acute > 0 && chronic > 0) ? acute / chronic : null;
 
     return {
       datum:       day.datum,
@@ -135,7 +136,7 @@ export function projectFutureACWR(
     const idx = extLoads.length - 1;
     const acute   = rollingAvg(extLoads, idx, 7);
     const chronic = rollingAvg(extLoads, idx, 28);
-    const acwr = (historicalDays.length + projected.length >= 27 && chronic > 0) ? acute / chronic : null;
+    const acwr = (acute > 0 && chronic > 0) ? acute / chronic : null;
     projected.push({
       datum:       iso,
       taeglLoad:   load,
