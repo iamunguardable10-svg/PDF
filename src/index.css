@@ -1,17 +1,92 @@
 @import "tailwindcss";
 
+/* ── Design Tokens (FitFuel — Fitness/Athlete Dark Mode) ─────────────────── */
+:root {
+  --ff-bg:         #0a0b0f;
+  --ff-surface:    #111318;
+  --ff-surface2:   #1a1d24;
+  --ff-border:     rgba(255,255,255,0.07);
+  --ff-text:       #f1f5f9;
+  --ff-muted:      #64748b;
+  --ff-orange:     #f97316;
+  --ff-orange-dim: rgba(249,115,22,0.15);
+  --ff-green:      #22c55e;
+  --ff-violet:     #7c3aed;
+  --ff-violet-dim: rgba(124,58,237,0.15);
+  --ff-radius:     16px;
+  --ff-radius-sm:  10px;
+  --ff-radius-lg:  24px;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-  background: #0f1117;
-  color: #e2e8f0;
+  font-family: 'Barlow', system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  background: var(--ff-bg);
+  color: var(--ff-text);
+  overscroll-behavior-y: none;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
 #root {
   width: 100%;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-.streaming-text {
-  white-space: pre-wrap;
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+/* ── Range input ─────────────────────────────────────────────────────────── */
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ff-orange);
+  border: 2px solid var(--ff-bg);
+  box-shadow: 0 0 0 2px var(--ff-orange);
+  cursor: pointer;
+}
+
+/* ── Card base ───────────────────────────────────────────────────────────── */
+.ff-card {
+  background: var(--ff-surface);
+  border: 1px solid var(--ff-border);
+  border-radius: var(--ff-radius-lg);
+  padding: 1.25rem;
+}
+
+/* ── Misc ────────────────────────────────────────────────────────────────── */
+.streaming-text { white-space: pre-wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

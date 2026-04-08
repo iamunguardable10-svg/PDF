@@ -82,18 +82,20 @@ export function TrainingOverview({
   }
 
   return (
-    <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800 space-y-5">
+    <div className="bg-gray-900/50 rounded-3xl p-4 sm:p-6 border border-gray-800 space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">🗓️</span>
-        <div>
-          <h2 className="text-lg font-semibold text-white">Trainingsübersicht</h2>
-          <p className="text-sm text-gray-400">{sessions.length} Einheiten gesamt</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-xl shrink-0">🗓️</span>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-white leading-tight">Trainingsübersicht</h2>
+            <p className="text-xs text-gray-400">{sessions.length} Einheiten gesamt</p>
+          </div>
         </div>
-        <div className="ml-auto flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
+        <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800 shrink-0">
           {([['kalender', 'Kalender'], ['woche', 'Woche'], ['verlauf', 'Verlauf']] as const).map(([v, label]) => (
             <button key={v} onClick={() => setView(v)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${view === v ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${view === v ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
               {label}
             </button>
           ))}
