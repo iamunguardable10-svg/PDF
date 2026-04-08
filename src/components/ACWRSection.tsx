@@ -182,10 +182,18 @@ export function ACWRSection({
               Der <span className="text-white font-semibold">Acute:Chronic Workload Ratio (ACWR)</span> misst das Verhältnis zwischen kurzfristiger und langfristiger Trainingsbelastung. Er zeigt, ob du gerade mehr trainierst als dein Körper gewohnt ist.
             </p>
             <div className="grid grid-cols-1 gap-2 text-xs">
-              <div className="bg-gray-800/60 rounded-xl p-3">
-                <div className="font-semibold text-white mb-1">Formel</div>
-                <div className="text-gray-400">ACWR = Ø-Last 7 Tage ÷ Ø-Last 28 Tage</div>
-                <div className="text-gray-500 mt-1">Trainingsbelastung (TL) = RPE × Dauer in Minuten</div>
+              <div className="bg-gray-800/60 rounded-xl p-3 space-y-2">
+                <div>
+                  <div className="font-semibold text-white mb-1">Formel</div>
+                  <div className="text-gray-400">ACWR = Acute Load ÷ Chronic Load</div>
+                  <div className="text-gray-500 mt-1">Trainingsbelastung (TL) = RPE × Dauer in Minuten</div>
+                </div>
+                <div className="border-t border-gray-700 pt-2 space-y-1">
+                  <div className="font-semibold text-white">Rolling Average (gleitender Durchschnitt)</div>
+                  <div className="text-gray-400"><span className="text-sky-400 font-medium">Acute Load (7d):</span> Ø tägliche Belastung der letzten 7 Tage — zeigt die aktuelle Trainingsintensität.</div>
+                  <div className="text-gray-400"><span className="text-gray-300 font-medium">Chronic Load (28d):</span> Ø tägliche Belastung der letzten 28 Tage — zeigt die gewohnte Belastungskapazität.</div>
+                  <div className="text-gray-500 mt-1">Ruhetage zählen als 0 und senken den Durchschnitt — so wird Detraining korrekt abgebildet.</div>
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-blue-900/20 border border-blue-800/40 rounded-xl p-2.5 text-center">
