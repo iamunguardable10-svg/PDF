@@ -11,6 +11,32 @@ interface Props {
   onAddPlanned?: (sessions: PlannedSession[]) => void;
   onAddSessionDirect?: (session: Session) => void;
   jumpToDate?: string; // ISO date — calendar navigates to the week containing this date
+  sport?: string;
+}
+
+/** Sport-specific game duration config */
+interface SportGameConfig { min: number; max: number; default: number; label: string; }
+function getGameConfig(sport = ''): SportGameConfig {
+  const s = sport.toLowerCase();
+  if (s.includes('fußball') || s.includes('fussball') || s.includes('soccer'))
+    return { min: 1, max: 120, default: 90, label: 'bis 120 Min (inkl. Verlängerung)' };
+  if (s.includes('basketball'))
+    return { min: 1, max: 55, default: 40, label: 'bis 55 Min (inkl. Overtime)' };
+  if (s.includes('handball'))
+    return { min: 1, max: 90, default: 60, label: 'bis 90 Min (inkl. Verlängerung)' };
+  if (s.includes('eishockey') || s.includes('ice hockey'))
+    return { min: 1, max: 80, default: 60, label: 'bis 80 Min (inkl. Overtime)' };
+  if (s.includes('feldhockey') || s.includes('hockey'))
+    return { min: 1, max: 75, default: 60, label: 'bis 75 Min (inkl. Overtime)' };
+  if (s.includes('rugby'))
+    return { min: 1, max: 100, default: 80, label: 'bis 100 Min (inkl. Overtime)' };
+  if (s.includes('volleyball'))
+    return { min: 1, max: 150, default: 90, label: 'bis 150 Min (Satzspiel)' };
+  if (s.includes('tennis') || s.includes('badminton') || s.includes('squash'))
+    return { min: 1, max: 240, default: 90, label: 'bis 240 Min' };
+  if (s.includes('american football') || s.includes('american'))
+    return { min: 1, max: 75, default: 60, label: 'bis 75 Min' };
+  return { min: 1, max: 120, default: 90, label: 'bis 120 Min' };
 }
 
 const WEEKDAYS_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -92,7 +118,7 @@ function subtractMinutes(timeStr: string, mins: number): string {
 }
 
 function CreateSessionModal({
-  datum, onClose, onAdd, onAddSessionDirect, plannedSessions, onUpdate,
+  datum, onClose, onAdd, onAddSessionDirect, plannedSessions, onUpdate, sport,
 }: {
   datum: string;
   onClose: () => void;
@@ -100,8 +126,10 @@ function CreateSessionModal({
   onAddSessionDirect?: (session: Session) => void;
   plannedSessions?: PlannedSession[];
   onUpdate?: (id: string, updates: Partial<PlannedSession>) => void;
+  sport?: string;
 }) {
-  const isPast = datum < toISO(new Date());
+  const isPast   = datum < toISO(new Date());
+  const gameConf = getGameConfig(sport);
 
   // Find an unconfirmed Spiel on the same day with a time set
   const sameDaySpiel = plannedSessions?.find(
@@ -112,11 +140,13 @@ function CreateSessionModal({
   const [time, setTime]   = useState('');
   const [dauer, setDauer] = useState(DEFAULT_DURATIONS['Team']);
   const [note, setNote]   = useState('');
+  // Spiel always has RPE 10
   const [rpe, setRpe]     = useState(7);
+  const effectiveRpe      = te === 'Spiel' ? 10 : rpe;
 
   function handleTeChange(unit: TrainingUnit) {
     setTe(unit);
-    setDauer(DEFAULT_DURATIONS[unit] ?? 60);
+    setDauer(unit === 'Spiel' ? gameConf.default : (DEFAULT_DURATIONS[unit] ?? 60));
     // Auto-fill warmup time if there's a Spiel with a time on the same day
     if (unit === 'Aufwärmen' && sameDaySpiel?.uhrzeit) {
       setTime(subtractMinutes(sameDaySpiel.uhrzeit, 75));
@@ -125,7 +155,7 @@ function CreateSessionModal({
 
   const color    = TE_COLORS[te];
   const emoji    = TE_EMOJI[te];
-  const rpeColor = rpe <= 3 ? '#4ade80' : rpe <= 6 ? '#facc15' : '#f87171';
+  const rpeColor = effectiveRpe <= 3 ? '#4ade80' : effectiveRpe <= 6 ? '#facc15' : '#f87171';
 
   function handleCreate() {
     if (isPast && onAddSessionDirect) {
@@ -135,9 +165,9 @@ function CreateSessionModal({
         name: '',
         datum,
         te,
-        rpe,
+        rpe: effectiveRpe,
         dauer,
-        tl: rpe * dauer,
+        tl: effectiveRpe * dauer,
       });
     } else {
       onAdd({
@@ -220,12 +250,12 @@ function CreateSessionModal({
               <div className="text-sm font-semibold text-white">{te}</div>
               <div className="text-xs text-gray-500">
                 {time ? `${time} Uhr · ` : ''}{dauer} Min
-                {isPast && <span className="ml-1" style={{ color: rpeColor }}>· RPE {rpe}</span>}
+                {isPast && <span className="ml-1" style={{ color: rpeColor }}>· RPE {effectiveRpe}</span>}
               </div>
             </div>
             {isPast && (
               <div className="ml-auto text-right">
-                <div className="text-xs font-bold text-orange-400">{rpe * dauer} AU</div>
+                <div className="text-xs font-bold text-orange-400">{effectiveRpe * dauer} AU</div>
                 <div className="text-xs text-gray-600">TL</div>
               </div>
             )}
@@ -247,15 +277,38 @@ function CreateSessionModal({
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-1.5">Dauer: {dauer} Min</label>
-              <input type="range" min={15} max={180} step={15} value={dauer}
-                onChange={e => setDauer(Number(e.target.value))}
-                className="w-full mt-2 accent-violet-500" />
+              {te === 'Spiel' ? (
+                <>
+                  <label className="text-xs text-gray-500 block mb-1.5">
+                    Spieldauer: <span className="text-white font-semibold">{dauer} Min</span>
+                    <span className="ml-1 text-gray-600">({gameConf.label})</span>
+                  </label>
+                  <input type="range" min={gameConf.min} max={gameConf.max} step={1} value={dauer}
+                    onChange={e => setDauer(Number(e.target.value))}
+                    className="w-full mt-2 accent-orange-500" />
+                  <div className="flex justify-between text-xs text-gray-600 mt-1">
+                    <span>{gameConf.min}</span><span>{gameConf.max} Min</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label className="text-xs text-gray-500 block mb-1.5">Dauer: {dauer} Min</label>
+                  <input type="range" min={15} max={180} step={15} value={dauer}
+                    onChange={e => setDauer(Number(e.target.value))}
+                    className="w-full mt-2 accent-violet-500" />
+                </>
+              )}
             </div>
           </div>
 
-          {/* RPE — nur für vergangene Daten */}
-          {isPast && (
+          {/* RPE — immer 10 bei Spiel, sonst nur bei vergangenen Daten */}
+          {te === 'Spiel' ? (
+            <div className="flex items-center gap-3 bg-red-900/20 border border-red-800/40 rounded-xl px-3 py-2.5">
+              <span className="text-xs text-gray-400">RPE Spiel:</span>
+              <span className="font-black text-red-400 text-lg">10</span>
+              <span className="text-xs text-gray-500">— maximale Wettkampfbelastung</span>
+            </div>
+          ) : isPast && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs text-gray-500">Empfundene Belastung (RPE)</label>
@@ -502,7 +555,7 @@ function SessionModal({
 
 // ─── Haupt-Komponente ──────────────────────────────────────────────────────────
 
-export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned, onAddSessionDirect, jumpToDate }: Props) {
+export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned, onAddSessionDirect, jumpToDate, sport }: Props) {
   const [weekOffset, setWeekOffset]           = useState(0);
   const [selectedSession, setSelectedSession] = useState<PlannedSession | null>(null);
   const [createForDay, setCreateForDay]       = useState<string | null>(null);
@@ -853,6 +906,7 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           onAddSessionDirect={onAddSessionDirect}
           plannedSessions={plannedSessions}
           onUpdate={onUpdate}
+          sport={sport}
         />
       )}
     </>

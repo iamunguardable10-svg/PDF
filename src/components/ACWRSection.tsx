@@ -218,6 +218,7 @@ export function ACWRSection({
         onAddPlanned={onAddPlanned}
         onAddSessionDirect={s => { onAddSession(s); onSessionConfirmed?.(); }}
         jumpToDate={calendarJumpDate}
+        sport={playerSport}
       />
 
       {/* Trainer-Plan Import */}

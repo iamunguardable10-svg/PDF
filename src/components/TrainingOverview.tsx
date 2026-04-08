@@ -13,6 +13,7 @@ interface Props {
   onAddPlanned?: (sessions: PlannedSession[]) => void;
   onAddSessionDirect?: (session: Session) => void;
   jumpToDate?: string;
+  sport?: string;
 }
 
 function isoWeekStart(offset = 0): string {
@@ -25,7 +26,7 @@ function isoWeekStart(offset = 0): string {
 
 export function TrainingOverview({
   sessions, plannedSessions,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onAddPlanned, onAddSessionDirect, jumpToDate,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onAddPlanned, onAddSessionDirect, jumpToDate, sport,
 }: Props) {
   const [view, setView] = useState<'kalender' | 'woche' | 'verlauf'>('kalender');
 
@@ -113,6 +114,7 @@ export function TrainingOverview({
           onAddPlanned={onAddPlanned}
           onAddSessionDirect={onAddSessionDirect}
           jumpToDate={jumpToDate}
+          sport={sport}
         />
       )}
 
