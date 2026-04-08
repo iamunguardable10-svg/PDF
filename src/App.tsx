@@ -43,6 +43,7 @@ function App() {
   const [user, setUser]           = useState<User | null | 'loading'>('loading');
   const [isGuest, setIsGuest]     = useState(() => !CLOUD_ENABLED || !!localStorage.getItem('fitfuel_guest'));
   const [cloudReady, setCloudReady] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const [profile, setProfile] = useState<AthleteProfile>(() => loadProfile());
   const [showTour, setShowTour] = useState(() => !localStorage.getItem('fitfuel_tour_done'));
@@ -338,6 +339,16 @@ function App() {
             <span className="text-xs text-gray-600">⚙</span>
           </button>
 
+          {/* Anmelden-Button (Gast-Modus, Cloud verfügbar) */}
+          {CLOUD_ENABLED && !loggedInUser && (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="text-xs px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors shrink-0"
+            >
+              Anmelden
+            </button>
+          )}
+
           {/* Sign out (only when logged in with account) */}
           {loggedInUser && !isGuest && (
             <button
@@ -439,6 +450,14 @@ function App() {
       )}
 
       {showTour && <AppTour onDone={handleTourDone} />}
+
+      {showAuthModal && CLOUD_ENABLED && (
+        <AuthScreen
+          onGuest={() => { handleGuestMode(); setShowAuthModal(false); }}
+          onLoggedIn={() => { handleLoggedIn(); setShowAuthModal(false); }}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
     </div>
   );
 }

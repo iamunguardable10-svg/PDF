@@ -4,11 +4,12 @@ import { supabase } from '../lib/supabase';
 interface Props {
   onGuest: () => void;
   onLoggedIn: () => void;
+  onClose?: () => void;  // wenn gesetzt → Modal-Modus
 }
 
 type Mode = 'login' | 'register';
 
-export function AuthScreen({ onGuest, onLoggedIn }: Props) {
+export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
   const [mode, setMode]         = useState<Mode>('login');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -44,9 +45,8 @@ export function AuthScreen({ onGuest, onLoggedIn }: Props) {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6">
+  const inner = (
+    <div className="w-full max-w-sm space-y-6">
 
         {/* Logo */}
         <div className="text-center space-y-2">
@@ -124,17 +124,38 @@ export function AuthScreen({ onGuest, onLoggedIn }: Props) {
           </form>
         </div>
 
-        {/* Guest option */}
+        {/* Guest option / Schließen */}
         <div className="text-center">
-          <button
-            onClick={onGuest}
-            className="text-sm text-gray-600 hover:text-gray-400 transition-colors"
-          >
-            Als Gast fortfahren →
-          </button>
-          <p className="text-xs text-gray-700 mt-1">Daten werden nur lokal gespeichert</p>
+          {onClose ? (
+            <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-400 transition-colors">
+              Abbrechen
+            </button>
+          ) : (
+            <>
+              <button onClick={onGuest} className="text-sm text-gray-600 hover:text-gray-400 transition-colors">
+                Als Gast fortfahren →
+              </button>
+              <p className="text-xs text-gray-700 mt-1">Daten werden nur lokal gespeichert</p>
+            </>
+          )}
         </div>
       </div>
+  );
+
+  if (onClose) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        {inner}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center p-4">
+      {inner}
     </div>
   );
 }
