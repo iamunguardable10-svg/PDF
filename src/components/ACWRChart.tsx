@@ -12,6 +12,7 @@ interface Props {
   data: ACWRDataPoint[];
   projectedData?: ACWRDataPoint[];
   dailyLoads?: DayLoad[];
+  ewmaData?: ACWRDataPoint[];
 }
 
 function localISO(d: Date): string {
@@ -138,8 +139,9 @@ function DetailTooltip({ active, payload, label }: any) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) {
+export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData = [] }: Props) {
   const [view, setView] = useState<'simple' | 'detail'>('simple');
+  const [method, setMethod] = useState<'rolling' | 'ewma'>('rolling');
 
   const todayISO       = localISO(new Date());
   const todayFormatted = formatDatum(todayISO);
@@ -150,7 +152,8 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) 
   const cutoff = localISO(cutoffDate);
 
 
-  const filtered = useMemo(() => data.filter(d => d.datum >= cutoff), [data, cutoff]);
+  const activeData = method === 'ewma' && ewmaData.length > 0 ? ewmaData : data;
+  const filtered = useMemo(() => activeData.filter(d => d.datum >= cutoff), [activeData, cutoff]);
 
   // ── Simple chart data ──────────────────────────────────────────────────────
   const lastHistorical = filtered[filtered.length - 1];
@@ -202,19 +205,36 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [] }: Props) 
 
   return (
     <div className="space-y-2">
-      {/* Toggle */}
-      <div className="flex justify-end gap-1">
-        {(['simple', 'detail'] as const).map(v => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-              view === v ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
-            }`}
-          >
-            {v === 'simple' ? 'ACWR' : 'Detail'}
-          </button>
-        ))}
+      {/* Toggle row */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {/* Method toggle — only relevant for simple/ACWR view */}
+        <div className="flex gap-1">
+          {ewmaData.length > 0 && (['rolling', 'ewma'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setMethod(m)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                method === m ? 'bg-sky-700 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'
+              }`}
+            >
+              {m === 'rolling' ? 'Rolling Avg' : 'EWMA'}
+            </button>
+          ))}
+        </div>
+        {/* View toggle */}
+        <div className="flex gap-1">
+          {(['simple', 'detail'] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                view === v ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+              }`}
+            >
+              {v === 'simple' ? 'ACWR' : 'Detail'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Simple view */}

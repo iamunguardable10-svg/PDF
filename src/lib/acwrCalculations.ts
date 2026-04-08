@@ -39,10 +39,8 @@ function localISO(d: Date): string {
 }
 
 /**
- * Gleitender Durchschnitt — Nenner = tatsächlich verfügbare Tage im Fenster.
- * Ruhetage (Load=0) werden mitgezählt. Kein Gate nötig, kein Spike:
- * - < 7/28 Tage: teilt durch vorhandene Tage (baut sich sauber auf)
- * - ≥ 7/28 Tage: klassisches ÷7 / ÷28
+ * Gleitender Durchschnitt — Nenner = Fenstergröße inkl. Ruhetage (Load = 0).
+ * Ruhetage senken den Durchschnitt korrekt (Detraining-Effekt).
  */
 function rollingAvg(loads: number[], index: number, window: number): number {
   const start = Math.max(0, index - window + 1);
@@ -89,6 +87,38 @@ const PROJECTED_RPE: Record<string, number> = {
   Spiel: 8, Team: 7, 'S&C': 7, Indi: 6,
   Aufwärmen: 5, Schulsport: 5, Prävention: 4,
 };
+
+/**
+ * EWMA-basierter ACWR.
+ * lambda_acute   = 2 / (7  + 1) = 0.25
+ * lambda_chronic = 2 / (28 + 1) ≈ 0.069
+ * Initialisierung: erster Tageswert als Startwert beider EWMAs.
+ */
+export function calculateEWMA(sessions: Session[]): ACWRDataPoint[] {
+  const days = fillMissingDays(aggregateDailyLoads(sessions));
+  if (days.length === 0) return [];
+
+  const lambdaA = 2 / (7  + 1);   // 0.25
+  const lambdaC = 2 / (28 + 1);   // ≈ 0.0690
+
+  let ewmaAcute   = days[0].taeglLoad;
+  let ewmaChronic = days[0].taeglLoad;
+
+  return days.map((day, i) => {
+    if (i > 0) {
+      ewmaAcute   = lambdaA * day.taeglLoad + (1 - lambdaA) * ewmaAcute;
+      ewmaChronic = lambdaC * day.taeglLoad + (1 - lambdaC) * ewmaChronic;
+    }
+    const acwr = (ewmaAcute > 0 && ewmaChronic > 0) ? ewmaAcute / ewmaChronic : null;
+    return {
+      datum:       day.datum,
+      taeglLoad:   day.taeglLoad,
+      acuteLoad:   Math.round(ewmaAcute),
+      chronicLoad: Math.round(ewmaChronic),
+      acwr:        acwr !== null ? Math.round(acwr * 100) / 100 : null,
+    };
+  });
+}
 
 /**
  * Projiziert den ACWR für die nächsten `daysAhead` Tage basierend auf

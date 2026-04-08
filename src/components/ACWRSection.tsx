@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import type { Session, PlannedSession, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
-import { calculateACWR, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel, projectFutureACWR } from '../lib/acwrCalculations';
+import { calculateACWR, calculateEWMA, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel, projectFutureACWR } from '../lib/acwrCalculations';
 import { CLOUD_ENABLED } from '../lib/supabase';
 import { encodeShareData, createLiveShare, revokeLiveShare, getActiveShare } from '../lib/trainerShare';
 import {
@@ -47,6 +47,7 @@ export function ACWRSection({
   const reminderTimeouts = useRef<Map<string, number>>(new Map());
 
   const acwrData      = useMemo(() => calculateACWR(sessions), [sessions]);
+  const ewmaData      = useMemo(() => calculateEWMA(sessions), [sessions]);
   const projectedData = useMemo(() => projectFutureACWR(sessions, plannedSessions), [sessions, plannedSessions]);
   const dailyLoads    = useMemo(() => aggregateDailyLoads(sessions), [sessions]);
   const current       = useMemo(() => getCurrentACWR(acwrData), [acwrData]);
@@ -193,6 +194,14 @@ export function ACWRSection({
                   <div className="text-gray-400"><span className="text-sky-400 font-medium">Acute Load (7d):</span> Ø tägliche Belastung der letzten 7 Tage — zeigt die aktuelle Trainingsintensität.</div>
                   <div className="text-gray-400"><span className="text-gray-300 font-medium">Chronic Load (28d):</span> Ø tägliche Belastung der letzten 28 Tage — zeigt die gewohnte Belastungskapazität.</div>
                   <div className="text-gray-500 mt-1">Ruhetage zählen als 0 und senken den Durchschnitt — so wird Detraining korrekt abgebildet.</div>
+                </div>
+                <div className="border-t border-gray-700 pt-2 space-y-1">
+                  <div className="font-semibold text-white">EWMA <span className="text-xs font-normal text-gray-500">(Exponentially Weighted Moving Average)</span></div>
+                  <div className="text-gray-400">Jüngere Tage werden stärker gewichtet als weiter zurückliegende — das Modell reagiert schneller auf Belastungsspitzen.</div>
+                  <div className="text-gray-500 mt-1">
+                    Gewichtungsfaktor: <span className="text-gray-300 font-mono">λ_acute = 0.25</span> (7d) · <span className="text-gray-300 font-mono">λ_chronic ≈ 0.07</span> (28d).
+                    Geeignet wenn kurzfristige Veränderungen früh erkannt werden sollen.
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -530,7 +539,7 @@ export function ACWRSection({
       {sessions.length > 0 && (
         <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800">
           <h3 className="text-sm font-semibold text-white mb-4">ACWR Verlauf (letzte 60 Tage)</h3>
-          <ACWRChart data={acwrData} projectedData={projectedData} dailyLoads={dailyLoads} />
+          <ACWRChart data={acwrData} projectedData={projectedData} dailyLoads={dailyLoads} ewmaData={ewmaData} />
         </div>
       )}
 
