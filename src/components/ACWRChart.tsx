@@ -2,13 +2,11 @@ import { useState, useMemo } from 'react';
 import type { ACWRDataPoint, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, Legend,
-  ComposedChart, Bar, YAxis as YAxisType, // eslint-disable-line @typescript-eslint/no-unused-vars
+  ComposedChart, Bar,
 } from 'recharts';
 
-// suppress unused import warning — YAxisType is the same as YAxis, just aliased
-void (YAxisType as unknown);
 
 interface Props {
   data: ACWRDataPoint[];
