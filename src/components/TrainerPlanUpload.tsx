@@ -24,10 +24,14 @@ export function TrainerPlanUpload({ onSessionsAdded }: Props) {
   const [error, setError] = useState('');
   const [dayOffset, setDayOffset] = useState(0);
 
+  function localISO(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   function shiftDate(datum: string, days: number): string {
-    const d = new Date(datum);
+    const d = new Date(datum + 'T00:00');
     d.setDate(d.getDate() + days);
-    return d.toISOString().split('T')[0];
+    return localISO(d);
   }
 
   const shiftedPreview = preview?.map(s => ({ ...s, datum: shiftDate(s.datum, dayOffset) })) ?? null;

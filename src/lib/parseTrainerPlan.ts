@@ -13,7 +13,11 @@ export async function parseTrainerPlan(
   message: string,
   onProgress: (text: string) => void,
 ): Promise<PlannedSession[]> {
-  const today = new Date().toISOString().split('T')[0];
+  function localISO(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  const today = localISO(new Date());
   const [year, month] = today.split('-');
 
   // Nächste 14 Tage als Kontext aufbauen — deutsch + englisch
@@ -24,7 +28,7 @@ export async function parseTrainerPlan(
   for (let i = 0; i < 14; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
-    const iso = d.toISOString().split('T')[0];
+    const iso = localISO(d);
     const wdDE = d.toLocaleDateString('de-DE', { weekday: 'long' }).toLowerCase();
     const wdIdx = d.getDay();
     // German: full + 2-char short (Mo, Di, Mi…)
