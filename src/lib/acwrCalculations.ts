@@ -39,9 +39,10 @@ function localISO(d: Date): string {
 }
 
 /**
- * Gleitender Durchschnitt — nur Trainingstage zählen (wie Excel MITTELWERTWENNS).
- * Ruhetage (Load=0) sind nicht in der Load-Tabelle → werden nicht gemittelt.
- * Damit ist ACWR sofort ab dem 1. Trainingstag sinnvoll (kein 28-Tage-Gate nötig).
+ * Gleitender Durchschnitt — wie Excel MITTELWERTWENNS.
+ * Nur Trainingstage (Load > 0) zählen zum Nenner; Ruhetage werden ignoriert.
+ * Damit startet Chronic exakt beim ersten Trainingswert (kein langsamer Aufbau).
+ * Kein 28-Tage-Gate nötig — ACWR ab dem 1. Trainingstag sichtbar.
  */
 function rollingAvg(loads: number[], index: number, window: number): number {
   const start = Math.max(0, index - window + 1);
