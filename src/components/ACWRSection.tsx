@@ -9,6 +9,7 @@ import {
   scheduleSessionReminder, cancelReminder, sendTestNotification,
 } from '../lib/notifications';
 import { ACWRChart } from './ACWRChart';
+import { ACWRForecast } from './ACWRForecast';
 import { SessionForm } from './SessionForm';
 import { TrainerPlanUpload } from './TrainerPlanUpload';
 import { PendingSessions } from './PendingSessions';
@@ -535,8 +536,19 @@ export function ACWRSection({
       {sessions.length > 0 && (
         <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800">
           <h3 className="text-sm font-semibold text-white mb-4">ACWR Verlauf (letzte 60 Tage)</h3>
-          <ACWRChart data={acwrData} projectedData={projectedData} dailyLoads={dailyLoads} />
+          <ACWRChart data={acwrData} projectedData={projectedData} dailyLoads={dailyLoads} sessions={sessions} />
         </div>
+      )}
+
+      {/* ACWR Forecast */}
+      {projectedData.length > 0 && current && (
+        <ACWRForecast
+          projected={projectedData}
+          currentAcwr={acwr}
+          currentAcute={current.acuteLoad}
+          currentChronic={current.chronicLoad}
+          plannedCount={plannedSessions.filter(ps => !ps.confirmed && ps.datum > new Date().toISOString().split('T')[0]).length}
+        />
       )}
 
       {/* Session-Log */}

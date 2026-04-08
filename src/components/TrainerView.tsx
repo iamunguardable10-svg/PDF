@@ -2,10 +2,11 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import type { TrainerShareData } from '../lib/trainerShare';
 type PlannedEntry = TrainerShareData['planned'];
 import { fetchLiveTrainerData } from '../lib/trainerShare';
-import type { ACWRDataPoint } from '../types/acwr';
+import type { ACWRDataPoint, Session, PlannedSession, TrainingUnit } from '../types/acwr';
 import { TE_EMOJI, TE_COLORS } from '../types/acwr';
-import { getACWRZoneLabel } from '../lib/acwrCalculations';
+import { getACWRZoneLabel, projectFutureACWR } from '../lib/acwrCalculations';
 import { ACWRChart } from './ACWRChart';
+import { ACWRForecast } from './ACWRForecast';
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
@@ -81,6 +82,35 @@ export function TrainerView({ data: staticData, token }: Props) {
       .sort((a, b) => b.d.localeCompare(a.d))
       .slice(0, 10),
   [data]);
+
+  // Reconstruct Session[] from sessions28 for projection
+  const sessions28AsSessions = useMemo<Session[]>(() =>
+    (data?.sessions28 ?? []).map((s, i) => ({
+      id: `ts-${i}`,
+      name: data?.athleteName ?? '',
+      datum: s.d,
+      te: s.te as TrainingUnit,
+      rpe: s.rpe,
+      dauer: s.rpe > 0 ? Math.round(s.tl / s.rpe) : 60,
+      tl: s.tl,
+    })),
+  [data]);
+
+  const plannedAsPS = useMemo<PlannedSession[]>(() =>
+    (data?.planned ?? []).map((s, i) => ({
+      id: `tp-${i}`,
+      datum: s.d,
+      te: s.t as TrainingUnit,
+      uhrzeit: s.u,
+      geschaetzteDauer: s.dur,
+      confirmed: false,
+      reminderScheduled: false,
+    })),
+  [data]);
+
+  const projectedData = useMemo(() =>
+    projectFutureACWR(sessions28AsSessions, plannedAsPS),
+  [sessions28AsSessions, plannedAsPS]);
 
   function fmtDate(iso: string) {
     const d = new Date(iso + 'T00:00');
@@ -227,8 +257,23 @@ export function TrainerView({ data: staticData, token }: Props) {
         {acwrData.length > 0 && (
           <div className="bg-gray-900/50 rounded-3xl p-5 border border-gray-800">
             <h3 className="text-sm font-semibold text-white mb-3">ACWR Verlauf (letzte 60 Tage)</h3>
-            <ACWRChart data={acwrData} />
+            <ACWRChart
+              data={acwrData}
+              projectedData={projectedData}
+              sessions={sessions28AsSessions}
+            />
           </div>
+        )}
+
+        {/* ACWR Forecast */}
+        {projectedData.length > 0 && currentPoint && (
+          <ACWRForecast
+            projected={projectedData}
+            currentAcwr={acwr}
+            currentAcute={currentPoint.a}
+            currentChronic={currentPoint.c}
+            plannedCount={(data?.planned ?? []).length}
+          />
         )}
 
         {/* Nächste 14 Tage */}
