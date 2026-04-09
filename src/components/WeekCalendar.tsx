@@ -175,7 +175,8 @@ function CreateSessionModal({
         datum,
         te,
         uhrzeit: time || undefined,
-        geschaetzteDauer: dauer,
+        // Spiel: keep explicit duration (sport-specific). Others: let algorithm derive from history.
+        geschaetzteDauer: te === 'Spiel' ? dauer : undefined,
         notiz: note || undefined,
         reminderScheduled: false,
         confirmed: false,
@@ -249,7 +250,8 @@ function CreateSessionModal({
             <div>
               <div className="text-sm font-semibold text-white">{te}</div>
               <div className="text-xs text-gray-500">
-                {time ? `${time} Uhr · ` : ''}{dauer} Min
+                {time ? `${time} Uhr · ` : ''}
+                {(isPast || te === 'Spiel') ? `${dauer} Min` : 'Dauer: Auto'}
                 {isPast && <span className="ml-1" style={{ color: rpeColor }}>· RPE {effectiveRpe}</span>}
               </div>
             </div>
@@ -262,7 +264,7 @@ function CreateSessionModal({
           </div>
 
           {/* Uhrzeit + Dauer */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${isPast || te === 'Spiel' ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div>
               <label className="text-xs text-gray-500 block mb-1.5">
                 Uhrzeit (optional)
@@ -276,30 +278,37 @@ function CreateSessionModal({
               <input type="time" value={time} onChange={e => setTime(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
             </div>
-            <div>
-              {te === 'Spiel' ? (
-                <>
-                  <label className="text-xs text-gray-500 block mb-1.5">
-                    Spieldauer: <span className="text-white font-semibold">{dauer} Min</span>
-                    <span className="ml-1 text-gray-600">({gameConf.label})</span>
-                  </label>
-                  <input type="range" min={gameConf.min} max={gameConf.max} step={1} value={dauer}
-                    onChange={e => setDauer(Number(e.target.value))}
-                    className="w-full mt-2 accent-orange-500" />
-                  <div className="flex justify-between text-xs text-gray-600 mt-1">
-                    <span>{gameConf.min}</span><span>{gameConf.max} Min</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <label className="text-xs text-gray-500 block mb-1.5">Dauer: {dauer} Min</label>
-                  <input type="range" min={15} max={180} step={15} value={dauer}
-                    onChange={e => setDauer(Number(e.target.value))}
-                    className="w-full mt-2 accent-violet-500" />
-                </>
-              )}
-            </div>
+            {te === 'Spiel' && (
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">
+                  Spieldauer: <span className="text-white font-semibold">{dauer} Min</span>
+                  <span className="ml-1 text-gray-600">({gameConf.label})</span>
+                </label>
+                <input type="range" min={gameConf.min} max={gameConf.max} step={1} value={dauer}
+                  onChange={e => setDauer(Number(e.target.value))}
+                  className="w-full mt-2 accent-orange-500" />
+                <div className="flex justify-between text-xs text-gray-600 mt-1">
+                  <span>{gameConf.min}</span><span>{gameConf.max} Min</span>
+                </div>
+              </div>
+            )}
+            {isPast && te !== 'Spiel' && (
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Dauer: {dauer} Min</label>
+                <input type="range" min={15} max={180} step={15} value={dauer}
+                  onChange={e => setDauer(Number(e.target.value))}
+                  className="w-full mt-2 accent-violet-500" />
+              </div>
+            )}
           </div>
+
+          {/* Auto-Dauer Hinweis für zukünftige Non-Spiel-Sessions */}
+          {!isPast && te !== 'Spiel' && (
+            <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-800/40 rounded-xl px-3 py-2">
+              <span>⏱</span>
+              <span>Dauer wird aus deinem Trainingsverlauf berechnet</span>
+            </div>
+          )}
 
           {/* RPE — immer 10 bei Spiel, sonst nur bei vergangenen Daten */}
           {te === 'Spiel' ? (
