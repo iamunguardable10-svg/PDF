@@ -162,19 +162,29 @@ function ChartTooltip({ active, payload, label }: any) {
 type Range = 14 | 30 | 60;
 
 export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData = [] }: Props) {
-  const [method,   setMethod]   = useState<'rolling' | 'ewma'>('rolling');
-  const [range,    setRange]    = useState<Range>(() =>
+  const [method,      setMethod]      = useState<'rolling' | 'ewma'>('rolling');
+  const [range,       setRange]       = useState<Range>(() =>
     typeof window !== 'undefined' && window.innerWidth < 640 ? 14 : 60
   );
-  const [expanded, setExpanded] = useState(false);
-  const [isMobile, setIsMobile] = useState(() =>
+  const [expanded,    setExpanded]    = useState(false);
+  const [isMobile,    setIsMobile]    = useState(() =>
     typeof window !== 'undefined' && window.innerWidth < 640
+  );
+  const [isLandscape, setIsLandscape] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth > window.innerHeight
   );
 
   useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 640);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: landscape)');
+    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, []);
 
   // Lock body scroll when expanded
@@ -261,7 +271,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
 
   // ── Shared chart renderer ─────────────────────────────────────────────────
 
-  const renderChart = useCallback((height: number | string, opts: { showLegend: boolean; compact: boolean }) => {
+  const renderChart = useCallback((height: number | `${number}%`, opts: { legendMode: 'full' | 'minimal' | 'none'; compact: boolean }) => {
     const totalPoints  = chartData.length;
     // Thin x-axis labels: target ~7 visible ticks
     const xInterval    = totalPoints <= 14 ? 1 : Math.ceil(totalPoints / 7) - 1;
@@ -292,7 +302,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
 
           <Tooltip content={<ChartTooltip />} />
 
-          {opts.showLegend && (
+          {opts.legendMode !== 'none' && (
             <Legend
               wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
               formatter={(value) => <span style={{ color: '#9ca3af' }}>{value}</span>}
@@ -311,19 +321,24 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
               label={{ value: 'Heute', position: 'top', fill: '#9ca3af', fontSize: 9 }} />
           )}
 
+          {/* Threshold lines — hidden from legend in minimal mode */}
           <Line yAxisId="right" dataKey="high" name="Risiko 1.3"
             stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.7}
-            dot={false} legendType="plainline" isAnimationActive={false} connectNulls />
+            dot={false} legendType={opts.legendMode === 'full' ? 'plainline' : 'none'}
+            isAnimationActive={false} connectNulls />
           <Line yAxisId="right" dataKey="low" name="Niedrig 0.8"
             stroke="#3b82f6" strokeWidth={1.5} strokeOpacity={0.7}
-            dot={false} legendType="plainline" isAnimationActive={false} connectNulls />
+            dot={false} legendType={opts.legendMode === 'full' ? 'plainline' : 'none'}
+            isAnimationActive={false} connectNulls />
           <Line yAxisId="right" dataKey="mid"
             stroke="#6b7280" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="2 4"
             dot={false} legendType="none" isAnimationActive={false} connectNulls />
 
+          {/* TE bars — hidden from legend in minimal mode */}
           {TE_TYPES.map(te => (
             <Bar key={te} yAxisId="left" dataKey={te} stackId="tl" name={te}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
+              legendType={opts.legendMode === 'full' ? 'square' : 'none'}
               maxBarSize={18} isAnimationActive={false} />
           ))}
 
@@ -334,23 +349,30 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
               maxBarSize={18} isAnimationActive={false} />
           ))}
 
+          {/* Core lines — always shown in legend when legendMode !== 'none' */}
           <Line yAxisId="left" type="monotone" dataKey="acuteLoad" name="Acute 7d"
             stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="3 2"
-            dot={false} isAnimationActive={false} legendType="plainline" connectNulls={false} />
+            dot={false} isAnimationActive={false}
+            legendType={opts.legendMode !== 'none' ? 'plainline' : 'none'}
+            connectNulls={false} />
 
           <Line yAxisId="left" type="monotone" dataKey="chronicLoad" name="Chronic 28d"
             stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 3"
-            dot={false} isAnimationActive={false} legendType="plainline" connectNulls={false} />
+            dot={false} isAnimationActive={false}
+            legendType={opts.legendMode !== 'none' ? 'plainline' : 'none'}
+            connectNulls={false} />
 
           <Line yAxisId="right" type="monotone" dataKey="acwr" name="ACWR"
             stroke="#a78bfa" strokeWidth={2.5}
             dot={<ACWRDot />} connectNulls={false} isAnimationActive={false}
+            legendType={opts.legendMode !== 'none' ? 'plainline' : 'none'}
             activeDot={{ r: 6, fill: '#a78bfa' }} />
 
           {projectedData.length > 0 && (
             <Line yAxisId="right" type="monotone" dataKey="projectedAcwr" name="Projektion"
               stroke="#a78bfa" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.55}
               dot={<ProjectedDot />} connectNulls={false} isAnimationActive={false}
+              legendType={opts.legendMode !== 'none' ? 'plainline' : 'none'}
               activeDot={{ r: 5, fill: '#a78bfa', fillOpacity: 0.5 }} />
           )}
         </ComposedChart>
@@ -398,16 +420,21 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
     </div>
   );
 
-  const compactHeight = isMobile ? 240 : 340;
+  // Portrait mobile → minimal legend (ACWR, Acute, Chronic only)
+  // Landscape mobile or desktop → full legend
+  const compactLegendMode = isMobile
+    ? (isLandscape ? 'full' : 'minimal')
+    : 'full';
+  const compactHeight = isMobile ? (isLandscape ? 300 : 240) : 340;
 
   return (
     <>
       {/* ── Compact view ── */}
       <div className="space-y-2">
         {controls}
-        {renderChart(compactHeight, { showLegend: !isMobile, compact: isMobile })}
-        {isMobile && (
-          <p className="text-center text-xs text-gray-600">Tippe auf einen Balken für Details · ⛶ für Vollbild</p>
+        {renderChart(compactHeight, { legendMode: compactLegendMode, compact: isMobile && !isLandscape })}
+        {isMobile && !isLandscape && (
+          <p className="text-center text-xs text-gray-600">Querformat oder ⛶ für mehr Details</p>
         )}
       </div>
 
@@ -430,7 +457,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
 
           {/* Chart — fills remaining space */}
           <div className="flex-1 p-3 min-h-0">
-            {renderChart('100%', { showLegend: true, compact: false })}
+            {renderChart('100%', { legendMode: 'full', compact: false })}
           </div>
         </div>
       )}
