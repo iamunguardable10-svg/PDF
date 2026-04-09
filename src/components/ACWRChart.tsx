@@ -273,23 +273,22 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
           <ComposedChart data={simpleData} margin={{ top: 10, right: 44, left: -10, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis {...xAxisProps} />
-            {/* Left axis: ACWR ratio */}
-            <YAxis yAxisId="left" domain={[0, 2.5]} ticks={[0, 0.5, 0.8, 1.0, 1.3, 1.5, 2.0, 2.5]}
-              tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => v.toFixed(1)} />
-            {/* Right axis: AU loads */}
-            <YAxis yAxisId="right" orientation="right"
-              tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} axisLine={false}
+            {/* Left axis: AU loads (einheitlich mit Detail-View) */}
+            <YAxis yAxisId="left" tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} axisLine={false}
               tickFormatter={v => `${v}`}
-              label={{ value: 'AU', angle: -90, position: 'insideRight', fill: '#4b5563', fontSize: 10, dy: -10 }} />
+              label={{ value: 'AU', angle: -90, position: 'insideLeft', fill: '#4b5563', fontSize: 10, dy: 20 }} />
+            {/* Right axis: ACWR ratio (einheitlich mit Detail-View) */}
+            <YAxis yAxisId="right" orientation="right" domain={[0, 2.5]} ticks={[0, 0.5, 0.8, 1.0, 1.3, 2.0, 2.5]}
+              tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => v.toFixed(1)} />
             <Tooltip content={<SimpleTooltip />} />
             <Legend wrapperStyle={{ fontSize: '12px', color: '#9ca3af', paddingTop: '8px' }} />
-            <ReferenceLine yAxisId="left" y={0.8} stroke="#3b82f6" strokeDasharray="6 3" strokeWidth={1.5}
-              label={{ value: '0.8', position: 'left', fill: '#3b82f6', fontSize: 10 }} />
-            <ReferenceLine yAxisId="left" y={1.3} stroke="#ef4444" strokeDasharray="6 3" strokeWidth={1.5}
-              label={{ value: '1.3', position: 'left', fill: '#ef4444', fontSize: 10 }} />
-            <ReferenceLine yAxisId="left" y={1.0} stroke="#6b7280" strokeDasharray="2 4" strokeWidth={1} />
+            <ReferenceLine yAxisId="right" y={0.8} stroke="#3b82f6" strokeDasharray="6 3" strokeWidth={1.5}
+              label={{ value: '0.8', position: 'right', fill: '#3b82f6', fontSize: 10 }} />
+            <ReferenceLine yAxisId="right" y={1.3} stroke="#ef4444" strokeDasharray="6 3" strokeWidth={1.5}
+              label={{ value: '1.3', position: 'right', fill: '#ef4444', fontSize: 10 }} />
+            <ReferenceLine yAxisId="right" y={1.0} stroke="#6b7280" strokeDasharray="2 4" strokeWidth={1} />
             {projectedData.length > 0 && (
-              <ReferenceLine yAxisId="left" x={todayFormatted} stroke="#6b7280" strokeWidth={1} strokeDasharray="4 4"
+              <ReferenceLine yAxisId="right" x={todayFormatted} stroke="#6b7280" strokeWidth={1} strokeDasharray="4 4"
                 label={{ value: 'Heute', position: 'top', fill: '#9ca3af', fontSize: 10 }} />
             )}
             {/* Aufbauphase — noch keine Aussagekraft */}
@@ -298,15 +297,16 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
                 fill="#6b7280" fillOpacity={0.07}
                 label={{ value: 'Aufbauphase', position: 'insideTopLeft', fill: '#6b7280', fontSize: 10 }} />
             )}
-            {/* Chronic (28d) rolling average on right axis */}
-            <Line yAxisId="right" type="monotone" dataKey="chronicLoad" name="Chronic (28d)"
+            {/* Chronic (28d) rolling average — left axis (AU) */}
+            <Line yAxisId="left" type="monotone" dataKey="chronicLoad" name="Chronic (28d)"
               stroke="#6b7280" strokeWidth={1.5} strokeDasharray="5 3" dot={false}
-              isAnimationActive={false} legendType="plainline" connectNulls />
-            <Line yAxisId="left" type="monotone" dataKey="acwr" name="ACWR"
+              isAnimationActive={false} legendType="plainline" connectNulls={false} />
+            {/* ACWR ratio — right axis */}
+            <Line yAxisId="right" type="monotone" dataKey="acwr" name="ACWR"
               stroke="#a78bfa" strokeWidth={2.5} dot={<ACWRDot />}
               connectNulls={false} activeDot={{ r: 6, fill: '#a78bfa' }} />
             {projectedData.length > 0 && (
-              <Line yAxisId="left" type="monotone" dataKey="projectedAcwr" name="Projektion"
+              <Line yAxisId="right" type="monotone" dataKey="projectedAcwr" name="Projektion"
                 stroke="#a78bfa" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.55}
                 dot={<ProjectedDot />} connectNulls={false}
                 activeDot={{ r: 5, fill: '#a78bfa', fillOpacity: 0.5 }} />
