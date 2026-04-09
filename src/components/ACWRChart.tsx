@@ -278,8 +278,8 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
     // Bar width: wider when fewer data points fill the same container
     const dynamicMaxBar = totalPoints <= 20 ? 36 : totalPoints <= 44 ? 24 : 18;
     const margin       = opts.compact
-      ? { top: 6, right: 40, left: -18, bottom: 18 }
-      : { top: 10, right: 48, left: -10, bottom: 20 };
+      ? { top: 6, right: 36, left: -18, bottom: 18 }
+      : { top: 10, right: 36, left: -10, bottom: 20 };
 
     return (
       <ResponsiveContainer width="100%" height={height}>
@@ -457,12 +457,12 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             </button>
           </div>
 
-          {/* Chart — capped on mobile portrait to avoid oversized bars */}
-          <div className="flex-1 p-3 min-h-0 flex flex-col">
-            {renderChart(
-              isMobile && !isLandscape ? 440 : '100%',
-              { legendMode: 'full', compact: false },
-            )}
+          {/* Chart — minimal legend on mobile portrait to save space */}
+          <div className="flex-1 p-3 min-h-0">
+            {renderChart('100%', {
+              legendMode: isMobile && !isLandscape ? 'minimal' : 'full',
+              compact: false,
+            })}
           </div>
         </div>
       )}
