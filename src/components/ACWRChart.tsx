@@ -293,7 +293,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             )}
             {/* Aufbauphase — noch keine Aussagekraft */}
             {buildingRange && (
-              <ReferenceArea yAxisId="left" x1={buildingRange.x1} x2={buildingRange.x2}
+              <ReferenceArea yAxisId="right" x1={buildingRange.x1} x2={buildingRange.x2}
                 fill="#6b7280" fillOpacity={0.07}
                 label={{ value: 'Aufbauphase', position: 'insideTopLeft', fill: '#6b7280', fontSize: 10 }} />
             )}
