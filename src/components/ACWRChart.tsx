@@ -159,12 +159,12 @@ function ChartTooltip({ active, payload, label }: any) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-type Range = 14 | 30 | 60;
+type Range = 7 | 14 | 30 | 60;
 
 export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData = [] }: Props) {
   const [method,      setMethod]      = useState<'rolling' | 'ewma'>('rolling');
   const [range,       setRange]       = useState<Range>(() =>
-    typeof window !== 'undefined' && window.innerWidth < 640 ? 14 : 60
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 7 : 60
   );
   const [expanded,    setExpanded]    = useState(false);
   const [isMobile,    setIsMobile]    = useState(() =>
@@ -277,9 +277,10 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
     const xInterval    = totalPoints <= 14 ? 1 : Math.ceil(totalPoints / 7) - 1;
     // Bar width: wider when fewer data points fill the same container
     const dynamicMaxBar = totalPoints <= 20 ? 36 : totalPoints <= 44 ? 24 : 18;
+    // margin.right=0 on both: right Y-axis sits flush at container edge, no extra gap
     const margin       = opts.compact
-      ? { top: 6, right: 36, left: -18, bottom: 18 }
-      : { top: 10, right: 36, left: -10, bottom: 20 };
+      ? { top: 6, right: 0, left: -18, bottom: 18 }
+      : { top: 10, right: 0, left: -10, bottom: 20 };
 
     return (
       <ResponsiveContainer width="100%" height={height}>
@@ -298,7 +299,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
 
           <YAxis yAxisId="right" orientation="right" domain={[0, 2.5]}
             ticks={[0.8, 1.0, 1.3, 2.0]}
-            tick={{ fill: '#6b7280', fontSize: opts.compact ? 9 : 10 }}
+            tick={{ fill: '#6b7280', fontSize: 10 }}
             tickLine={false} axisLine={false}
             tickFormatter={v => v.toFixed(1)} />
 
@@ -398,7 +399,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
         ))}
 
         {/* Range toggle */}
-        {([14, 30, 60] as Range[]).map(r => (
+        {([7, 14, 30, 60] as Range[]).map(r => (
           <button key={r} onClick={() => setRange(r)}
             className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
               range === r ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'
