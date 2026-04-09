@@ -324,14 +324,14 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
           {TE_TYPES.map(te => (
             <Bar key={te} yAxisId="left" dataKey={te} stackId="tl" name={te}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
-              maxBarSize={opts.compact ? 14 : 18} isAnimationActive={false} />
+              maxBarSize={18} isAnimationActive={false} />
           ))}
 
           {projectedData.length > 0 && TE_TYPES.map(te => (
             <Bar key={`${te}_p`} yAxisId="left" dataKey={`${te}_p`} stackId="tl" name={undefined}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
               fillOpacity={0.35} legendType="none"
-              maxBarSize={opts.compact ? 14 : 18} isAnimationActive={false} />
+              maxBarSize={18} isAnimationActive={false} />
           ))}
 
           <Line yAxisId="left" type="monotone" dataKey="acuteLoad" name="Acute 7d"
