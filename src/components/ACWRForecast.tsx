@@ -53,9 +53,9 @@ export function ACWRForecast({ projected, currentAcwr, currentAcute, currentChro
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
           <span className="text-base shrink-0">📈</span>
-          <span className="text-sm font-semibold text-white">Belastungsprognose</span>
+          <span className="text-sm font-semibold text-white shrink-0">Belastungsprognose</span>
           {day7?.acwr != null && (() => {
             const z = zoneOf(day7.acwr!);
             return (
