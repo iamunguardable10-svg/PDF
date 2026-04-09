@@ -457,9 +457,12 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             </button>
           </div>
 
-          {/* Chart — fills remaining space */}
-          <div className="flex-1 p-3 min-h-0">
-            {renderChart('100%', { legendMode: 'full', compact: false })}
+          {/* Chart — capped on mobile portrait to avoid oversized bars */}
+          <div className="flex-1 p-3 min-h-0 flex flex-col">
+            {renderChart(
+              isMobile && !isLandscape ? 440 : '100%',
+              { legendMode: 'full', compact: false },
+            )}
           </div>
         </div>
       )}
