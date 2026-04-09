@@ -297,9 +297,11 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             tickLine={false} axisLine={false}
             label={opts.compact ? undefined : { value: 'AU', angle: -90, position: 'insideLeft', fill: '#4b5563', fontSize: 10, dy: 20 }} />
 
+          {/* mirror=true: labels render inside plot area → 0px layout space on right */}
           <YAxis yAxisId="right" orientation="right" domain={[0, 2.5]}
             ticks={[0.8, 1.0, 1.3, 2.0]}
             tick={{ fill: '#6b7280', fontSize: 10 }}
+            mirror={true}
             tickLine={false} axisLine={false}
             tickFormatter={v => v.toFixed(1)} />
 
