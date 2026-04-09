@@ -165,15 +165,22 @@ export function projectFutureACWR(
     }
   }
 
-  // ── Median RPE per training type from history ────────────────────────────
-  const rpeByTE = new Map<string, number[]>();
+  // ── Median RPE and duration per training type from history ──────────────
+  const rpeByTE      = new Map<string, number[]>();
+  const durationByTE = new Map<string, number[]>();
   for (const s of sessions) {
-    if (!rpeByTE.has(s.te)) rpeByTE.set(s.te, []);
+    if (!rpeByTE.has(s.te))      rpeByTE.set(s.te, []);
+    if (!durationByTE.has(s.te)) durationByTE.set(s.te, []);
     rpeByTE.get(s.te)!.push(s.rpe);
+    durationByTE.get(s.te)!.push(s.dauer);
   }
-  const medianRpeByTE = new Map<string, number>();
+  const medianRpeByTE      = new Map<string, number>();
+  const medianDurationByTE = new Map<string, number>();
   for (const [te, rpes] of rpeByTE) {
     medianRpeByTE.set(te, medianOf(rpes));
+  }
+  for (const [te, durations] of durationByTE) {
+    medianDurationByTE.set(te, medianOf(durations));
   }
 
   // ── Weekday load statistics (last 12 weeks = 84 days) ────────────────────
@@ -232,7 +239,7 @@ export function projectFutureACWR(
       plannedTeLoads = {};
       for (const ps of dayPlanned) {
         const rpe = medianRpeByTE.get(ps.te) ?? 6;
-        const dur = ps.geschaetzteDauer ?? 90;
+        const dur = ps.geschaetzteDauer ?? medianDurationByTE.get(ps.te) ?? 90;
         const load = rpe * dur;
         plannedLoad += load;
         plannedTeLoads[ps.te] = (plannedTeLoads[ps.te] ?? 0) + load;
