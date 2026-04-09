@@ -157,6 +157,21 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
+// ── Custom right-axis tick with dark background (used when mirrored inside plot) ─
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function MirroredRightTick(props: any) {
+  const { x, y, payload } = props;
+  if (x == null || y == null || !payload) return null;
+  const label = Number(payload.value).toFixed(1);
+  return (
+    <g>
+      <rect x={x - 29} y={y - 7} width={27} height={14} fill="#0f172a" rx={3} opacity={0.88} />
+      <text x={x - 3} y={y + 4} textAnchor="end" fill="#9ca3af" fontSize={10}>{label}</text>
+    </g>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 type Range = 7 | 14 | 30 | 60;
@@ -204,8 +219,16 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
   cutoffDate.setDate(cutoffDate.getDate() - range);
   const cutoff = localISO(cutoffDate);
 
+  const isMobilePortrait = isMobile && !isLandscape;
+
   const activeData = method === 'ewma' && ewmaData.length > 0 ? ewmaData : data;
   const filtered   = useMemo(() => activeData.filter(d => d.datum >= cutoff), [activeData, cutoff]);
+
+  // Mobile portrait: only 3 forecast days — keeps chart readable on small screens
+  const projectedSlice = useMemo(
+    () => isMobilePortrait ? projectedData.slice(0, 3) : projectedData,
+    [projectedData, isMobilePortrait],
+  );
 
   // ── Build unified chart data ───────────────────────────────────────────────
   const chartData: ChartPoint[] = useMemo(() => {
@@ -229,14 +252,14 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
         acuteLoad:     pt.acwr !== null ? pt.acuteLoad  : null,
         chronicLoad:   pt.acwr !== null ? pt.chronicLoad : null,
         acwr:          pt.acwr,
-        projectedAcwr: (isLast && projectedData.length > 0) ? (pt.acwr ?? undefined) : undefined,
+        projectedAcwr: (isLast && projectedSlice.length > 0) ? (pt.acwr ?? undefined) : undefined,
         isProjected:   false,
         high: 1.3, low: 0.8, mid: 1.0,
         chronicFull:   pt.chronicFull,
       };
     });
 
-    const projected: ChartPoint[] = projectedData.map(d => {
+    const projected: ChartPoint[] = projectedSlice.map(d => {
       const tl = d.plannedTeLoads ?? {};
       return {
         datum:         formatDatum(d.datum),
@@ -261,7 +284,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
     });
 
     return [...historical, ...projected];
-  }, [filtered, projectedData, dailyLoads]);
+  }, [filtered, projectedSlice, dailyLoads]);
 
   const buildingRange = useMemo(() => {
     const nullPts = chartData.filter(d => !d.isProjected && d.acwr == null);
@@ -297,13 +320,14 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             tickLine={false} axisLine={false}
             label={opts.compact ? undefined : { value: 'AU', angle: -90, position: 'insideLeft', fill: '#4b5563', fontSize: 10, dy: 20 }} />
 
-          {/* mirror=true: labels render inside plot area → 0px layout space on right */}
+          {/* Mobile portrait: mirror=true + dark-bg tick → labels inside plot, 0px layout space */}
+          {/* Desktop / landscape: normal right axis outside plot */}
           <YAxis yAxisId="right" orientation="right" domain={[0, 2.5]}
             ticks={[0.8, 1.0, 1.3, 2.0]}
-            tick={{ fill: '#6b7280', fontSize: 10 }}
-            mirror={true}
+            tick={opts.compact ? <MirroredRightTick /> : { fill: '#6b7280', fontSize: 10 }}
+            mirror={opts.compact}
             tickLine={false} axisLine={false}
-            tickFormatter={v => v.toFixed(1)} />
+            tickFormatter={opts.compact ? undefined : (v: number) => v.toFixed(1)} />
 
           <Tooltip content={<ChartTooltip />} />
 
@@ -320,7 +344,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
               label={{ value: 'Aufbauphase', position: 'insideTopLeft', fill: '#6b7280', fontSize: 9 }} />
           )}
 
-          {projectedData.length > 0 && (
+          {projectedSlice.length > 0 && (
             <ReferenceLine yAxisId="right" x={todayFormatted} stroke="#6b7280"
               strokeWidth={1} strokeDasharray="4 4"
               label={{ value: 'Heute', position: 'top', fill: '#9ca3af', fontSize: 9 }} />
@@ -347,7 +371,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
               maxBarSize={dynamicMaxBar} isAnimationActive={false} />
           ))}
 
-          {projectedData.length > 0 && TE_TYPES.map(te => (
+          {projectedSlice.length > 0 && TE_TYPES.map(te => (
             <Bar key={`${te}_p`} yAxisId="left" dataKey={`${te}_p`} stackId="tl" name={undefined}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
               fillOpacity={0.35} legendType="none"
@@ -373,7 +397,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             legendType={opts.legendMode !== 'none' ? 'plainline' : 'none'}
             activeDot={{ r: 6, fill: '#a78bfa' }} />
 
-          {projectedData.length > 0 && (
+          {projectedSlice.length > 0 && (
             <Line yAxisId="right" type="monotone" dataKey="projectedAcwr" name="Projektion"
               stroke="#a78bfa" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.55}
               dot={<ProjectedDot />} connectNulls={false} isAnimationActive={false}
