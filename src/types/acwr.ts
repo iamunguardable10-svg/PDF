@@ -71,6 +71,7 @@ export interface ACWRDataPoint {
   acwr: number | null;
   chronicFull?: boolean;    // true ab Tag 28 — volles 28d-Fenster
   forecastBasis?: string;   // Basis der Lastschätzung für projizierte Punkte
+  plannedTeLoads?: Partial<Record<TrainingUnit, number>>; // Per-TE-Last geplanter Sessions (via medianRpe)
 }
 
 export const ACWR_ZONES = {

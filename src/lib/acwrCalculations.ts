@@ -1,4 +1,4 @@
-import type { Session, PlannedSession, DayLoad, ACWRDataPoint } from '../types/acwr';
+import type { Session, PlannedSession, DayLoad, ACWRDataPoint, TrainingUnit } from '../types/acwr';
 import { ACWR_ZONES } from '../types/acwr';
 
 /** Aggregiert alle Sessions zu tägl. Load pro Tag */
@@ -224,13 +224,18 @@ export function projectFutureACWR(
 
     const dayPlanned = plannedMap.get(iso);
 
+    let plannedTeLoads: Partial<Record<string, number>> | undefined;
+
     if (dayPlanned && dayPlanned.length > 0) {
       // A) Geplante Sessions — RPE aus History-Median falls nicht angegeben
       let plannedLoad = 0;
+      plannedTeLoads = {};
       for (const ps of dayPlanned) {
         const rpe = medianRpeByTE.get(ps.te) ?? 6;
         const dur = ps.geschaetzteDauer ?? 90;
-        plannedLoad += rpe * dur;
+        const load = rpe * dur;
+        plannedLoad += load;
+        plannedTeLoads[ps.te] = (plannedTeLoads[ps.te] ?? 0) + load;
       }
       predictedLoad = Math.round(
         0.7 * plannedLoad +
@@ -261,13 +266,14 @@ export function projectFutureACWR(
     const acwr    = (idx >= 7 && acute > 0 && chronic > 0) ? acute / chronic : null;
 
     projected.push({
-      datum:         iso,
-      taeglLoad:     predictedLoad,
-      acuteLoad:     Math.round(acute),
-      chronicLoad:   Math.round(chronic),
-      acwr:          acwr !== null ? Math.round(acwr * 100) / 100 : null,
-      chronicFull:   idx >= 27,
+      datum:          iso,
+      taeglLoad:      predictedLoad,
+      acuteLoad:      Math.round(acute),
+      chronicLoad:    Math.round(chronic),
+      acwr:           acwr !== null ? Math.round(acwr * 100) / 100 : null,
+      chronicFull:    idx >= 27,
       forecastBasis,
+      plannedTeLoads: plannedTeLoads as Partial<Record<TrainingUnit, number>> | undefined,
     });
   }
 

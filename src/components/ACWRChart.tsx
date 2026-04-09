@@ -37,9 +37,12 @@ function zoneColor(v: number) {
 
 type ChartPoint = {
   datum: string;
-  // TE bars (from dailyLoads)
+  // TE bars (from dailyLoads, historical)
   Team: number; 'S&C': number; Spiel: number; Aufwärmen: number;
   Indi: number; Schulsport: number; Prävention: number;
+  // TE bars planned (projected, low opacity)
+  Team_p: number; 'S&C_p': number; Spiel_p: number; Aufwärmen_p: number;
+  Indi_p: number; Schulsport_p: number; Prävention_p: number;
   taeglLoad: number;
   // Rolling averages (AU, left axis)
   acuteLoad: number | null;
@@ -81,7 +84,9 @@ function ChartTooltip({ active, payload, label }: any) {
   const zone    = acwr == null ? null : acwr < 0.8 ? 'Niedrig' : acwr <= 1.3 ? 'Optimal' : 'Hoch';
   const zoneCol = acwr == null ? '#9ca3af' : zoneColor(acwr);
   const teEntries = TE_TYPES.filter(te => (d[te] ?? 0) > 0);
-  const totalTL = teEntries.reduce((s, te) => s + (d[te] ?? 0), 0);
+  const teEntriesP = d.isProjected ? TE_TYPES.filter(te => ((d as Record<string, number>)[`${te}_p`] ?? 0) > 0) : [];
+  const totalTL = teEntries.reduce((s, te) => s + (d[te] ?? 0), 0)
+                + teEntriesP.reduce((s, te) => s + ((d as Record<string, number>)[`${te}_p`] ?? 0), 0);
 
   return (
     <div className="bg-gray-900/95 border border-gray-700 rounded-xl p-3 text-sm shadow-xl min-w-[180px] backdrop-blur-sm">
@@ -101,6 +106,12 @@ function ChartTooltip({ active, payload, label }: any) {
           <div key={te} className="flex justify-between gap-4">
             <span style={{ color: TE_COLORS[te as keyof typeof TE_COLORS] }}>{te}</span>
             <span className="text-white font-medium">{d[te]} AU</span>
+          </div>
+        ))}
+        {teEntriesP.map(te => (
+          <div key={`${te}_p`} className="flex justify-between gap-4">
+            <span style={{ color: TE_COLORS[te as keyof typeof TE_COLORS] + 'aa' }}>{te} <span className="text-gray-600">(gepl.)</span></span>
+            <span className="text-gray-300 font-medium">{(d as Record<string, number>)[`${te}_p`]} AU</span>
           </div>
         ))}
         {totalTL > 0 && (
@@ -173,6 +184,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
   // ── Build unified chart data ───────────────────────────────────────────────
   const chartData: ChartPoint[] = useMemo(() => {
     const loadMap = new Map(dailyLoads.map(d => [d.datum, d]));
+    const zeroPlan = { Team_p: 0, 'S&C_p': 0, Spiel_p: 0, Aufwärmen_p: 0, Indi_p: 0, Schulsport_p: 0, Prävention_p: 0 };
 
     const historical: ChartPoint[] = filtered.map((pt, idx) => {
       const day = loadMap.get(pt.datum);
@@ -186,6 +198,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
         Indi:        day?.loads['Indi']        ?? 0,
         Schulsport:  day?.loads['Schulsport']  ?? 0,
         Prävention:  day?.loads['Prävention']  ?? 0,
+        ...zeroPlan,
         taeglLoad:   pt.taeglLoad,
         // Gate: acute/chronic nur wenn ACWR valide ist (ab Tag 8)
         acuteLoad:   pt.acwr !== null ? pt.acuteLoad  : null,
@@ -201,21 +214,32 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
       };
     });
 
-    const projected: ChartPoint[] = projectedData.map(d => ({
-      datum:       formatDatum(d.datum),
-      Team: 0, 'S&C': 0, Spiel: 0, Aufwärmen: 0, Indi: 0, Schulsport: 0, Prävention: 0,
-      taeglLoad:   d.taeglLoad,
-      acuteLoad:   d.acwr !== null ? d.acuteLoad  : null,
-      chronicLoad: d.acwr !== null ? d.chronicLoad : null,
-      acwr:        null,
-      projectedAcwr: d.acwr ?? undefined,
-      isProjected: true,
-      high:         1.3,
-      low:          0.8,
-      mid:          1.0,
-      chronicFull:  d.chronicFull,
-      forecastBasis: d.forecastBasis,
-    }));
+    const projected: ChartPoint[] = projectedData.map(d => {
+      // plannedTeLoads is pre-computed in projectFutureACWR using medianRpeByTE from history
+      const tl = d.plannedTeLoads ?? {};
+      return {
+        datum:       formatDatum(d.datum),
+        Team: 0, 'S&C': 0, Spiel: 0, Aufwärmen: 0, Indi: 0, Schulsport: 0, Prävention: 0,
+        Team_p:       tl['Team']       ?? 0,
+        'S&C_p':      tl['S&C']        ?? 0,
+        Spiel_p:      tl['Spiel']      ?? 0,
+        Aufwärmen_p:  tl['Aufwärmen']  ?? 0,
+        Indi_p:       tl['Indi']       ?? 0,
+        Schulsport_p: tl['Schulsport'] ?? 0,
+        Prävention_p: tl['Prävention'] ?? 0,
+        taeglLoad:   d.taeglLoad,
+        acuteLoad:   d.acwr !== null ? d.acuteLoad  : null,
+        chronicLoad: d.acwr !== null ? d.chronicLoad : null,
+        acwr:        null,
+        projectedAcwr: d.acwr ?? undefined,
+        isProjected: true,
+        high:         1.3,
+        low:          0.8,
+        mid:          1.0,
+        chronicFull:  d.chronicFull,
+        forecastBasis: d.forecastBasis,
+      };
+    });
 
     return [...historical, ...projected];
   }, [filtered, projectedData, dailyLoads]);
@@ -301,10 +325,18 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             stroke="#6b7280" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="2 4"
             dot={false} legendType="none" isAnimationActive={false} connectNulls />
 
-          {/* TE-Balken (gestapelt, linke Achse) */}
+          {/* TE-Balken historisch (gestapelt, linke Achse) */}
           {TE_TYPES.map(te => (
             <Bar key={te} yAxisId="left" dataKey={te} stackId="tl" name={te}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
+              maxBarSize={18} isAnimationActive={false} />
+          ))}
+
+          {/* TE-Balken geplant (Projektion, niedrige Opacity) */}
+          {projectedData.length > 0 && TE_TYPES.map(te => (
+            <Bar key={`${te}_p`} yAxisId="left" dataKey={`${te}_p`} stackId="tl" name={undefined}
+              fill={TE_COLORS[te as keyof typeof TE_COLORS]}
+              fillOpacity={0.35} legendType="none"
               maxBarSize={18} isAnimationActive={false} />
           ))}
 
