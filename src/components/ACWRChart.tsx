@@ -329,7 +329,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             tickLine={false} axisLine={false}
             tickFormatter={opts.compact ? undefined : (v: number) => v.toFixed(1)} />
 
-          <Tooltip content={<ChartTooltip />} />
+          {!opts.compact && <Tooltip content={<ChartTooltip />} />}
 
           {opts.legendMode !== 'none' && (
             <Legend
