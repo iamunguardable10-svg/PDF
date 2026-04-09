@@ -58,15 +58,16 @@ export function calculateACWR(sessions: Session[]): ACWRDataPoint[] {
     const acute   = rollingAvg(loads, i, 7);
     const chronic = rollingAvg(loads, i, 28);
     // ACWR erst ab Tag 8 (i>=7): vorher sind Acute- und Chronic-Fenster identisch → ACWR wäre immer 1.0
-    // Ab Tag 29 (i>=28): volles 7/28-Fenster (Option C)
+    // Ab Tag 28 (i>=27): volles 7/28-Fenster (Option C)
     const acwr = (i >= 7 && acute > 0 && chronic > 0) ? acute / chronic : null;
 
     return {
-      datum:       day.datum,
-      taeglLoad:   day.taeglLoad,
-      acuteLoad:   Math.round(acute),
-      chronicLoad: Math.round(chronic),
-      acwr:        acwr !== null ? Math.round(acwr * 100) / 100 : null,
+      datum:        day.datum,
+      taeglLoad:    day.taeglLoad,
+      acuteLoad:    Math.round(acute),
+      chronicLoad:  Math.round(chronic),
+      acwr:         acwr !== null ? Math.round(acwr * 100) / 100 : null,
+      chronicFull:  i >= 27,
     };
   });
 }
@@ -114,11 +115,12 @@ export function calculateEWMA(sessions: Session[]): ACWRDataPoint[] {
     // Gleicher Gate wie Rolling Avg: erst ab Tag 8 sinnvoll
     const acwr = (i >= 7 && ewmaAcute > 0 && ewmaChronic > 0) ? ewmaAcute / ewmaChronic : null;
     return {
-      datum:       day.datum,
-      taeglLoad:   day.taeglLoad,
-      acuteLoad:   Math.round(ewmaAcute),
-      chronicLoad: Math.round(ewmaChronic),
-      acwr:        acwr !== null ? Math.round(acwr * 100) / 100 : null,
+      datum:        day.datum,
+      taeglLoad:    day.taeglLoad,
+      acuteLoad:    Math.round(ewmaAcute),
+      chronicLoad:  Math.round(ewmaChronic),
+      acwr:         acwr !== null ? Math.round(acwr * 100) / 100 : null,
+      chronicFull:  i >= 27,
     };
   });
 }

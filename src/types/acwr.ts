@@ -69,6 +69,7 @@ export interface ACWRDataPoint {
   acuteLoad: number;
   chronicLoad: number;
   acwr: number | null;
+  chronicFull?: boolean; // true ab Tag 28 — volles 28d-Fenster
 }
 
 export const ACWR_ZONES = {

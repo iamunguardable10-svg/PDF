@@ -36,6 +36,7 @@ type SimplePoint = {
   acwr?: number | null;
   projectedAcwr?: number | null;
   isProjected?: boolean;
+  chronicFull?: boolean;
 };
 
 function ACWRDot(props: { cx?: number; cy?: number; payload?: SimplePoint }) {
@@ -76,6 +77,9 @@ function SimpleTooltip({ active, payload, label }: any) {
           <div className="mt-2 pt-2 border-t border-gray-700">
             ACWR: <span style={{ color: zoneCol }} className="font-bold text-base">{acwr.toFixed(2)}</span>
             <span className="ml-2" style={{ color: zoneCol }}>({zone})</span>
+            {!d.chronicFull && (
+              <div className="mt-1 text-xs text-amber-400/80">⚠ Chronic-Fenster im Aufbau (&lt;28 Tage)</div>
+            )}
           </div>
         )}
       </div>
@@ -94,6 +98,7 @@ type DetailPoint = {
   acwr: number | null;
   highThreshold: number;
   lowThreshold: number;
+  chronicFull?: boolean;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,11 +130,16 @@ function DetailTooltip({ active, payload, label }: any) {
           <div className="flex justify-between gap-4"><span className="text-gray-500">Chronic (28d)</span><span className="text-gray-300">{d.chronicLoad} AU</span></div>
         </div>
         {acwr != null && (
-          <div className="flex items-center justify-between border-t border-gray-700 pt-1.5 mt-1 gap-4">
-            <span className="text-gray-400">ACWR</span>
-            <span style={{ color: zoneCol }} className="font-bold text-base">
-              {acwr.toFixed(2)} <span className="text-xs font-normal">({zone})</span>
-            </span>
+          <div className="border-t border-gray-700 pt-1.5 mt-1 space-y-1">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-gray-400">ACWR</span>
+              <span style={{ color: zoneCol }} className="font-bold text-base">
+                {acwr.toFixed(2)} <span className="text-xs font-normal">({zone})</span>
+              </span>
+            </div>
+            {!d.chronicFull && (
+              <div className="text-xs text-amber-400/80">⚠ Chronic-Fenster im Aufbau (&lt;28 Tage)</div>
+            )}
           </div>
         )}
       </div>
@@ -195,6 +205,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
         chronicLoad:    pt.acwr !== null ? pt.chronicLoad : null,
         acuteLoad:      pt.acwr !== null ? pt.acuteLoad   : null,
         acwr:           pt.acwr,
+        chronicFull:    pt.chronicFull,
         highThreshold:  1.3,
         lowThreshold:   0.8,
       };
