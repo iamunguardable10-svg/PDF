@@ -84,9 +84,9 @@ function ChartTooltip({ active, payload, label }: any) {
   const zone    = acwr == null ? null : acwr < 0.8 ? 'Niedrig' : acwr <= 1.3 ? 'Optimal' : 'Hoch';
   const zoneCol = acwr == null ? '#9ca3af' : zoneColor(acwr);
   const teEntries = TE_TYPES.filter(te => (d[te] ?? 0) > 0);
-  const teEntriesP = d.isProjected ? TE_TYPES.filter(te => ((d as Record<string, number>)[`${te}_p`] ?? 0) > 0) : [];
+  const teEntriesP = d.isProjected ? TE_TYPES.filter(te => ((d as unknown as Record<string, number>)[`${te}_p`] ?? 0) > 0) : [];
   const totalTL = teEntries.reduce((s, te) => s + (d[te] ?? 0), 0)
-                + teEntriesP.reduce((s, te) => s + ((d as Record<string, number>)[`${te}_p`] ?? 0), 0);
+                + teEntriesP.reduce((s, te) => s + ((d as unknown as Record<string, number>)[`${te}_p`] ?? 0), 0);
 
   return (
     <div className="bg-gray-900/95 border border-gray-700 rounded-xl p-3 text-sm shadow-xl min-w-[180px] backdrop-blur-sm">
@@ -111,7 +111,7 @@ function ChartTooltip({ active, payload, label }: any) {
         {teEntriesP.map(te => (
           <div key={`${te}_p`} className="flex justify-between gap-4">
             <span style={{ color: TE_COLORS[te as keyof typeof TE_COLORS] + 'aa' }}>{te} <span className="text-gray-600">(gepl.)</span></span>
-            <span className="text-gray-300 font-medium">{(d as Record<string, number>)[`${te}_p`]} AU</span>
+            <span className="text-gray-300 font-medium">{(d as unknown as Record<string, number>)[`${te}_p`]} AU</span>
           </div>
         ))}
         {totalTL > 0 && (
