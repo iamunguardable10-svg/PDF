@@ -15,6 +15,7 @@ import { wearableData as mockWearable, trainingGoals } from './lib/mockData';
 import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { decodeShareData } from './lib/trainerShare';
 import { TrainerView } from './components/TrainerView';
+import { TrainerDashboard } from './components/TrainerDashboard';
 import { loadProfile, saveProfile } from './lib/profileStorage';
 import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
 import { loadSessions, saveSessions, loadPlannedSessions, savePlannedSessions } from './lib/trainingStorage';
@@ -273,6 +274,9 @@ function App() {
     setIsGuest(false);
     setCloudReady(false);
   };
+
+  /* ── Coach Dashboard gate ── */
+  if (window.location.hash === '#coach') return <TrainerDashboard />;
 
   /* ── Trainer-Ansicht gate ── */
   const trainerHash = window.location.hash.match(/^#trainer\/(.+)$/)?.[1];
