@@ -31,8 +31,8 @@ const TE_TYPES = ['Team', 'S&C', 'Spiel', 'Aufwärmen', 'Indi', 'Schulsport', 'P
 type SimplePoint = {
   datum: string;
   taeglLoad: number;
-  acuteLoad: number;
-  chronicLoad: number;
+  acuteLoad: number | null;
+  chronicLoad: number | null;
   acwr?: number | null;
   projectedAcwr?: number | null;
   isProjected?: boolean;
@@ -70,8 +70,8 @@ function SimpleTooltip({ active, payload, label }: any) {
       </div>
       <div className="space-y-1 text-gray-300">
         {d.taeglLoad > 0 && <div>Tagesl.: <span className="text-white font-medium">{d.taeglLoad} AU</span>{proj && <span className="text-gray-500 ml-1">(gesch.)</span>}</div>}
-        <div>Acute (7d): <span className="text-white font-medium">{d.acuteLoad} AU</span></div>
-        <div>Chronic (28d): <span className="text-white font-medium">{d.chronicLoad} AU</span></div>
+        {d.acuteLoad != null && <div>Acute (7d): <span className="text-white font-medium">{d.acuteLoad} AU</span></div>}
+        {d.chronicLoad != null && <div>Chronic (28d): <span className="text-white font-medium">{d.chronicLoad} AU</span></div>}
         {acwr != null && (
           <div className="mt-2 pt-2 border-t border-gray-700">
             ACWR: <span style={{ color: zoneCol }} className="font-bold text-base">{acwr.toFixed(2)}</span>
@@ -89,8 +89,8 @@ type DetailPoint = {
   datum: string;
   Team: number; 'S&C': number; Spiel: number; Aufwärmen: number;
   Indi: number; Schulsport: number; Prävention: number;
-  chronicLoad: number;
-  acuteLoad: number;
+  chronicLoad: number | null;
+  acuteLoad: number | null;
   acwr: number | null;
   highThreshold: number;
   lowThreshold: number;
@@ -159,7 +159,13 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
   const lastHistorical = filtered[filtered.length - 1];
   const simpleData: SimplePoint[] = useMemo(() => [
     ...filtered.map(d => ({
-      ...d, datum: formatDatum(d.datum), projectedAcwr: undefined as number | undefined, isProjected: false,
+      ...d,
+      datum: formatDatum(d.datum),
+      // Gate: acute/chronic erst sichtbar ab Tag 8 (wie ACWR)
+      acuteLoad:   d.acwr !== null ? d.acuteLoad   : null,
+      chronicLoad: d.acwr !== null ? d.chronicLoad  : null,
+      projectedAcwr: undefined as number | undefined,
+      isProjected: false,
     })),
     ...(projectedData.length > 0 && lastHistorical ? [{
       ...lastHistorical, datum: formatDatum(lastHistorical.datum),
@@ -185,8 +191,9 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
         Indi:        day?.loads['Indi']        ?? 0,
         Schulsport:  day?.loads['Schulsport']  ?? 0,
         Prävention:  day?.loads['Prävention']  ?? 0,
-        chronicLoad:    pt.chronicLoad,
-        acuteLoad:      pt.acuteLoad,
+        // Gate: acute/chronic erst sichtbar wenn ACWR sinnvoll ist (ab Tag 8)
+        chronicLoad:    pt.acwr !== null ? pt.chronicLoad : null,
+        acuteLoad:      pt.acwr !== null ? pt.acuteLoad   : null,
         acwr:           pt.acwr,
         highThreshold:  1.3,
         lowThreshold:   0.8,
@@ -308,10 +315,14 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
                 maxBarSize={18} isAnimationActive={false} radius={[0, 0, 0, 0]} />
             ))}
 
+            {/* Acute rolling average (sky, left axis) */}
+            <Line yAxisId="left" type="monotone" dataKey="acuteLoad" name="Acute (7d)"
+              stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="3 2" dot={false}
+              isAnimationActive={false} legendType="plainline" connectNulls={false} />
             {/* Chronic rolling average (gray dashed, left axis) */}
             <Line yAxisId="left" type="monotone" dataKey="chronicLoad" name="Chronic (28d)"
               stroke="#6b7280" strokeWidth={1.5} strokeDasharray="5 3" dot={false}
-              isAnimationActive={false} legendType="plainline" />
+              isAnimationActive={false} legendType="plainline" connectNulls={false} />
 
             {/* Flat ACWR threshold lines — use Line with constant data so right axis is always active */}
             <Line yAxisId="right" type="monotone" dataKey="highThreshold" name="High 1.3"

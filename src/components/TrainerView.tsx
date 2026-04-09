@@ -4,7 +4,7 @@ type PlannedEntry = TrainerShareData['planned'];
 import { fetchLiveTrainerData } from '../lib/trainerShare';
 import type { ACWRDataPoint, Session, PlannedSession, TrainingUnit } from '../types/acwr';
 import { TE_EMOJI, TE_COLORS } from '../types/acwr';
-import { getACWRZoneLabel, projectFutureACWR, aggregateDailyLoads, calculateEWMA } from '../lib/acwrCalculations';
+import { getACWRZoneLabel, projectFutureACWR, aggregateDailyLoads, calculateACWR, calculateEWMA } from '../lib/acwrCalculations';
 import type { DayLoad } from '../types/acwr';
 import { ACWRChart } from './ACWRChart';
 import { ACWRForecast } from './ACWRForecast';
@@ -50,11 +50,16 @@ export function TrainerView({ data: staticData, token }: Props) {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const acwrData: ACWRDataPoint[] = useMemo(() =>
-    (data?.acwrHistory ?? []).map(p => ({
+  // Prefer sessions28-based calculation: has real taeglLoad per day → bars work in detail view.
+  // Fall back to pre-encoded acwrHistory only when sessions28 is empty (old share links).
+  const acwrData: ACWRDataPoint[] = useMemo(() => {
+    if (sessions28AsSessions.length > 0) {
+      return calculateACWR(sessions28AsSessions);
+    }
+    return (data?.acwrHistory ?? []).map(p => ({
       datum: p.d, taeglLoad: 0, acuteLoad: p.a, chronicLoad: p.c, acwr: p.v,
-    })),
-  [data]);
+    }));
+  }, [sessions28AsSessions, data]);
 
   const currentPoint = useMemo(() => {
     const active = [...(data?.acwrHistory ?? [])].reverse().find(p => p.v !== null);
