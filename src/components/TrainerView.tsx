@@ -50,17 +50,6 @@ export function TrainerView({ data: staticData, token }: Props) {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Prefer sessions28-based calculation: has real taeglLoad per day → bars work in detail view.
-  // Fall back to pre-encoded acwrHistory only when sessions28 is empty (old share links).
-  const acwrData: ACWRDataPoint[] = useMemo(() => {
-    if (sessions28AsSessions.length > 0) {
-      return calculateACWR(sessions28AsSessions);
-    }
-    return (data?.acwrHistory ?? []).map(p => ({
-      datum: p.d, taeglLoad: 0, acuteLoad: p.a, chronicLoad: p.c, acwr: p.v,
-    }));
-  }, [sessions28AsSessions, data]);
-
   const currentPoint = useMemo(() => {
     const active = [...(data?.acwrHistory ?? [])].reverse().find(p => p.v !== null);
     return active ?? null;
@@ -125,6 +114,17 @@ export function TrainerView({ data: staticData, token }: Props) {
   const trainerEwmaData = useMemo(() =>
     calculateEWMA(sessions28AsSessions),
   [sessions28AsSessions]);
+
+  // Prefer sessions28-based calculation: has real taeglLoad per day → bars work in detail view.
+  // Fall back to pre-encoded acwrHistory only when sessions28 is empty (old share links).
+  const acwrData: ACWRDataPoint[] = useMemo(() => {
+    if (sessions28AsSessions.length > 0) {
+      return calculateACWR(sessions28AsSessions);
+    }
+    return (data?.acwrHistory ?? []).map(p => ({
+      datum: p.d, taeglLoad: 0, acuteLoad: p.a, chronicLoad: p.c, acwr: p.v,
+    }));
+  }, [sessions28AsSessions, data]);
 
   function fmtDate(iso: string) {
     const d = new Date(iso + 'T00:00');
