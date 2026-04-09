@@ -275,6 +275,8 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
     const totalPoints  = chartData.length;
     // Thin x-axis labels: target ~7 visible ticks
     const xInterval    = totalPoints <= 14 ? 1 : Math.ceil(totalPoints / 7) - 1;
+    // Bar width: wider when fewer data points fill the same container
+    const dynamicMaxBar = totalPoints <= 20 ? 36 : totalPoints <= 44 ? 24 : 18;
     const margin       = opts.compact
       ? { top: 6, right: 40, left: -18, bottom: 18 }
       : { top: 10, right: 48, left: -10, bottom: 20 };
@@ -339,14 +341,14 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             <Bar key={te} yAxisId="left" dataKey={te} stackId="tl" name={te}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
               legendType={opts.legendMode === 'full' ? 'square' : 'none'}
-              maxBarSize={18} isAnimationActive={false} />
+              maxBarSize={dynamicMaxBar} isAnimationActive={false} />
           ))}
 
           {projectedData.length > 0 && TE_TYPES.map(te => (
             <Bar key={`${te}_p`} yAxisId="left" dataKey={`${te}_p`} stackId="tl" name={undefined}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
               fillOpacity={0.35} legendType="none"
-              maxBarSize={18} isAnimationActive={false} />
+              maxBarSize={dynamicMaxBar} isAnimationActive={false} />
           ))}
 
           {/* Core lines — always shown in legend when legendMode !== 'none' */}
