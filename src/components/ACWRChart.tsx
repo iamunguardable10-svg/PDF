@@ -3,7 +3,7 @@ import type { ACWRDataPoint, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
 import {
   Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, ResponsiveContainer, Legend,
+  ReferenceLine, ReferenceArea, ResponsiveContainer, Legend,
   ComposedChart, Bar,
 } from 'recharts';
 
@@ -182,8 +182,13 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
       projectedAcwr: lastHistorical.acwr ?? undefined, isProjected: false,
     }] : []),
     ...projectedData.map(d => ({
-      ...d, datum: formatDatum(d.datum), acwr: undefined as number | undefined,
-      projectedAcwr: d.acwr ?? undefined, isProjected: true,
+      ...d,
+      datum: formatDatum(d.datum),
+      acuteLoad:    d.acwr !== null ? d.acuteLoad   : null,
+      chronicLoad:  d.acwr !== null ? d.chronicLoad  : null,
+      acwr:         undefined as number | undefined,
+      projectedAcwr: d.acwr ?? undefined,
+      isProjected:  true,
     })),
   ], [filtered, projectedData, lastHistorical]);
 
@@ -211,6 +216,13 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
       };
     });
   }, [filtered, dailyLoads]);
+
+  // Aufbauphase: Tage im sichtbaren Bereich wo acwr noch null ist
+  const buildingRange = useMemo(() => {
+    const nullPoints = simpleData.filter(d => !d.isProjected && d.acwr == null && d.projectedAcwr == null);
+    if (nullPoints.length === 0) return null;
+    return { x1: nullPoints[0].datum, x2: nullPoints[nullPoints.length - 1].datum };
+  }, [simpleData]);
 
   const xAxisProps = {
     dataKey: 'datum',
@@ -280,6 +292,12 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
               <ReferenceLine yAxisId="left" x={todayFormatted} stroke="#6b7280" strokeWidth={1} strokeDasharray="4 4"
                 label={{ value: 'Heute', position: 'top', fill: '#9ca3af', fontSize: 10 }} />
             )}
+            {/* Aufbauphase — noch keine Aussagekraft */}
+            {buildingRange && (
+              <ReferenceArea yAxisId="left" x1={buildingRange.x1} x2={buildingRange.x2}
+                fill="#6b7280" fillOpacity={0.07}
+                label={{ value: 'Aufbauphase', position: 'insideTopLeft', fill: '#6b7280', fontSize: 10 }} />
+            )}
             {/* Chronic (28d) rolling average on right axis */}
             <Line yAxisId="right" type="monotone" dataKey="chronicLoad" name="Chronic (28d)"
               stroke="#6b7280" strokeWidth={1.5} strokeDasharray="5 3" dot={false}
@@ -318,6 +336,13 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
               wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
               formatter={(value) => <span style={{ color: '#9ca3af' }}>{value}</span>}
             />
+
+            {/* Aufbauphase — noch keine Aussagekraft */}
+            {buildingRange && (
+              <ReferenceArea yAxisId="left" x1={buildingRange.x1} x2={buildingRange.x2}
+                fill="#6b7280" fillOpacity={0.07}
+                label={{ value: 'Aufbauphase', position: 'insideTopLeft', fill: '#6b7280', fontSize: 10 }} />
+            )}
 
             {/* Stacked bars per TE type — matches Excel */}
             {TE_TYPES.map(te => (

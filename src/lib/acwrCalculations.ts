@@ -171,13 +171,15 @@ export function projectFutureACWR(
     const idx = extLoads.length - 1;
     const acute   = rollingAvg(extLoads, idx, 7);
     const chronic = rollingAvg(extLoads, idx, 28);
-    const acwr = (acute > 0 && chronic > 0) ? acute / chronic : null;
+    // Same gate as calculateACWR: both windows must diverge (idx >= 7)
+    const acwr = (idx >= 7 && acute > 0 && chronic > 0) ? acute / chronic : null;
     projected.push({
-      datum:       iso,
-      taeglLoad:   load,
-      acuteLoad:   Math.round(acute),
-      chronicLoad: Math.round(chronic),
-      acwr:        acwr !== null ? Math.round(acwr * 100) / 100 : null,
+      datum:        iso,
+      taeglLoad:    load,
+      acuteLoad:    Math.round(acute),
+      chronicLoad:  Math.round(chronic),
+      acwr:         acwr !== null ? Math.round(acwr * 100) / 100 : null,
+      chronicFull:  idx >= 27,
     });
   }
 
