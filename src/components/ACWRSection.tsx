@@ -272,21 +272,21 @@ export function ACWRSection({
 
       {/* ACWR Status */}
       <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📊</span>
-            <div>
-              <h2 className="text-lg font-semibold text-white">ACWR · {playerName}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-y-2 mb-5">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-2xl shrink-0">📊</span>
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-white truncate">ACWR · {playerName}</h2>
               <p className="text-sm text-gray-400">Acute:Chronic Workload Ratio</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             {/* Trainer-Link */}
             {sessions.length > 0 && (
               CLOUD_ENABLED && userId ? (
                 activeToken ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-green-400 flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-green-400 flex items-center gap-1 shrink-0">
                       <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse inline-block" />
                       Live-Link aktiv
                     </span>
