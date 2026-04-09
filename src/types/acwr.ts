@@ -69,7 +69,8 @@ export interface ACWRDataPoint {
   acuteLoad: number;
   chronicLoad: number;
   acwr: number | null;
-  chronicFull?: boolean; // true ab Tag 28 — volles 28d-Fenster
+  chronicFull?: boolean;    // true ab Tag 28 — volles 28d-Fenster
+  forecastBasis?: string;   // Basis der Lastschätzung für projizierte Punkte
 }
 
 export const ACWR_ZONES = {

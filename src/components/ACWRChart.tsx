@@ -54,6 +54,7 @@ type ChartPoint = {
   mid: number;
   // Meta
   chronicFull?: boolean;
+  forecastBasis?: string;
 };
 
 // ── Custom dots ───────────────────────────────────────────────────────────────
@@ -84,10 +85,13 @@ function ChartTooltip({ active, payload, label }: any) {
 
   return (
     <div className="bg-gray-900/95 border border-gray-700 rounded-xl p-3 text-sm shadow-xl min-w-[180px] backdrop-blur-sm">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="font-semibold text-white">{label}</span>
         {d.isProjected && (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-300 border border-violet-700/50">Projektion</span>
+          <span className="text-xs px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-300 border border-violet-700/50">Prognose</span>
+        )}
+        {d.forecastBasis && (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">{d.forecastBasis}</span>
         )}
       </div>
       <div className="space-y-1 text-gray-300">
@@ -206,10 +210,11 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
       acwr:        null,
       projectedAcwr: d.acwr ?? undefined,
       isProjected: true,
-      high:        1.3,
-      low:         0.8,
-      mid:         1.0,
-      chronicFull: d.chronicFull,
+      high:         1.3,
+      low:          0.8,
+      mid:          1.0,
+      chronicFull:  d.chronicFull,
+      forecastBasis: d.forecastBasis,
     }));
 
     return [...historical, ...projected];
