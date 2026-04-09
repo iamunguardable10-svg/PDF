@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { ACWRDataPoint, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
 import {
@@ -51,7 +51,7 @@ type ChartPoint = {
   acwr: number | null;
   projectedAcwr?: number | null;
   isProjected: boolean;
-  // Constant threshold lines (right axis — keeps axis active even without ACWR data)
+  // Constant threshold lines (right axis)
   high: number;
   low: number;
   mid: number;
@@ -83,7 +83,7 @@ function ChartTooltip({ active, payload, label }: any) {
   const acwr    = d?.acwr ?? d?.projectedAcwr ?? null;
   const zone    = acwr == null ? null : acwr < 0.8 ? 'Niedrig' : acwr <= 1.3 ? 'Optimal' : 'Hoch';
   const zoneCol = acwr == null ? '#9ca3af' : zoneColor(acwr);
-  const teEntries = TE_TYPES.filter(te => (d[te] ?? 0) > 0);
+  const teEntries  = TE_TYPES.filter(te => (d[te] ?? 0) > 0);
   const teEntriesP = d.isProjected ? TE_TYPES.filter(te => ((d as unknown as Record<string, number>)[`${te}_p`] ?? 0) > 0) : [];
   const totalTL = teEntries.reduce((s, te) => s + (d[te] ?? 0), 0)
                 + teEntriesP.reduce((s, te) => s + ((d as unknown as Record<string, number>)[`${te}_p`] ?? 0), 0);
@@ -100,8 +100,6 @@ function ChartTooltip({ active, payload, label }: any) {
         )}
       </div>
       <div className="space-y-1 text-gray-300">
-
-        {/* TE breakdown */}
         {teEntries.map(te => (
           <div key={te} className="flex justify-between gap-4">
             <span style={{ color: TE_COLORS[te as keyof typeof TE_COLORS] }}>{te}</span>
@@ -120,8 +118,6 @@ function ChartTooltip({ active, payload, label }: any) {
             <span className="text-orange-400 font-bold">{totalTL} AU{d.isProjected && <span className="text-gray-500 ml-1 font-normal">(gesch.)</span>}</span>
           </div>
         )}
-
-        {/* Rolling averages */}
         {(d.acuteLoad != null || d.chronicLoad != null) && (
           <div className="border-t border-gray-700 pt-1 mt-1 space-y-0.5">
             {d.acuteLoad != null && (
@@ -138,8 +134,6 @@ function ChartTooltip({ active, payload, label }: any) {
             )}
           </div>
         )}
-
-        {/* ACWR */}
         {acwr != null && (
           <div className="border-t border-gray-700 pt-1.5 mt-1 space-y-1">
             <div className="flex items-center justify-between gap-4">
@@ -153,7 +147,6 @@ function ChartTooltip({ active, payload, label }: any) {
             )}
           </div>
         )}
-
         {acwr == null && !d.isProjected && (
           <div className="border-t border-gray-700 pt-1 mt-1 text-xs text-gray-600">
             Noch keine Aussagekraft — Aufbauphase
@@ -166,18 +159,41 @@ function ChartTooltip({ active, payload, label }: any) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+type Range = 14 | 30 | 60;
+
 export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData = [] }: Props) {
-  const [method, setMethod] = useState<'rolling' | 'ewma'>('rolling');
+  const [method,   setMethod]   = useState<'rolling' | 'ewma'>('rolling');
+  const [range,    setRange]    = useState<Range>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 14 : 60
+  );
+  const [expanded, setExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640
+  );
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  // Lock body scroll when expanded
+  useEffect(() => {
+    if (expanded) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [expanded]);
 
   const todayISO       = localISO(new Date());
   const todayFormatted = formatDatum(todayISO);
 
-  // Last 60 days
   const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - 60);
+  cutoffDate.setDate(cutoffDate.getDate() - range);
   const cutoff = localISO(cutoffDate);
 
-  // Active dataset (rolling or EWMA) — single source of truth for all values
   const activeData = method === 'ewma' && ewmaData.length > 0 ? ewmaData : data;
   const filtered   = useMemo(() => activeData.filter(d => d.datum >= cutoff), [activeData, cutoff]);
 
@@ -187,56 +203,49 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
     const zeroPlan = { Team_p: 0, 'S&C_p': 0, Spiel_p: 0, Aufwärmen_p: 0, Indi_p: 0, Schulsport_p: 0, Prävention_p: 0 };
 
     const historical: ChartPoint[] = filtered.map((pt, idx) => {
-      const day = loadMap.get(pt.datum);
+      const day    = loadMap.get(pt.datum);
       const isLast = idx === filtered.length - 1;
       return {
-        datum:       formatDatum(pt.datum),
-        Team:        day?.loads['Team']       ?? 0,
-        'S&C':       day?.loads['S&C']        ?? 0,
-        Spiel:       day?.loads['Spiel']       ?? 0,
-        Aufwärmen:   day?.loads['Aufwärmen']   ?? 0,
-        Indi:        day?.loads['Indi']        ?? 0,
-        Schulsport:  day?.loads['Schulsport']  ?? 0,
-        Prävention:  day?.loads['Prävention']  ?? 0,
+        datum:         formatDatum(pt.datum),
+        Team:          day?.loads['Team']       ?? 0,
+        'S&C':         day?.loads['S&C']        ?? 0,
+        Spiel:         day?.loads['Spiel']       ?? 0,
+        Aufwärmen:     day?.loads['Aufwärmen']   ?? 0,
+        Indi:          day?.loads['Indi']        ?? 0,
+        Schulsport:    day?.loads['Schulsport']  ?? 0,
+        Prävention:    day?.loads['Prävention']  ?? 0,
         ...zeroPlan,
-        taeglLoad:   pt.taeglLoad,
-        // Gate: acute/chronic nur wenn ACWR valide ist (ab Tag 8)
-        acuteLoad:   pt.acwr !== null ? pt.acuteLoad  : null,
-        chronicLoad: pt.acwr !== null ? pt.chronicLoad : null,
-        acwr:        pt.acwr,
-        // Bridge: letzter historischer Punkt startet die Projektions-Linie
+        taeglLoad:     pt.taeglLoad,
+        acuteLoad:     pt.acwr !== null ? pt.acuteLoad  : null,
+        chronicLoad:   pt.acwr !== null ? pt.chronicLoad : null,
+        acwr:          pt.acwr,
         projectedAcwr: (isLast && projectedData.length > 0) ? (pt.acwr ?? undefined) : undefined,
-        isProjected: false,
-        high:        1.3,
-        low:         0.8,
-        mid:         1.0,
-        chronicFull: pt.chronicFull,
+        isProjected:   false,
+        high: 1.3, low: 0.8, mid: 1.0,
+        chronicFull:   pt.chronicFull,
       };
     });
 
     const projected: ChartPoint[] = projectedData.map(d => {
-      // plannedTeLoads is pre-computed in projectFutureACWR using medianRpeByTE from history
       const tl = d.plannedTeLoads ?? {};
       return {
-        datum:       formatDatum(d.datum),
+        datum:         formatDatum(d.datum),
         Team: 0, 'S&C': 0, Spiel: 0, Aufwärmen: 0, Indi: 0, Schulsport: 0, Prävention: 0,
-        Team_p:       tl['Team']       ?? 0,
-        'S&C_p':      tl['S&C']        ?? 0,
-        Spiel_p:      tl['Spiel']      ?? 0,
-        Aufwärmen_p:  tl['Aufwärmen']  ?? 0,
-        Indi_p:       tl['Indi']       ?? 0,
-        Schulsport_p: tl['Schulsport'] ?? 0,
-        Prävention_p: tl['Prävention'] ?? 0,
-        taeglLoad:   d.taeglLoad,
-        acuteLoad:   d.acwr !== null ? d.acuteLoad  : null,
-        chronicLoad: d.acwr !== null ? d.chronicLoad : null,
-        acwr:        null,
+        Team_p:        tl['Team']       ?? 0,
+        'S&C_p':       tl['S&C']        ?? 0,
+        Spiel_p:       tl['Spiel']      ?? 0,
+        Aufwärmen_p:   tl['Aufwärmen']  ?? 0,
+        Indi_p:        tl['Indi']       ?? 0,
+        Schulsport_p:  tl['Schulsport'] ?? 0,
+        Prävention_p:  tl['Prävention'] ?? 0,
+        taeglLoad:     d.taeglLoad,
+        acuteLoad:     d.acwr !== null ? d.acuteLoad  : null,
+        chronicLoad:   d.acwr !== null ? d.chronicLoad : null,
+        acwr:          null,
         projectedAcwr: d.acwr ?? undefined,
-        isProjected: true,
-        high:         1.3,
-        low:          0.8,
-        mid:          1.0,
-        chronicFull:  d.chronicFull,
+        isProjected:   true,
+        high: 1.3, low: 0.8, mid: 1.0,
+        chronicFull:   d.chronicFull,
         forecastBasis: d.forecastBasis,
       };
     });
@@ -244,77 +253,64 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
     return [...historical, ...projected];
   }, [filtered, projectedData, dailyLoads]);
 
-  // Aufbauphase: Bereich ohne ACWR-Aussagekraft
   const buildingRange = useMemo(() => {
     const nullPts = chartData.filter(d => !d.isProjected && d.acwr == null);
     if (nullPts.length === 0) return null;
     return { x1: nullPts[0].datum, x2: nullPts[nullPts.length - 1].datum };
   }, [chartData]);
 
-  const xAxisProps = {
-    dataKey:     'datum',
-    tick:        { fill: '#6b7280', fontSize: 10 },
-    interval:    'preserveStartEnd' as const,
-    angle:       -40,
-    textAnchor:  'end' as const,
-    height:      45,
-  };
+  // ── Shared chart renderer ─────────────────────────────────────────────────
 
-  return (
-    <div className="space-y-2">
+  const renderChart = useCallback((height: number | string, opts: { showLegend: boolean; compact: boolean }) => {
+    const totalPoints  = chartData.length;
+    // Thin x-axis labels: target ~7 visible ticks
+    const xInterval    = totalPoints <= 14 ? 1 : Math.ceil(totalPoints / 7) - 1;
+    const margin       = opts.compact
+      ? { top: 6, right: 40, left: -18, bottom: 18 }
+      : { top: 10, right: 48, left: -10, bottom: 20 };
 
-      {/* Method toggle */}
-      {ewmaData.length > 0 && (
-        <div className="flex gap-1">
-          {(['rolling', 'ewma'] as const).map(m => (
-            <button key={m} onClick={() => setMethod(m)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                method === m ? 'bg-sky-700 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'
-              }`}>
-              {m === 'rolling' ? 'Rolling Avg' : 'EWMA'}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Unified chart */}
-      <ResponsiveContainer width="100%" height={340}>
-        <ComposedChart data={chartData} margin={{ top: 10, right: 48, left: -10, bottom: 20 }}>
+    return (
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart data={chartData} margin={margin}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-          <XAxis {...xAxisProps} />
 
-          {/* Left axis — AU (bars + acute + chronic) */}
-          <YAxis yAxisId="left" tick={{ fill: '#6b7280', fontSize: 10 }}
+          <XAxis dataKey="datum"
+            tick={{ fill: '#6b7280', fontSize: opts.compact ? 9 : 10 }}
+            interval={xInterval}
+            angle={-35} textAnchor="end"
+            height={opts.compact ? 36 : 45} />
+
+          <YAxis yAxisId="left" tick={{ fill: '#6b7280', fontSize: opts.compact ? 9 : 10 }}
             tickLine={false} axisLine={false}
-            label={{ value: 'AU', angle: -90, position: 'insideLeft', fill: '#4b5563', fontSize: 10, dy: 20 }} />
+            label={opts.compact ? undefined : { value: 'AU', angle: -90, position: 'insideLeft', fill: '#4b5563', fontSize: 10, dy: 20 }} />
 
-          {/* Right axis — ACWR ratio */}
           <YAxis yAxisId="right" orientation="right" domain={[0, 2.5]}
             ticks={[0.8, 1.0, 1.3, 2.0]}
-            tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} axisLine={false}
+            tick={{ fill: '#6b7280', fontSize: opts.compact ? 9 : 10 }}
+            tickLine={false} axisLine={false}
             tickFormatter={v => v.toFixed(1)} />
 
           <Tooltip content={<ChartTooltip />} />
-          <Legend
-            wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
-            formatter={(value) => <span style={{ color: '#9ca3af' }}>{value}</span>}
-          />
 
-          {/* Aufbauphase */}
+          {opts.showLegend && (
+            <Legend
+              wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
+              formatter={(value) => <span style={{ color: '#9ca3af' }}>{value}</span>}
+            />
+          )}
+
           {buildingRange && (
             <ReferenceArea yAxisId="right" x1={buildingRange.x1} x2={buildingRange.x2}
               fill="#6b7280" fillOpacity={0.07}
-              label={{ value: 'Aufbauphase', position: 'insideTopLeft', fill: '#6b7280', fontSize: 10 }} />
+              label={{ value: 'Aufbauphase', position: 'insideTopLeft', fill: '#6b7280', fontSize: 9 }} />
           )}
 
-          {/* Heute-Linie bei Projektion */}
           {projectedData.length > 0 && (
             <ReferenceLine yAxisId="right" x={todayFormatted} stroke="#6b7280"
               strokeWidth={1} strokeDasharray="4 4"
-              label={{ value: 'Heute', position: 'top', fill: '#9ca3af', fontSize: 10 }} />
+              label={{ value: 'Heute', position: 'top', fill: '#9ca3af', fontSize: 9 }} />
           )}
 
-          {/* ACWR-Schwellenwerte — als Line damit rechte Achse immer aktiv ist */}
           <Line yAxisId="right" dataKey="high" name="Risiko 1.3"
             stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.7}
             dot={false} legendType="plainline" isAnimationActive={false} connectNulls />
@@ -325,47 +321,119 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
             stroke="#6b7280" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="2 4"
             dot={false} legendType="none" isAnimationActive={false} connectNulls />
 
-          {/* TE-Balken historisch (gestapelt, linke Achse) */}
           {TE_TYPES.map(te => (
             <Bar key={te} yAxisId="left" dataKey={te} stackId="tl" name={te}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
-              maxBarSize={18} isAnimationActive={false} />
+              maxBarSize={opts.compact ? 14 : 18} isAnimationActive={false} />
           ))}
 
-          {/* TE-Balken geplant (Projektion, niedrige Opacity) */}
           {projectedData.length > 0 && TE_TYPES.map(te => (
             <Bar key={`${te}_p`} yAxisId="left" dataKey={`${te}_p`} stackId="tl" name={undefined}
               fill={TE_COLORS[te as keyof typeof TE_COLORS]}
               fillOpacity={0.35} legendType="none"
-              maxBarSize={18} isAnimationActive={false} />
+              maxBarSize={opts.compact ? 14 : 18} isAnimationActive={false} />
           ))}
 
-          {/* Acute (7d) — linke Achse */}
           <Line yAxisId="left" type="monotone" dataKey="acuteLoad" name="Acute 7d"
             stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="3 2"
             dot={false} isAnimationActive={false} legendType="plainline" connectNulls={false} />
 
-          {/* Chronic (28d) — linke Achse */}
           <Line yAxisId="left" type="monotone" dataKey="chronicLoad" name="Chronic 28d"
             stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 3"
             dot={false} isAnimationActive={false} legendType="plainline" connectNulls={false} />
 
-          {/* ACWR historisch — rechte Achse */}
           <Line yAxisId="right" type="monotone" dataKey="acwr" name="ACWR"
             stroke="#a78bfa" strokeWidth={2.5}
             dot={<ACWRDot />} connectNulls={false} isAnimationActive={false}
             activeDot={{ r: 6, fill: '#a78bfa' }} />
 
-          {/* ACWR Projektion — rechte Achse */}
           {projectedData.length > 0 && (
             <Line yAxisId="right" type="monotone" dataKey="projectedAcwr" name="Projektion"
               stroke="#a78bfa" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.55}
               dot={<ProjectedDot />} connectNulls={false} isAnimationActive={false}
               activeDot={{ r: 5, fill: '#a78bfa', fillOpacity: 0.5 }} />
           )}
-
         </ComposedChart>
       </ResponsiveContainer>
+    );
+  }, [chartData, buildingRange, projectedData, todayFormatted]);
+
+  // ── Controls ──────────────────────────────────────────────────────────────
+
+  const controls = (
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex gap-1 flex-wrap">
+        {/* Method toggle */}
+        {ewmaData.length > 0 && (['rolling', 'ewma'] as const).map(m => (
+          <button key={m} onClick={() => setMethod(m)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+              method === m ? 'bg-sky-700 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'
+            }`}>
+            {m === 'rolling' ? 'Rolling Avg' : 'EWMA'}
+          </button>
+        ))}
+
+        {/* Range toggle */}
+        {([14, 30, 60] as Range[]).map(r => (
+          <button key={r} onClick={() => setRange(r)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+              range === r ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'
+            }`}>
+            {r}d
+          </button>
+        ))}
+      </div>
+
+      {/* Expand button */}
+      <button
+        onClick={() => setExpanded(true)}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-800 text-gray-400 hover:text-white transition-colors"
+        title="Vollbild"
+      >
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+          <path d="M1.5 1h4v1.5h-2.5v2.5h-1.5v-4zm9 0h4v4h-1.5v-2.5h-2.5v-1.5zm-9 9h1.5v2.5h2.5v1.5h-4v-4zm10.5 2.5v-2.5h1.5v4h-4v-1.5h2.5z"/>
+        </svg>
+        <span className="hidden sm:inline">Vollbild</span>
+      </button>
     </div>
+  );
+
+  const compactHeight = isMobile ? 240 : 340;
+
+  return (
+    <>
+      {/* ── Compact view ── */}
+      <div className="space-y-2">
+        {controls}
+        {renderChart(compactHeight, { showLegend: !isMobile, compact: isMobile })}
+        {isMobile && (
+          <p className="text-center text-xs text-gray-600">Tippe auf einen Balken für Details · ⛶ für Vollbild</p>
+        )}
+      </div>
+
+      {/* ── Fullscreen modal ── */}
+      {expanded && (
+        <div className="fixed inset-0 z-50 bg-[#0a0b0f] flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
+            <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+              <span className="text-sm font-semibold text-white shrink-0">ACWR Verlauf</span>
+              {controls}
+            </div>
+            <button
+              onClick={() => setExpanded(false)}
+              className="ml-3 w-8 h-8 flex items-center justify-center rounded-xl bg-gray-800 text-gray-400 hover:text-white shrink-0 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Chart — fills remaining space */}
+          <div className="flex-1 p-3 min-h-0">
+            {renderChart('100%', { showLegend: true, compact: false })}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
