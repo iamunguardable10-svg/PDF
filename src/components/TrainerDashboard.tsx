@@ -1405,7 +1405,7 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
             )}
             <button onClick={() => setShowAddModal(true)}
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors">
-              + Manuell
+              + Athlet
             </button>
             <button onClick={() => { for (const a of roster.athletes) refreshAthlete(a); }}
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors"
