@@ -589,60 +589,49 @@ function AlertPanel({ alerts }: { alerts: CoachAlert[] }) {
   );
 }
 
-// ── Add Athlete Dropdown ──────────────────────────────────────────────────────
+// ── Add Athlete Popup ─────────────────────────────────────────────────────────
 
-function AddAthleteDropdown({ cloudEnabled, onInvite, onManual }: {
+function AddAthletePopup({ cloudEnabled, onInvite, onManual, onClose }: {
   cloudEnabled: boolean;
   onInvite: () => void;
   onManual: () => void;
+  onClose: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-medium flex items-center gap-1"
-      >
-        + Athlet <span className={`transition-transform text-[10px] ${open ? 'rotate-180' : ''}`}>▼</span>
-      </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+      onClick={onClose}>
+      <div className="bg-gray-900 border border-gray-700 rounded-3xl p-5 w-full max-w-sm space-y-3"
+        onClick={e => e.stopPropagation()}>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-52 bg-gray-900 border border-gray-700 rounded-2xl shadow-xl z-20 overflow-hidden">
-          {cloudEnabled && (
-            <button
-              onClick={() => { setOpen(false); onInvite(); }}
-              className="w-full flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left border-b border-gray-800"
-            >
-              <span className="text-violet-400 mt-0.5">🔗</span>
-              <div>
-                <div className="text-white text-xs font-medium">Einladen</div>
-                <div className="text-gray-500 text-xs">Link generieren, Athlet bestätigt</div>
-              </div>
-            </button>
-          )}
+        <div className="flex items-center justify-between">
+          <h3 className="text-white font-bold text-base">Athlet hinzufügen</h3>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-400 text-lg leading-none">✕</button>
+        </div>
+
+        {cloudEnabled && (
           <button
-            onClick={() => { setOpen(false); onManual(); }}
-            className="w-full flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
+            onClick={() => { onClose(); onInvite(); }}
+            className="w-full flex items-center gap-4 px-4 py-4 bg-violet-950/40 hover:bg-violet-950/70 border border-violet-800/40 hover:border-violet-700 rounded-2xl transition-all text-left"
           >
-            <span className="text-gray-400 mt-0.5">📋</span>
+            <div className="w-10 h-10 bg-violet-800/50 rounded-xl flex items-center justify-center text-lg shrink-0">🔗</div>
             <div>
-              <div className="text-white text-xs font-medium">Link einfügen</div>
-              <div className="text-gray-500 text-xs">Trainer-Link manuell eingeben</div>
+              <div className="text-white text-sm font-semibold">Einladen</div>
+              <div className="text-gray-400 text-xs mt-0.5">Link generieren — Athlet bestätigt mit einem Tap</div>
             </div>
           </button>
-        </div>
-      )}
+        )}
+
+        <button
+          onClick={() => { onClose(); onManual(); }}
+          className="w-full flex items-center gap-4 px-4 py-4 bg-gray-800/40 hover:bg-gray-800/70 border border-gray-700/40 hover:border-gray-600 rounded-2xl transition-all text-left"
+        >
+          <div className="w-10 h-10 bg-gray-700/50 rounded-xl flex items-center justify-center text-lg shrink-0">📋</div>
+          <div>
+            <div className="text-white text-sm font-semibold">Link einfügen</div>
+            <div className="text-gray-400 text-xs mt-0.5">Trainer-Link des Athleten manuell eingeben</div>
+          </div>
+        </button>
+      </div>
     </div>
   );
 }
@@ -1273,6 +1262,7 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
   const [tab, setTab] = useState<Tab>('kader');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortMode, setSortMode] = useState<SortMode>('risk');
+  const [showAddAthletePopup, setShowAddAthletePopup] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -1455,11 +1445,12 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors">
               + Gruppe
             </button>
-            <AddAthleteDropdown
-              cloudEnabled={CLOUD_ENABLED}
-              onInvite={() => setShowInviteModal(true)}
-              onManual={() => setShowAddModal(true)}
-            />
+            <button
+              onClick={() => setShowAddAthletePopup(true)}
+              className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-medium"
+            >
+              + Athlet
+            </button>
             <button onClick={() => { for (const a of roster.athletes) refreshAthlete(a); }}
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors"
               title="Alle Daten aktualisieren">
@@ -1555,6 +1546,14 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
       {/* Fixed alert panel (bottom) */}
       <AlertPanel alerts={alerts} />
 
+      {showAddAthletePopup && (
+        <AddAthletePopup
+          cloudEnabled={CLOUD_ENABLED}
+          onInvite={() => setShowInviteModal(true)}
+          onManual={() => setShowAddModal(true)}
+          onClose={() => setShowAddAthletePopup(false)}
+        />
+      )}
       {showInviteModal && (
         <InviteModal
           trainerId={user.id}
