@@ -589,6 +589,64 @@ function AlertPanel({ alerts }: { alerts: CoachAlert[] }) {
   );
 }
 
+// ── Add Athlete Dropdown ──────────────────────────────────────────────────────
+
+function AddAthleteDropdown({ cloudEnabled, onInvite, onManual }: {
+  cloudEnabled: boolean;
+  onInvite: () => void;
+  onManual: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-medium flex items-center gap-1"
+      >
+        + Athlet <span className={`transition-transform text-[10px] ${open ? 'rotate-180' : ''}`}>▼</span>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 w-52 bg-gray-900 border border-gray-700 rounded-2xl shadow-xl z-20 overflow-hidden">
+          {cloudEnabled && (
+            <button
+              onClick={() => { setOpen(false); onInvite(); }}
+              className="w-full flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left border-b border-gray-800"
+            >
+              <span className="text-violet-400 mt-0.5">🔗</span>
+              <div>
+                <div className="text-white text-xs font-medium">Einladen</div>
+                <div className="text-gray-500 text-xs">Link generieren, Athlet bestätigt</div>
+              </div>
+            </button>
+          )}
+          <button
+            onClick={() => { setOpen(false); onManual(); }}
+            className="w-full flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
+          >
+            <span className="text-gray-400 mt-0.5">📋</span>
+            <div>
+              <div className="text-white text-xs font-medium">Link einfügen</div>
+              <div className="text-gray-500 text-xs">Trainer-Link manuell eingeben</div>
+            </div>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Invite Modal ──────────────────────────────────────────────────────────────
 
 interface InviteModalProps {
@@ -1397,16 +1455,11 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors">
               + Gruppe
             </button>
-            {CLOUD_ENABLED && (
-              <button onClick={() => setShowInviteModal(true)}
-                className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-medium">
-                Einladen
-              </button>
-            )}
-            <button onClick={() => setShowAddModal(true)}
-              className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors">
-              + Athlet
-            </button>
+            <AddAthleteDropdown
+              cloudEnabled={CLOUD_ENABLED}
+              onInvite={() => setShowInviteModal(true)}
+              onManual={() => setShowAddModal(true)}
+            />
             <button onClick={() => { for (const a of roster.athletes) refreshAthlete(a); }}
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors"
               title="Alle Daten aktualisieren">
