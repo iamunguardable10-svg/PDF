@@ -348,7 +348,7 @@ function App() {
 
   /* ── Coach Dashboard gate ── */
   if (currentHash === '#coach') {
-    if (loggedInUser && !isGuest) return <TrainerDashboard />;
+    if (loggedInUser && !isGuest) return <TrainerDashboard user={loggedInUser} trainerName={profile.name || loggedInUser.email || 'Trainer'} />;
     setCurrentHash('');
     window.location.hash = '';
   }

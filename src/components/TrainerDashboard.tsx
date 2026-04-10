@@ -7,7 +7,9 @@ import {
   generateAlerts, sortStatuses, groupColor, GROUP_COLORS,
   type SortMode, type CoachAlert,
 } from '../lib/trainerRoster';
-import { fetchLiveTrainerData } from '../lib/trainerShare';
+import { fetchLiveTrainerData, createTrainerInvite, listAcceptedInvites, listPendingInvites, deleteInvite } from '../lib/trainerShare';
+import { CLOUD_ENABLED } from '../lib/supabase';
+import type { User } from '@supabase/supabase-js';
 import { TrainerView } from './TrainerView';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -587,6 +589,185 @@ function AlertPanel({ alerts }: { alerts: CoachAlert[] }) {
   );
 }
 
+// ── Invite Modal ──────────────────────────────────────────────────────────────
+
+interface InviteModalProps {
+  trainerId: string;
+  trainerName: string;
+  onClose: () => void;
+}
+
+function InviteModal({ trainerId, trainerName, onClose }: InviteModalProps) {
+  const [step, setStep] = useState<'idle' | 'generating' | 'done' | 'error'>('idle');
+  const [link, setLink] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const generate = async () => {
+    setStep('generating');
+    const code = await createTrainerInvite(trainerId, trainerName);
+    if (!code) { setStep('error'); return; }
+    const url = `${window.location.origin}${window.location.pathname}#invite/${code}`;
+    setLink(url);
+    setStep('done');
+  };
+
+  const copy = () => {
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-3xl p-6 w-full max-w-md space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-white font-bold text-base">Athleten einladen</h3>
+            <p className="text-gray-500 text-xs mt-0.5">
+              Generiere einen Link und schick ihn dem Athleten — er klickt drauf und bestätigt mit einem Tap.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-400 text-lg leading-none shrink-0">✕</button>
+        </div>
+
+        {step === 'idle' && (
+          <button onClick={generate}
+            className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors">
+            Link generieren
+          </button>
+        )}
+
+        {step === 'generating' && (
+          <div className="flex items-center justify-center gap-2 py-3 text-gray-400 text-sm">
+            <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            Wird erstellt…
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div className="space-y-3">
+            <div className="bg-gray-800/60 border border-gray-700 rounded-xl px-3 py-2.5 flex items-center gap-2">
+              <span className="text-xs text-gray-400 flex-1 truncate">{link}</span>
+              <button onClick={copy}
+                className={`shrink-0 text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
+                  copied ? 'bg-green-800/60 text-green-400' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}>
+                {copied ? '✓ Kopiert' : 'Kopieren'}
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              {navigator.share && (
+                <button
+                  onClick={() => navigator.share({ title: 'Trainer-Einladung', url: link })}
+                  className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors"
+                >
+                  Teilen
+                </button>
+              )}
+              <button
+                onClick={() => { setStep('idle'); setLink(''); }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 text-sm hover:bg-gray-800 transition-colors"
+              >
+                Neuer Link
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600 text-center">Link ist 7 Tage gültig · einmalig verwendbar</p>
+          </div>
+        )}
+
+        {step === 'error' && (
+          <div className="space-y-3">
+            <p className="text-red-400 text-xs">Fehler beim Erstellen. Ist die Supabase-Migration ausgeführt?</p>
+            <button onClick={() => setStep('idle')}
+              className="w-full py-2.5 rounded-xl border border-gray-700 text-gray-400 text-sm hover:bg-gray-800 transition-colors">
+              Erneut versuchen
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Pending Invites ───────────────────────────────────────────────────────────
+
+interface PendingInvitesProps {
+  trainerId: string;
+  onNewAthlete: (token: string, name: string) => void;
+}
+
+function PendingInvites({ trainerId, onNewAthlete }: PendingInvitesProps) {
+  const [pending, setPending] = useState<{ id: string; createdAt: string; expiresAt: string }[]>([]);
+  const [open, setOpen] = useState(false);
+
+  const refresh = useCallback(async () => {
+    // Check for newly accepted invites and pull them in
+    const accepted = await listAcceptedInvites(trainerId);
+    for (const inv of accepted) {
+      onNewAthlete(inv.athleteToken, inv.athleteName);
+      await deleteInvite(inv.id);
+    }
+    const pend = await listPendingInvites(trainerId);
+    setPending(pend);
+  }, [trainerId, onNewAthlete]);
+
+  useEffect(() => {
+    if (!CLOUD_ENABLED) return;
+    refresh();
+    const interval = setInterval(refresh, 15000); // poll every 15s
+    return () => clearInterval(interval);
+  }, [refresh]);
+
+  const revoke = async (id: string) => {
+    await deleteInvite(id);
+    setPending(p => p.filter(i => i.id !== id));
+  };
+
+  if (pending.length === 0) return null;
+
+  const fmtExpiry = (iso: string) => {
+    const d = new Date(iso);
+    const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
+    return days <= 0 ? 'abgelaufen' : `noch ${days}d`;
+  };
+
+  return (
+    <div className="border border-amber-800/30 bg-amber-950/10 rounded-2xl overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-amber-400 text-xs">⏳</span>
+          <span className="text-amber-300 text-sm font-medium">{pending.length} offene Einladung{pending.length !== 1 ? 'en' : ''}</span>
+          <span className="text-gray-600 text-xs">— warten auf Bestätigung</span>
+        </div>
+        <span className={`text-amber-700 text-xs transition-transform shrink-0 ${open ? 'rotate-180' : ''}`}>▼</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-amber-800/20">
+          {pending.map(inv => (
+            <div key={inv.id} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-800/40 last:border-0">
+              <div className="min-w-0">
+                <div className="text-xs text-gray-400 font-mono truncate">{inv.id}</div>
+                <div className="text-xs text-gray-600">{fmtExpiry(inv.expiresAt)}</div>
+              </div>
+              <button onClick={() => revoke(inv.id)}
+                className="text-xs text-red-700 hover:text-red-500 transition-colors shrink-0">
+                Widerrufen
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Kader Tab ────────────────────────────────────────────────────────────────
 
 interface KaderTabProps {
@@ -1021,7 +1202,12 @@ function buildMockRoster(): {
 
 // ── Main TrainerDashboard ─────────────────────────────────────────────────────
 
-export function TrainerDashboard() {
+interface TrainerDashboardProps {
+  user: User;
+  trainerName: string;
+}
+
+export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
   const [roster, setRoster] = useState(() => loadRoster());
   const [statuses, setStatuses] = useState<Map<string, AthleteStatus>>(new Map());
   const [histories, setHistories] = useState<Map<string, { d: string; v: number | null }[]>>(new Map());
@@ -1031,6 +1217,7 @@ export function TrainerDashboard() {
   const [sortMode, setSortMode] = useState<SortMode>('risk');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [openAthleteToken, setOpenAthleteToken] = useState<string | null>(null);
   const [isMockLoaded, setIsMockLoaded] = useState(false);
   const mockRef = useRef(false);
@@ -1210,9 +1397,15 @@ export function TrainerDashboard() {
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors">
               + Gruppe
             </button>
+            {CLOUD_ENABLED && (
+              <button onClick={() => setShowInviteModal(true)}
+                className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-medium">
+                Einladen
+              </button>
+            )}
             <button onClick={() => setShowAddModal(true)}
-              className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-medium">
-              + Athlet
+              className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors">
+              + Manuell
             </button>
             <button onClick={() => { for (const a of roster.athletes) refreshAthlete(a); }}
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors"
@@ -1230,6 +1423,28 @@ export function TrainerDashboard() {
             </button>
           </div>
         </div>
+
+        {/* Pending invites (polls every 15s, auto-imports accepted) */}
+        {CLOUD_ENABLED && !isMockLoaded && (
+          <PendingInvites
+            trainerId={user.id}
+            onNewAthlete={async (token, name) => {
+              // Check not already in roster
+              if (roster.athletes.some(a => a.token === token)) return;
+              const data = await fetchLiveTrainerData(token);
+              const athlete: ManagedAthlete = {
+                id:       crypto.randomUUID(),
+                name:     data?.athleteName || name,
+                sport:    data?.sport || '',
+                token,
+                groupIds: [],
+                addedAt:  new Date().toISOString().split('T')[0],
+              };
+              setRoster(r => ({ ...r, athletes: [...r.athletes, athlete] }));
+              refreshAthlete(athlete);
+            }}
+          />
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-2xl p-1">
@@ -1287,6 +1502,13 @@ export function TrainerDashboard() {
       {/* Fixed alert panel (bottom) */}
       <AlertPanel alerts={alerts} />
 
+      {showInviteModal && (
+        <InviteModal
+          trainerId={user.id}
+          trainerName={trainerName}
+          onClose={() => setShowInviteModal(false)}
+        />
+      )}
       {showAddModal && (
         <AddAthleteModal
           groups={roster.groups}
