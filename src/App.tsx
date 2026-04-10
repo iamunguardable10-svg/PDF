@@ -16,6 +16,7 @@ import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { decodeShareData } from './lib/trainerShare';
 import { TrainerView } from './components/TrainerView';
 import { TrainerDashboard } from './components/TrainerDashboard';
+import { InviteAccept } from './components/InviteAccept';
 import { loadProfile, saveProfile } from './lib/profileStorage';
 import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
 import { loadSessions, saveSessions, loadPlannedSessions, savePlannedSessions } from './lib/trainingStorage';
@@ -38,6 +39,7 @@ import type { User } from '@supabase/supabase-js';
 type Tab = 'dashboard' | 'tagebuch' | 'acwr';
 
 function App() {
+  const [currentHash, setCurrentHash] = useState(() => window.location.hash);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [showSettings, setShowSettings] = useState(false);
 
@@ -129,6 +131,13 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Hash change tracking ───────────────────────────────────────────────────
+  useEffect(() => {
+    const onHashChange = () => setCurrentHash(window.location.hash);
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
   // ── Load cloud data after login ────────────────────────────────────────────
@@ -276,7 +285,7 @@ function App() {
   };
 
   /* ── Trainer-Ansicht gate ── */
-  const trainerHash = window.location.hash.match(/^#trainer\/(.+)$/)?.[1];
+  const trainerHash = currentHash.match(/^#trainer\/(.+)$/)?.[1];
   if (trainerHash) {
     if (isLiveToken(trainerHash)) return <TrainerView token={trainerHash} />;
     const trainerData = decodeShareData(trainerHash);
@@ -325,9 +334,22 @@ function App() {
 
   const loggedInUser = user && user !== 'loading' ? user as User : null;
 
+  /* ── Invite acceptance gate (athletes, before coach gate) ── */
+  const inviteHash = currentHash.match(/^#invite\/(.+)$/)?.[1];
+  if (inviteHash) {
+    return (
+      <InviteAccept
+        inviteCode={inviteHash}
+        user={loggedInUser}
+        onLoginRequest={() => setShowAuthModal(true)}
+      />
+    );
+  }
+
   /* ── Coach Dashboard gate ── */
-  if (window.location.hash === '#coach') {
+  if (currentHash === '#coach') {
     if (loggedInUser && !isGuest) return <TrainerDashboard />;
+    setCurrentHash('');
     window.location.hash = '';
   }
 
@@ -385,7 +407,7 @@ function App() {
             )}
             {loggedInUser && !isGuest && (
               <button
-                onClick={() => { window.location.hash = '#coach'; }}
+                onClick={() => { window.location.hash = '#coach'; setCurrentHash('#coach'); }}
                 className="text-xs px-3 py-1.5 rounded-xl border border-gray-700 text-gray-400 hover:border-violet-500 hover:text-violet-400 transition-all"
               >
                 Trainer

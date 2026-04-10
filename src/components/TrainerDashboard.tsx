@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ManagedAthlete, AthleteGroup, AthleteStatus, ACWRZone, SelectionStats } from '../types/trainerDashboard';
 import {
   loadRoster, saveRoster, extractToken,
@@ -49,31 +49,36 @@ interface AddModalProps {
 }
 
 function AddAthleteModal({ groups, onAdd, onClose }: AddModalProps) {
-  const [input, setInput]   = useState('');
-  const [name, setName]     = useState('');
-  const [sport, setSport]   = useState('');
+  const [input, setInput]     = useState('');
   const [groupId, setGroupId] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const [error, setError] = useState('');
+  const [preview, setPreview] = useState<{ name: string; sport: string } | null>(null);
+  const [error, setError]     = useState('');
 
-  const handleAdd = async () => {
+  const handleVerify = async () => {
     const token = extractToken(input);
     if (!token) { setError('Ungültiger Link oder Token'); return; }
-    if (!name.trim()) { setError('Name erforderlich'); return; }
     setVerifying(true);
     setError('');
     const data = await fetchLiveTrainerData(token);
-    if (!data) { setError('Athleten-Daten konnten nicht geladen werden. Token gültig?'); setVerifying(false); return; }
+    if (!data) { setError('Daten konnten nicht geladen werden. Token gültig?'); setVerifying(false); return; }
+    setPreview({ name: data.athleteName, sport: data.sport });
+    setVerifying(false);
+  };
+
+  const handleAdd = async () => {
+    const token = extractToken(input)!;
+    const data = await fetchLiveTrainerData(token);
+    if (!data) { setError('Fehler beim Laden'); return; }
     const athlete: ManagedAthlete = {
       id:       crypto.randomUUID(),
-      name:     name.trim() || data.athleteName,
-      sport:    sport.trim() || data.sport || '',
+      name:     data.athleteName,
+      sport:    data.sport || '',
       token,
       groupIds: groupId ? [groupId] : [],
       addedAt:  new Date().toISOString().split('T')[0],
     };
     onAdd(athlete);
-    setVerifying(false);
   };
 
   return (
@@ -83,43 +88,46 @@ function AddAthleteModal({ groups, onAdd, onClose }: AddModalProps) {
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-gray-400 mb-1 block">Live-Link oder Token *</label>
-            <input
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-violet-500"
-              placeholder="https://… oder live_abc123"
-              value={input} onChange={e => setInput(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Name *</label>
-            <input
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-violet-500"
-              placeholder="Max Mustermann"
-              value={name} onChange={e => setName(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Sportart</label>
+            <label className="text-xs text-gray-400 mb-1 block">Live-Link oder Token</label>
+            <div className="flex gap-2">
               <input
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-violet-500"
-                placeholder="Fußball"
-                value={sport} onChange={e => setSport(e.target.value)}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-violet-500"
+                placeholder="https://… oder live_abc123"
+                value={input} onChange={e => { setInput(e.target.value); setPreview(null); setError(''); }}
+                onKeyDown={e => e.key === 'Enter' && !preview && handleVerify()}
               />
+              {!preview && (
+                <button onClick={handleVerify} disabled={verifying || !input.trim()}
+                  className="px-3 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-sm rounded-xl transition-colors shrink-0">
+                  {verifying ? '…' : 'Prüfen'}
+                </button>
+              )}
             </div>
-            {groups.length > 0 && (
-              <div>
-                <label className="text-xs text-gray-400 mb-1 block">Gruppe</label>
-                <select
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-violet-500"
-                  value={groupId} onChange={e => setGroupId(e.target.value)}
-                >
-                  <option value="">Keine</option>
-                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
-              </div>
-            )}
           </div>
+
+          {preview && (
+            <div className="bg-gray-800/60 border border-green-800/40 rounded-xl px-4 py-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-green-400 text-xs">✓</span>
+                <span className="text-white font-semibold text-sm">{preview.name}</span>
+                {preview.sport && <span className="text-gray-400 text-xs">{preview.sport}</span>}
+              </div>
+              <p className="text-xs text-gray-500">Daten erfolgreich geladen</p>
+            </div>
+          )}
+
+          {groups.length > 0 && preview && (
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Gruppe (optional)</label>
+              <select
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-violet-500"
+                value={groupId} onChange={e => setGroupId(e.target.value)}
+              >
+                <option value="">Keine</option>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         {error && <p className="text-red-400 text-xs">{error}</p>}
@@ -129,9 +137,10 @@ function AddAthleteModal({ groups, onAdd, onClose }: AddModalProps) {
             className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 text-sm hover:bg-gray-800 transition-colors">
             Abbrechen
           </button>
-          <button onClick={handleAdd} disabled={verifying}
+          <button onClick={preview ? handleAdd : handleVerify}
+            disabled={verifying || !input.trim()}
             className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors">
-            {verifying ? 'Prüfe…' : 'Hinzufügen'}
+            {preview ? 'Hinzufügen' : verifying ? 'Prüfe…' : 'Weiter'}
           </button>
         </div>
       </div>
@@ -672,6 +681,68 @@ function UebersichtTab({ statuses, selectedIds, histories, groups }: UebersichtT
 
 type Tab = 'kader' | 'gruppen' | 'uebersicht';
 
+// ── Mock data for debugging ───────────────────────────────────────────────────
+
+const MOCK_NAMES = [
+  'Leon Weber', 'Felix Müller', 'Jonas Bauer', 'Lukas Hoffmann', 'Noah Fischer',
+  'Elias Schmidt', 'Finn Richter', 'Ben Schulz', 'Luca Wagner', 'Tim Koch', 'Max Braun',
+];
+
+function generateMockHistory(seed: number): { d: string; v: number | null }[] {
+  const result: { d: string; v: number | null }[] = [];
+  let acwr = 0.9 + (seed % 5) * 0.08;
+  for (let i = 59; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const iso = d.toISOString().split('T')[0];
+    // Random walk with some variation per player
+    acwr += (Math.sin(i * 0.3 + seed) * 0.07);
+    acwr = Math.max(0.5, Math.min(1.8, acwr));
+    result.push({ d: iso, v: i < 28 ? Math.round(acwr * 100) / 100 : null });
+  }
+  return result;
+}
+
+function buildMockRoster(): {
+  athletes: ManagedAthlete[];
+  groups: AthleteGroup[];
+  statuses: Map<string, AthleteStatus>;
+  histories: Map<string, { d: string; v: number | null }[]>;
+} {
+  const group1: AthleteGroup = { id: 'g1', name: 'Starters', color: 'violet' };
+  const group2: AthleteGroup = { id: 'g2', name: 'Bench', color: 'sky' };
+
+  const athletes: ManagedAthlete[] = MOCK_NAMES.map((name, i) => ({
+    id:       `mock_${i}`,
+    name,
+    sport:    'Basketball',
+    token:    `mock_token_${i}`,
+    groupIds: i < 5 ? ['g1'] : ['g2'],
+    addedAt:  new Date().toISOString().split('T')[0],
+  }));
+
+  const zones: ACWRZone[] = ['optimal', 'optimal', 'elevated', 'high', 'low', 'optimal', 'building', 'optimal', 'elevated', 'optimal', 'low'];
+  const acwrValues = [1.05, 0.92, 1.38, 1.62, 0.65, 1.10, null, 0.88, 1.41, 1.15, 0.72];
+
+  const statuses = new Map<string, AthleteStatus>();
+  const histories = new Map<string, { d: string; v: number | null }[]>();
+
+  athletes.forEach((a, i) => {
+    const hist = generateMockHistory(i * 7);
+    histories.set(a.id, hist);
+    statuses.set(a.id, {
+      id: a.id, name: a.name, sport: a.sport, token: a.token, groupIds: a.groupIds,
+      acwr: acwrValues[i], acuteLoad: Math.round(300 + i * 40), chronicLoad: Math.round(280 + i * 35),
+      zone: zones[i], trend: (i % 3 === 0 ? 0.12 : i % 3 === 1 ? -0.08 : 0.02),
+      lastLoadDate: new Date().toISOString().split('T')[0],
+      dataAge: i % 3, loading: false, error: false,
+    });
+  });
+
+  return { athletes, groups: [group1, group2], statuses, histories };
+}
+
+// ── Main TrainerDashboard ─────────────────────────────────────────────────────
+
 export function TrainerDashboard() {
   const [roster, setRoster] = useState(() => loadRoster());
   const [statuses, setStatuses] = useState<Map<string, AthleteStatus>>(new Map());
@@ -683,9 +754,30 @@ export function TrainerDashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [openAthleteToken, setOpenAthleteToken] = useState<string | null>(null);
+  const [isMockLoaded, setIsMockLoaded] = useState(false);
+  const mockRef = useRef(false);
 
-  // Persist roster
-  useEffect(() => { saveRoster(roster); }, [roster]);
+  // Persist roster (skip when mock data is active)
+  useEffect(() => { if (!isMockLoaded) saveRoster(roster); }, [roster, isMockLoaded]);
+
+  const loadMockData = useCallback(() => {
+    if (mockRef.current) {
+      // Toggle off — restore real roster
+      mockRef.current = false;
+      setIsMockLoaded(false);
+      const real = loadRoster();
+      setRoster(real);
+      setStatuses(new Map());
+      setHistories(new Map());
+      return;
+    }
+    mockRef.current = true;
+    setIsMockLoaded(true);
+    const { athletes, groups, statuses: mockStatuses, histories: mockHistories } = buildMockRoster();
+    setRoster({ athletes, groups });
+    setStatuses(mockStatuses);
+    setHistories(mockHistories);
+  }, []);
 
   // Load athlete data
   const refreshAthlete = useCallback(async (athlete: ManagedAthlete) => {
@@ -803,7 +895,7 @@ export function TrainerDashboard() {
     return (
       <div className="relative">
         <button
-          onClick={() => setOpenAthleteToken(null)}
+          onClick={() => { setOpenAthleteToken(null); }}
           className="fixed top-4 left-4 z-50 flex items-center gap-1.5 px-3 py-1.5 bg-gray-900/90 border border-gray-700 rounded-xl text-sm text-gray-300 hover:text-white hover:border-gray-500 transition-colors backdrop-blur-sm"
         >
           ← Zurück
@@ -827,7 +919,7 @@ export function TrainerDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <button
-              onClick={() => { window.location.hash = ''; }}
+              onClick={() => { window.location.hash = ''; dispatchEvent(new HashChangeEvent('hashchange')); }}
               className="text-xs text-gray-600 hover:text-gray-400 transition-colors mb-1"
             >
               ← App
@@ -848,6 +940,15 @@ export function TrainerDashboard() {
               className="px-3 py-1.5 text-xs border border-gray-700 text-gray-400 rounded-xl hover:border-gray-500 hover:text-gray-200 transition-colors"
               title="Alle Daten aktualisieren">
               ↻
+            </button>
+            <button onClick={loadMockData}
+              className={`px-3 py-1.5 text-xs rounded-xl border transition-colors ${
+                isMockLoaded
+                  ? 'border-amber-600 text-amber-400 bg-amber-950/30 hover:bg-amber-950/50'
+                  : 'border-gray-700 text-gray-600 hover:border-gray-500 hover:text-gray-400'
+              }`}
+              title="Demo-Daten laden (Basketball-Team)">
+              {isMockLoaded ? 'Demo aus' : 'Demo'}
             </button>
           </div>
         </div>

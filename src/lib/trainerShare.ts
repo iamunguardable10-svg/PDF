@@ -120,6 +120,93 @@ export async function fetchLiveTrainerData(token: string): Promise<TrainerShareD
   };
 }
 
+// ── Trainer invite system ─────────────────────────────────────────────────────
+
+/** Create an invite link code (stored in trainer_invites table) */
+export async function createTrainerInvite(
+  trainerId: string,
+  trainerName: string,
+): Promise<string | null> {
+  if (!CLOUD_ENABLED) return null;
+  const id = 'inv_' + randomToken(20);
+  const { error } = await supabase
+    .from('trainer_invites')
+    .insert({ id, trainer_id: trainerId, trainer_name: trainerName });
+  return error ? null : id;
+}
+
+/** Fetch invite metadata (public — athlete sees trainer name) */
+export async function fetchInvite(
+  inviteId: string,
+): Promise<{ trainerName: string; expired: boolean } | null> {
+  if (!CLOUD_ENABLED) return null;
+  const { data, error } = await supabase
+    .from('trainer_invites')
+    .select('trainer_name, accepted, expires_at')
+    .eq('id', inviteId)
+    .single();
+  if (error || !data) return null;
+  const expired = data.accepted || new Date(data.expires_at) < new Date();
+  return { trainerName: data.trainer_name, expired };
+}
+
+/** Athlete accepts invite — writes their live token to the row */
+export async function acceptInvite(
+  inviteId: string,
+  athleteToken: string,
+  athleteName: string,
+): Promise<boolean> {
+  if (!CLOUD_ENABLED) return false;
+  const { error } = await supabase
+    .from('trainer_invites')
+    .update({ athlete_token: athleteToken, athlete_name: athleteName, accepted: true })
+    .eq('id', inviteId)
+    .eq('accepted', false);
+  return !error;
+}
+
+/** Trainer polls for accepted invites */
+export async function listAcceptedInvites(
+  trainerId: string,
+): Promise<Array<{ id: string; athleteToken: string; athleteName: string; createdAt: string }>> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('trainer_invites')
+    .select('id, athlete_token, athlete_name, created_at')
+    .eq('trainer_id', trainerId)
+    .eq('accepted', true)
+    .order('created_at', { ascending: false });
+  if (error || !data) return [];
+  return data.map(r => ({
+    id: r.id,
+    athleteToken: r.athlete_token,
+    athleteName:  r.athlete_name,
+    createdAt:    r.created_at,
+  }));
+}
+
+/** Trainer lists all their pending (unaccepted) invites */
+export async function listPendingInvites(
+  trainerId: string,
+): Promise<Array<{ id: string; createdAt: string; expiresAt: string }>> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('trainer_invites')
+    .select('id, created_at, expires_at')
+    .eq('trainer_id', trainerId)
+    .eq('accepted', false)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false });
+  if (error || !data) return [];
+  return data.map(r => ({ id: r.id, createdAt: r.created_at, expiresAt: r.expires_at }));
+}
+
+/** Delete / revoke an invite */
+export async function deleteInvite(inviteId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  await supabase.from('trainer_invites').delete().eq('id', inviteId);
+}
+
 // ── Legacy base64 (kept for backward compat) ──────────────────────────────────
 
 export function encodeShareData(
