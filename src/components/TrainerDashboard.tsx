@@ -827,6 +827,12 @@ export function TrainerDashboard() {
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
+            <button
+              onClick={() => { window.location.hash = ''; }}
+              className="text-xs text-gray-600 hover:text-gray-400 transition-colors mb-1"
+            >
+              ← App
+            </button>
             <h1 className="text-xl font-bold text-white">Trainer-Dashboard</h1>
             <p className="text-xs text-gray-500 mt-0.5">{roster.athletes.length} Athleten · {roster.groups.length} Gruppen</p>
           </div>
