@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { LineChart, Line, XAxis, YAxis, ReferenceLine, ReferenceArea, Tooltip, ResponsiveContainer } from 'recharts';
 import type { ManagedAthlete, AthleteGroup, AthleteStatus, ACWRZone, SelectionStats } from '../types/trainerDashboard';
 import {
   loadRoster, saveRoster, extractToken,
@@ -302,6 +303,123 @@ function AthleteCard({ status, groups, selected, onSelect, onClick, onRemove }: 
   );
 }
 
+// ── Avg ACWR Chart ────────────────────────────────────────────────────────────
+
+function fmtChartDate(iso: string) {
+  const d = new Date(iso + 'T00:00');
+  return d.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' });
+}
+
+interface AvgACWRChartProps {
+  history: { date: string; acwr: number }[];
+  label: string;
+  accentColor?: string;
+}
+
+function AvgACWRChart({ history, label, accentColor = '#a78bfa' }: AvgACWRChartProps) {
+  if (history.length < 3) return (
+    <div className="text-xs text-gray-600 text-center py-4">
+      Zu wenig Verlaufsdaten für einen Graphen (mind. 3 gemeinsame Tage nötig).
+    </div>
+  );
+
+  // Last 30 days
+  const data = history.slice(-30);
+  const yMin = Math.max(0.3, Math.min(...data.map(d => d.acwr)) - 0.1);
+  const yMax = Math.min(2.0, Math.max(...data.map(d => d.acwr)) + 0.1);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-500 uppercase tracking-wide">Ø ACWR – {label}</span>
+        <span className="text-xs text-gray-600">{data.length} Tage</span>
+      </div>
+      <div className="h-28">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+            {/* Optimal zone */}
+            <ReferenceArea y1={0.8} y2={1.3} fill="#14532d" fillOpacity={0.25} />
+            <ReferenceLine y={0.8} stroke="#4ade80" strokeOpacity={0.3} strokeDasharray="3 3" />
+            <ReferenceLine y={1.3} stroke="#f87171" strokeOpacity={0.3} strokeDasharray="3 3" />
+
+            <XAxis dataKey="date" tickFormatter={fmtChartDate}
+              tick={{ fill: '#4b5563', fontSize: 9 }} tickLine={false} axisLine={false}
+              interval={Math.floor(data.length / 4)} />
+            <YAxis domain={[yMin, yMax]}
+              tick={{ fill: '#4b5563', fontSize: 9 }} tickLine={false} axisLine={false}
+              tickFormatter={v => v.toFixed(1)} />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: 10, fontSize: 11 }}
+              labelFormatter={(l: unknown) => fmtChartDate(l as string)}
+              formatter={(v: unknown) => [(v as number).toFixed(2), 'Ø ACWR']}
+            />
+            <Line
+              type="monotone" dataKey="acwr" stroke={accentColor}
+              strokeWidth={2} dot={false} activeDot={{ r: 3, fill: accentColor }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ── Athlete roster list (accordion row, reused in Übersicht + Gruppen) ─────────
+
+interface RosterListProps {
+  statuses: AthleteStatus[];
+  label: string;
+  accentColor?: string;
+  onOpenAthlete: (token: string) => void;
+}
+
+function RosterList({ statuses, label, accentColor, onOpenAthlete }: RosterListProps) {
+  const [open, setOpen] = useState(false);
+  const sorted = useMemo(() => sortStatuses(statuses, 'risk'), [statuses]);
+
+  return (
+    <div className="border border-gray-800 rounded-2xl overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          {accentColor && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />}
+          <span className="text-white font-semibold text-sm">{label}</span>
+          <span className="text-gray-600 text-xs">{statuses.length} Athleten</span>
+        </div>
+        <span className={`text-gray-500 text-xs transition-transform shrink-0 ${open ? 'rotate-180' : ''}`}>▼</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-gray-800">
+          {sorted.map(s => (
+            <button
+              key={s.id}
+              className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-gray-800/50 last:border-0 hover:bg-white/[0.02] transition-colors text-left"
+              onClick={() => onOpenAthlete(s.token)}
+            >
+              <span className="text-white text-sm flex-1 truncate">{s.name}</span>
+              {s.loading && <span className="text-gray-600 text-xs">…</span>}
+              {s.error   && <span className="text-red-500 text-xs">Fehler</span>}
+              {!s.loading && !s.error && s.acwr !== null && (
+                <>
+                  <span className="text-gray-400 text-xs font-mono">{s.acwr.toFixed(2)}</span>
+                  <ZoneBadge zone={s.zone} />
+                  <TrendIcon trend={s.trend} />
+                </>
+              )}
+              {!s.loading && !s.error && s.acwr === null && (
+                <ZoneBadge zone={s.zone} />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Selection Stats Panel ────────────────────────────────────────────────────
 
 function StatsPanel({ stats, label }: { stats: SelectionStats; label: string }) {
@@ -475,6 +593,7 @@ interface KaderTabProps {
   statuses: AthleteStatus[];
   groups: AthleteGroup[];
   selectedIds: Set<string>;
+  histories: Map<string, { d: string; v: number | null }[]>;
   sortMode: SortMode;
   onToggleSelect: (id: string) => void;
   onOpenAthlete: (token: string) => void;
@@ -485,11 +604,22 @@ interface KaderTabProps {
 }
 
 function KaderTab({
-  statuses, groups, selectedIds, sortMode,
+  statuses, groups, selectedIds, histories, sortMode,
   onToggleSelect, onOpenAthlete, onRemoveAthlete,
   onSortChange, onSelectAll, onClearAll,
 }: KaderTabProps) {
   const sorted = useMemo(() => sortStatuses(statuses, sortMode), [statuses, sortMode]);
+
+  const selected = useMemo(() => statuses.filter(s => selectedIds.has(s.id)), [statuses, selectedIds]);
+  const selHistories = useMemo(() => {
+    const m = new Map<string, { d: string; v: number | null }[]>();
+    for (const s of selected) { const h = histories.get(s.id); if (h) m.set(s.id, h); }
+    return m;
+  }, [selected, histories]);
+  const selStats = useMemo(() =>
+    selected.length > 1 ? computeSelectionStats(selected, selHistories) : null,
+    [selected, selHistories],
+  );
 
   const sortOptions: { value: SortMode; label: string }[] = [
     { value: 'risk',      label: 'Risiko' },
@@ -542,6 +672,17 @@ function KaderTab({
           />
         ))}
       </div>
+
+      {/* Selection chart */}
+      {selStats && selStats.avgHistory.length >= 3 && (
+        <div className="bg-gray-900/60 border border-violet-800/30 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-violet-400 font-medium">Ø ACWR – Auswahl ({selected.length} Athleten)</span>
+            <span className="text-xs text-gray-500">Ø {selStats.avgAcwr?.toFixed(2) ?? '—'}</span>
+          </div>
+          <AvgACWRChart history={selStats.avgHistory} label="Auswahl" accentColor="#818cf8" />
+        </div>
+      )}
     </div>
   );
 }
@@ -613,9 +754,14 @@ function GruppenTab({ groups, statuses, histories, onCreateGroup, onDeleteGroup,
 
             {isExpanded && (
               <div className="border-t border-gray-800 p-4 space-y-4">
-                {/* Stats */}
+                {/* Stats + Chart */}
                 {stats && members.length > 0 && (
-                  <StatsPanel stats={stats} label={g.name} />
+                  <>
+                    <StatsPanel stats={stats} label={g.name} />
+                    {stats.avgHistory.length >= 3 && (
+                      <AvgACWRChart history={stats.avgHistory} label={g.name} accentColor={c.bg} />
+                    )}
+                  </>
                 )}
 
                 {/* Members */}
@@ -680,79 +826,93 @@ interface UebersichtTabProps {
   selectedIds: Set<string>;
   histories: Map<string, { d: string; v: number | null }[]>;
   groups: AthleteGroup[];
+  onOpenAthlete: (token: string) => void;
 }
 
-function UebersichtTab({ statuses, selectedIds, histories, groups }: UebersichtTabProps) {
+function UebersichtTab({ statuses, selectedIds, histories, groups, onOpenAthlete }: UebersichtTabProps) {
   const selected = statuses.filter(s => selectedIds.has(s.id));
-  const selHistories = new Map<string, { d: string; v: number | null }[]>();
-  for (const s of selected) {
-    const h = histories.get(s.id);
-    if (h) selHistories.set(s.id, h);
-  }
+  const hasSelection = selected.length > 0 && selected.length !== statuses.length;
 
-  const allHistories = new Map<string, { d: string; v: number | null }[]>();
-  for (const s of statuses) {
-    const h = histories.get(s.id);
-    if (h) allHistories.set(s.id, h);
-  }
+  const allHistories = useMemo(() => {
+    const m = new Map<string, { d: string; v: number | null }[]>();
+    for (const s of statuses) { const h = histories.get(s.id); if (h) m.set(s.id, h); }
+    return m;
+  }, [statuses, histories]);
 
-  const allStats = statuses.length > 0 ? computeSelectionStats(statuses, allHistories) : null;
-  const selStats = selected.length > 0 ? computeSelectionStats(selected, selHistories) : null;
+  const selHistories = useMemo(() => {
+    const m = new Map<string, { d: string; v: number | null }[]>();
+    for (const s of selected) { const h = histories.get(s.id); if (h) m.set(s.id, h); }
+    return m;
+  }, [selected, histories]);
+
+  const allStats = useMemo(() => statuses.length > 0 ? computeSelectionStats(statuses, allHistories) : null, [statuses, allHistories]);
+  const selStats = useMemo(() => hasSelection ? computeSelectionStats(selected, selHistories) : null, [selected, selHistories, hasSelection]);
+
+  if (statuses.length === 0) return (
+    <div className="text-center py-8 text-gray-600 text-sm">
+      Füge Athleten im Kader-Tab hinzu, um Statistiken zu sehen.
+    </div>
+  );
 
   return (
-    <div className="space-y-5">
-      {allStats && <StatsPanel stats={allStats} label="Gesamtkader" />}
+    <div className="space-y-4">
 
-      {selStats && selected.length !== statuses.length && (
-        <StatsPanel stats={selStats} label="Auswahl" />
+      {/* ── Gesamtkader ── */}
+      <div className="border border-gray-800 rounded-2xl overflow-hidden">
+        {/* Header with stats always visible */}
+        {allStats && <StatsPanel stats={allStats} label="Gesamtkader" />}
+        {/* Chart */}
+        {allStats && allStats.avgHistory.length >= 3 && (
+          <div className="px-4 pb-4 border-t border-gray-800/60 pt-4">
+            <AvgACWRChart history={allStats.avgHistory} label="Gesamtkader" accentColor="#a78bfa" />
+          </div>
+        )}
+        {/* Roster list */}
+        <div className="border-t border-gray-800">
+          <RosterList statuses={statuses} label="Alle Athleten" onOpenAthlete={onOpenAthlete} />
+        </div>
+      </div>
+
+      {/* ── Auswahl (only when a subset is selected) ── */}
+      {selStats && hasSelection && (
+        <div className="border border-violet-800/40 rounded-2xl overflow-hidden">
+          <StatsPanel stats={selStats} label={`Auswahl (${selected.length})`} />
+          {selStats.avgHistory.length >= 3 && (
+            <div className="px-4 pb-4 border-t border-gray-800/60 pt-4">
+              <AvgACWRChart history={selStats.avgHistory} label="Auswahl" accentColor="#818cf8" />
+            </div>
+          )}
+          <div className="border-t border-gray-800">
+            <RosterList statuses={selected} label="Ausgewählte Athleten" onOpenAthlete={onOpenAthlete} />
+          </div>
+        </div>
       )}
 
-      {/* Group overview */}
+      {/* ── Gruppen ── */}
       {groups.length > 0 && (
-        <div className="space-y-2">
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Gruppen</div>
+        <div className="space-y-3">
+          <div className="text-xs text-gray-500 uppercase tracking-wide px-1">Gruppen</div>
           {groups.map(g => {
             const members = statuses.filter(s => s.groupIds.includes(g.id));
             if (members.length === 0) return null;
             const gHistories = new Map<string, { d: string; v: number | null }[]>();
-            for (const m of members) {
-              const h = histories.get(m.id);
-              if (h) gHistories.set(m.id, h);
-            }
+            for (const m of members) { const h = histories.get(m.id); if (h) gHistories.set(m.id, h); }
             const stats = computeSelectionStats(members, gHistories);
             const c = groupColor(g.color);
             return (
-              <div key={g.id} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.bg }} />
-                  <span className="text-white text-sm font-semibold">{g.name}</span>
-                  <span className="text-gray-500 text-xs">{members.length} Athleten</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div>
-                    <div className="text-xs text-gray-500">Ø ACWR</div>
-                    <div className="text-base font-bold text-white">{stats.avgAcwr?.toFixed(2) ?? '—'}</div>
+              <div key={g.id} className="border border-gray-800 rounded-2xl overflow-hidden">
+                <StatsPanel stats={stats} label={g.name} />
+                {stats.avgHistory.length >= 3 && (
+                  <div className="px-4 pb-4 border-t border-gray-800/60 pt-4">
+                    <AvgACWRChart history={stats.avgHistory} label={g.name} accentColor={c.bg} />
                   </div>
-                  <div>
-                    <div className="text-xs text-gray-500">Ø Akut</div>
-                    <div className="text-base font-bold text-sky-400">{stats.avgAcute}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">Risiko</div>
-                    <div className={`text-base font-bold ${stats.riskCount > 0 ? 'text-orange-400' : 'text-green-400'}`}>
-                      {stats.riskCount}
-                    </div>
-                  </div>
+                )}
+                <div className="border-t border-gray-800">
+                  <RosterList statuses={members} label={`${g.name} – Athleten`} accentColor={c.bg} onOpenAthlete={onOpenAthlete} />
                 </div>
               </div>
             );
           })}
-        </div>
-      )}
-
-      {statuses.length === 0 && (
-        <div className="text-center py-8 text-gray-600 text-sm">
-          Füge Athleten im Kader-Tab hinzu, um Statistiken zu sehen.
         </div>
       )}
     </div>
@@ -1056,6 +1216,7 @@ export function TrainerDashboard() {
             statuses={statusList}
             groups={roster.groups}
             selectedIds={selectedIds}
+            histories={histories}
             sortMode={sortMode}
             onToggleSelect={toggleSelect}
             onOpenAthlete={setOpenAthleteToken}
@@ -1082,6 +1243,7 @@ export function TrainerDashboard() {
             selectedIds={selectedIds}
             histories={histories}
             groups={roster.groups}
+            onOpenAthlete={setOpenAthleteToken}
           />
         )}
       </div>
