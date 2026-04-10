@@ -350,39 +350,121 @@ function StatsPanel({ stats, label }: { stats: SelectionStats; label: string }) 
   );
 }
 
-// ── Alert Bar ────────────────────────────────────────────────────────────────
+// ── Alert Panel (collapsible, fixed bottom) ───────────────────────────────────
 
-function AlertBar({ alerts }: { alerts: CoachAlert[] }) {
-  const [dismissed, setDismissed] = useState(false);
-  if (dismissed || alerts.length === 0) return null;
+function AlertPanel({ alerts }: { alerts: CoachAlert[] }) {
+  const [open, setOpen] = useState(false);
+  const [expandedAthlete, setExpandedAthlete] = useState<string | null>(null);
+
+  if (alerts.length === 0) return null;
 
   const critical = alerts.filter(a => a.level === 'critical');
   const warnings = alerts.filter(a => a.level === 'warning');
+  const infos    = alerts.filter(a => a.level === 'info');
+
+  // Group by athlete
+  const byAthlete = new Map<string, CoachAlert[]>();
+  for (const a of alerts) {
+    if (!byAthlete.has(a.athleteId)) byAthlete.set(a.athleteId, []);
+    byAthlete.get(a.athleteId)!.push(a);
+  }
+
+  const levelIcon = (level: CoachAlert['level']) =>
+    level === 'critical' ? '🔴' : level === 'warning' ? '⚠' : 'ℹ';
+  const levelColor = (level: CoachAlert['level']) =>
+    level === 'critical' ? 'text-red-300' : level === 'warning' ? 'text-orange-300' : 'text-blue-300';
+  const levelBg = (level: CoachAlert['level']) =>
+    level === 'critical' ? 'bg-red-950/40 border-red-800/30' : level === 'warning' ? 'bg-orange-950/40 border-orange-800/30' : 'bg-blue-950/40 border-blue-800/30';
+
+  const topLevel = critical.length > 0 ? 'critical' : warnings.length > 0 ? 'warning' : 'info';
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 text-sm space-y-1.5 relative ${
-      critical.length > 0
-        ? 'bg-red-950/30 border-red-800/40'
-        : 'bg-orange-950/30 border-orange-800/40'
-    }`}>
-      <button onClick={() => setDismissed(true)}
-        className="absolute top-2 right-3 text-gray-600 hover:text-gray-400 text-xs">✕</button>
+    <div className="fixed bottom-0 inset-x-0 z-30 pointer-events-none">
+      <div className="max-w-4xl mx-auto px-4 pb-4 pointer-events-auto">
 
-      {critical.slice(0, 2).map((a, i) => (
-        <div key={i} className="flex gap-2 items-start text-xs">
-          <span className="text-red-400 shrink-0">🔴</span>
-          <span className="text-red-300"><strong>{a.athleteName}:</strong> {a.message}</span>
-        </div>
-      ))}
-      {warnings.slice(0, 2).map((a, i) => (
-        <div key={i} className="flex gap-2 items-start text-xs">
-          <span className="text-orange-400 shrink-0">⚠</span>
-          <span className="text-orange-300"><strong>{a.athleteName}:</strong> {a.message}</span>
-        </div>
-      ))}
-      {alerts.length > 4 && (
-        <div className="text-xs text-gray-500">+{alerts.length - 4} weitere Hinweise</div>
-      )}
+        {/* Expanded panel */}
+        {open && (
+          <div className="mb-2 bg-gray-900/98 border border-gray-700 rounded-2xl overflow-hidden shadow-2xl max-h-[60vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
+              <span className="text-white text-sm font-semibold">
+                Hinweise & Warnungen
+              </span>
+              <div className="flex gap-3 text-xs text-gray-500">
+                {critical.length > 0 && <span className="text-red-400">{critical.length} kritisch</span>}
+                {warnings.length > 0 && <span className="text-orange-400">{warnings.length} Warnung{warnings.length !== 1 ? 'en' : ''}</span>}
+                {infos.length > 0    && <span className="text-blue-400">{infos.length} Info{infos.length !== 1 ? 's' : ''}</span>}
+              </div>
+            </div>
+
+            <div className="overflow-y-auto">
+              {Array.from(byAthlete.entries()).map(([athleteId, athleteAlerts]) => {
+                const name = athleteAlerts[0].athleteName;
+                const isExpanded = expandedAthlete === athleteId;
+                const worstLevel = athleteAlerts[0].level; // already sorted critical→warning→info
+
+                return (
+                  <div key={athleteId} className="border-b border-gray-800/60 last:border-0">
+                    {/* Athlete row */}
+                    <button
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors text-left"
+                      onClick={() => setExpandedAthlete(isExpanded ? null : athleteId)}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-sm shrink-0">{levelIcon(worstLevel)}</span>
+                        <span className={`text-sm font-medium truncate ${levelColor(worstLevel)}`}>{name}</span>
+                        <span className="text-gray-600 text-xs shrink-0">{athleteAlerts.length} Hinweis{athleteAlerts.length !== 1 ? 'e' : ''}</span>
+                      </div>
+                      <span className={`text-gray-500 text-xs shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                    </button>
+
+                    {/* Per-athlete alerts */}
+                    {isExpanded && (
+                      <div className="px-4 pb-3 space-y-1.5 pl-10">
+                        {athleteAlerts.map((a, i) => (
+                          <div key={i} className={`text-xs px-3 py-2 rounded-xl border ${levelBg(a.level)}`}>
+                            <span className={levelColor(a.level)}>{a.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Compact toggle button */}
+        <button
+          onClick={() => setOpen(o => !o)}
+          className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl border shadow-lg transition-all ${
+            topLevel === 'critical'
+              ? 'bg-red-950/90 border-red-800/60 hover:bg-red-950'
+              : topLevel === 'warning'
+              ? 'bg-orange-950/90 border-orange-800/60 hover:bg-orange-950'
+              : 'bg-blue-950/90 border-blue-800/60 hover:bg-blue-950'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm">{levelIcon(topLevel)}</span>
+            <span className={`text-sm font-medium ${topLevel === 'critical' ? 'text-red-300' : topLevel === 'warning' ? 'text-orange-300' : 'text-blue-300'}`}>
+              {byAthlete.size} Athlet{byAthlete.size !== 1 ? 'en' : ''} mit Hinweisen
+            </span>
+            <div className="flex gap-1.5">
+              {critical.length > 0 && (
+                <span className="text-xs bg-red-900/60 text-red-300 px-1.5 py-0.5 rounded-full">{critical.length}×🔴</span>
+              )}
+              {warnings.length > 0 && (
+                <span className="text-xs bg-orange-900/60 text-orange-300 px-1.5 py-0.5 rounded-full">{warnings.length}×⚠</span>
+              )}
+              {infos.length > 0 && (
+                <span className="text-xs bg-blue-900/60 text-blue-300 px-1.5 py-0.5 rounded-full">{infos.length}×ℹ</span>
+              )}
+            </div>
+          </div>
+          <span className={`text-xs shrink-0 transition-transform ${open ? 'rotate-180' : ''} ${topLevel === 'critical' ? 'text-red-500' : topLevel === 'warning' ? 'text-orange-500' : 'text-blue-500'}`}>▲</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -913,7 +995,7 @@ export function TrainerDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-5">
+      <div className="max-w-4xl mx-auto px-4 py-6 pb-24 space-y-5">
 
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -952,9 +1034,6 @@ export function TrainerDashboard() {
             </button>
           </div>
         </div>
-
-        {/* Alerts */}
-        <AlertBar alerts={alerts} />
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-2xl p-1">
@@ -1006,6 +1085,9 @@ export function TrainerDashboard() {
           />
         )}
       </div>
+
+      {/* Fixed alert panel (bottom) */}
+      <AlertPanel alerts={alerts} />
 
       {showAddModal && (
         <AddAthleteModal
