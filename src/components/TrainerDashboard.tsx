@@ -930,16 +930,33 @@ const MOCK_NAMES = [
   'Elias Schmidt', 'Finn Richter', 'Ben Schulz', 'Luca Wagner', 'Tim Koch', 'Max Braun',
 ];
 
-function generateMockHistory(seed: number): { d: string; v: number | null }[] {
+/** Generates a 60-day ACWR history that ends at `targetAcwr` on today */
+function generateMockHistory(seed: number, targetAcwr: number | null): { d: string; v: number | null }[] {
   const result: { d: string; v: number | null }[] = [];
-  let acwr = 0.9 + (seed % 5) * 0.08;
+
+  // Build raw walk (60 days, oldest first)
+  const raw: number[] = [];
+  let v = 0.85 + (seed % 7) * 0.06;
   for (let i = 59; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
+    v += Math.sin(i * 0.4 + seed) * 0.06;
+    v = Math.max(0.5, Math.min(1.8, v));
+    raw.push(v);
+  }
+
+  // Steer final value towards targetAcwr over last 7 days
+  if (targetAcwr !== null) {
+    const drift = (targetAcwr - raw[raw.length - 1]) / 7;
+    for (let k = raw.length - 7; k < raw.length; k++) {
+      raw[k] = Math.max(0.5, Math.min(1.9, raw[k] + drift * (k - (raw.length - 8))));
+    }
+    raw[raw.length - 1] = targetAcwr; // pin last point exactly
+  }
+
+  for (let i = 0; i < 60; i++) {
+    const d = new Date(); d.setDate(d.getDate() - (59 - i));
     const iso = d.toISOString().split('T')[0];
-    // Random walk with some variation per player
-    acwr += (Math.sin(i * 0.3 + seed) * 0.07);
-    acwr = Math.max(0.5, Math.min(1.8, acwr));
-    result.push({ d: iso, v: i < 28 ? Math.round(acwr * 100) / 100 : null });
+    // First 28 days: no valid ACWR yet (building chronic window)
+    result.push({ d: iso, v: i >= 28 ? Math.round(raw[i] * 100) / 100 : null });
   }
   return result;
 }
@@ -962,19 +979,38 @@ function buildMockRoster(): {
     addedAt:  new Date().toISOString().split('T')[0],
   }));
 
-  const zones: ACWRZone[] = ['optimal', 'optimal', 'elevated', 'high', 'low', 'optimal', 'building', 'optimal', 'elevated', 'optimal', 'low'];
-  const acwrValues = [1.05, 0.92, 1.38, 1.62, 0.65, 1.10, null, 0.88, 1.41, 1.15, 0.72];
+  // Target ACWR for today — determines both the card value AND the last history point
+  const targetAcwrs: (number | null)[] = [1.05, 0.92, 1.38, 1.62, 0.65, 1.10, null, 0.88, 1.41, 1.15, 0.72];
 
   const statuses = new Map<string, AthleteStatus>();
   const histories = new Map<string, { d: string; v: number | null }[]>();
 
   athletes.forEach((a, i) => {
-    const hist = generateMockHistory(i * 7);
+    const target = targetAcwrs[i];
+    const hist = generateMockHistory(i * 7, target);
     histories.set(a.id, hist);
+
+    // Derive zone from actual target value (same logic as classifyZone)
+    const zone: ACWRZone = target === null ? 'building'
+      : target >= 0.8 && target <= 1.3 ? 'optimal'
+      : target < 0.8 ? 'low'
+      : target <= 1.5 ? 'elevated'
+      : 'high';
+
+    // Trend: compare today to 7 days ago in the history
+    const validPts = hist.filter(p => p.v !== null);
+    const todayVal = validPts[validPts.length - 1]?.v ?? null;
+    const weekAgoVal = validPts[validPts.length - 8]?.v ?? null;
+    const trend = todayVal !== null && weekAgoVal !== null
+      ? Math.round((todayVal - weekAgoVal) * 100) / 100
+      : null;
+
     statuses.set(a.id, {
       id: a.id, name: a.name, sport: a.sport, token: a.token, groupIds: a.groupIds,
-      acwr: acwrValues[i], acuteLoad: Math.round(300 + i * 40), chronicLoad: Math.round(280 + i * 35),
-      zone: zones[i], trend: (i % 3 === 0 ? 0.12 : i % 3 === 1 ? -0.08 : 0.02),
+      acwr: target,
+      acuteLoad:   Math.round(target !== null ? target * (280 + i * 10) : 0),
+      chronicLoad: Math.round(280 + i * 10),
+      zone, trend,
       lastLoadDate: new Date().toISOString().split('T')[0],
       dataAge: i % 3, loading: false, error: false,
     });
