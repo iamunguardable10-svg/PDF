@@ -7,7 +7,6 @@ import {
   type SortMode, type CoachAlert,
 } from '../lib/trainerRoster';
 import { fetchLiveTrainerData } from '../lib/trainerShare';
-import type { TrainerShareData } from '../lib/trainerShare';
 import { TrainerView } from './TrainerView';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

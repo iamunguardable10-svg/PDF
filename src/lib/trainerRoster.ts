@@ -1,4 +1,4 @@
-import type { TrainerRoster, ManagedAthlete, AthleteGroup, AthleteStatus, ACWRZone, SelectionStats } from '../types/trainerDashboard';
+import type { TrainerRoster, ManagedAthlete, AthleteStatus, ACWRZone, SelectionStats } from '../types/trainerDashboard';
 import type { TrainerShareData } from './trainerShare';
 
 const ROSTER_KEY = 'fitfuel_coach_roster';

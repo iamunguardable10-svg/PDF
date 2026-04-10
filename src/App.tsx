@@ -275,16 +275,6 @@ function App() {
     setCloudReady(false);
   };
 
-  /* ── Coach Dashboard gate ── */
-  if (window.location.hash === '#coach') {
-    if (loggedInUser && !isGuest) return <TrainerDashboard />;
-    // Not logged in → redirect to auth
-    if (!loggedInUser) {
-      window.location.hash = '';
-      return null;
-    }
-  }
-
   /* ── Trainer-Ansicht gate ── */
   const trainerHash = window.location.hash.match(/^#trainer\/(.+)$/)?.[1];
   if (trainerHash) {
@@ -334,6 +324,12 @@ function App() {
   }
 
   const loggedInUser = user && user !== 'loading' ? user as User : null;
+
+  /* ── Coach Dashboard gate ── */
+  if (window.location.hash === '#coach') {
+    if (loggedInUser && !isGuest) return <TrainerDashboard />;
+    window.location.hash = '';
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0b0f] text-white">
