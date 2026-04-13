@@ -419,7 +419,7 @@ export function ACWRSection({
                 <>
                   <div className="relative h-5">
                     <div className="absolute inset-0 rounded-full overflow-hidden"
-                      style={{ background: `linear-gradient(to right, #60a5fa 0%, #60a5fa ${toP(0.8)}, #4ade80 ${toP(0.8)}, #4ade80 ${toP(1.3)}, #f87171 ${toP(1.3)}, #f87171 100%)` }}
+                      style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 36%, #4ade80 44%, #4ade80 61%, #f87171 69%, #f87171 100%)' }}
                     />
                     {/* Zone dividers */}
                     {[0.8, 1.3].map(v => (

@@ -235,7 +235,7 @@ export function TrainerView({ data: staticData, token }: Props) {
 
               {/* Gauge — scale 0–2, zones at 0.8 (40%) and 1.3 (65%) */}
               <div className="relative h-4 rounded-full overflow-hidden mb-1"
-                style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 40%, #4ade80 40%, #4ade80 65%, #f87171 65%, #f87171 100%)' }}>
+                style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 36%, #4ade80 44%, #4ade80 61%, #f87171 69%, #f87171 100%)' }}>
                 <div className="absolute top-0 bottom-0 flex items-center"
                   style={{ left: `${Math.min(100, Math.max(0, (acwr / 2) * 100))}%`, transform: 'translateX(-50%)' }}>
                   <div className="w-3 h-3 bg-white rounded-full border-2 border-gray-900 shadow" />
