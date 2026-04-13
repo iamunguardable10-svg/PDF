@@ -120,6 +120,80 @@ export async function fetchLiveTrainerData(token: string): Promise<TrainerShareD
   };
 }
 
+// ── Trainer roster (Supabase) ────────────────────────────────────────────────
+
+export interface SupabaseAthlete {
+  id: string;
+  trainer_id: string;
+  token: string;
+  name: string;
+  sport: string;
+  group_ids: string[];
+  added_at: string;
+}
+
+export interface SupabaseGroup {
+  id: string;
+  trainer_id: string;
+  name: string;
+  color: string;
+}
+
+export async function loadRosterFromSupabase(
+  trainerId: string,
+): Promise<{ athletes: SupabaseAthlete[]; groups: SupabaseGroup[] }> {
+  if (!CLOUD_ENABLED) return { athletes: [], groups: [] };
+  const [{ data: athletes }, { data: groups }] = await Promise.all([
+    supabase.from('trainer_roster').select('*').eq('trainer_id', trainerId),
+    supabase.from('trainer_groups').select('*').eq('trainer_id', trainerId),
+  ]);
+  return {
+    athletes: (athletes ?? []) as SupabaseAthlete[],
+    groups:   (groups   ?? []) as SupabaseGroup[],
+  };
+}
+
+export async function upsertAthleteInSupabase(
+  trainerId: string,
+  athlete: { id: string; token: string; name: string; sport?: string; groupIds: string[]; addedAt: string },
+): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  await supabase.from('trainer_roster').upsert({
+    id:         athlete.id,
+    trainer_id: trainerId,
+    token:      athlete.token,
+    name:       athlete.name,
+    sport:      athlete.sport ?? '',
+    group_ids:  athlete.groupIds,
+    added_at:   athlete.addedAt,
+  }, { onConflict: 'id' });
+}
+
+export async function deleteAthleteFromSupabase(athleteId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  await supabase.from('trainer_roster').delete().eq('id', athleteId);
+}
+
+export async function upsertGroupInSupabase(
+  trainerId: string,
+  group: { id: string; name: string; color: string },
+): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  await supabase.from('trainer_groups').upsert({
+    id: group.id, trainer_id: trainerId, name: group.name, color: group.color,
+  }, { onConflict: 'id' });
+}
+
+export async function deleteGroupFromSupabase(groupId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  await supabase.from('trainer_groups').delete().eq('id', groupId);
+}
+
+export async function updateAthleteGroupsInSupabase(athleteId: string, groupIds: string[]): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  await supabase.from('trainer_roster').update({ group_ids: groupIds }).eq('id', athleteId);
+}
+
 // ── Trainer invite system ─────────────────────────────────────────────────────
 
 /** Create an invite link code (stored in trainer_invites table) */

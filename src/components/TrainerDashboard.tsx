@@ -7,7 +7,11 @@ import {
   generateAlerts, sortStatuses, groupColor, GROUP_COLORS,
   type SortMode, type CoachAlert,
 } from '../lib/trainerRoster';
-import { fetchLiveTrainerData, createTrainerInvite, listAcceptedInvites, listPendingInvites, deleteInvite } from '../lib/trainerShare';
+import {
+  fetchLiveTrainerData, createTrainerInvite, listAcceptedInvites, listPendingInvites, deleteInvite,
+  loadRosterFromSupabase, upsertAthleteInSupabase, deleteAthleteFromSupabase,
+  upsertGroupInSupabase, deleteGroupFromSupabase, updateAthleteGroupsInSupabase,
+} from '../lib/trainerShare';
 import { CLOUD_ENABLED } from '../lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { TrainerView } from './TrainerView';
@@ -1270,18 +1274,51 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
   const [isMockLoaded, setIsMockLoaded] = useState(false);
   const mockRef = useRef(false);
 
-  // Persist roster (skip when mock data is active)
-  useEffect(() => { if (!isMockLoaded) saveRoster(roster); }, [roster, isMockLoaded]);
+  // Load roster from Supabase on mount (falls back to localStorage when offline)
+  useEffect(() => {
+    if (!CLOUD_ENABLED) return;
+    loadRosterFromSupabase(user.id).then(({ athletes, groups }) => {
+      if (athletes.length > 0 || groups.length > 0) {
+        const mapped = {
+          athletes: athletes.map(a => ({
+            id: a.id, token: a.token, name: a.name, sport: a.sport,
+            groupIds: a.group_ids ?? [], addedAt: a.added_at,
+          })),
+          groups: groups.map(g => ({ id: g.id, name: g.name, color: g.color })),
+        };
+        setRoster(mapped);
+        saveRoster(mapped); // keep localStorage in sync
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id]);
 
   const loadMockData = useCallback(() => {
     if (mockRef.current) {
-      // Toggle off — restore real roster
+      // Toggle off — restore real roster from Supabase (fall back to localStorage)
       mockRef.current = false;
       setIsMockLoaded(false);
-      const real = loadRoster();
-      setRoster(real);
       setStatuses(new Map());
       setHistories(new Map());
+      if (CLOUD_ENABLED) {
+        loadRosterFromSupabase(user.id).then(({ athletes, groups }) => {
+          if (athletes.length > 0 || groups.length > 0) {
+            const mapped = {
+              athletes: athletes.map(a => ({
+                id: a.id, token: a.token, name: a.name, sport: a.sport,
+                groupIds: a.group_ids ?? [], addedAt: a.added_at,
+              })),
+              groups: groups.map(g => ({ id: g.id, name: g.name, color: g.color })),
+            };
+            setRoster(mapped);
+            saveRoster(mapped);
+          } else {
+            setRoster(loadRoster());
+          }
+        });
+      } else {
+        setRoster(loadRoster());
+      }
       return;
     }
     mockRef.current = true;
@@ -1347,13 +1384,14 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
 
   const alerts = useMemo(() => generateAlerts(statusList), [statusList]);
 
-  // Roster mutations — save immediately inside the updater to survive quick navigations
+  // Roster mutations — save to Supabase + localStorage
   const addAthlete = (athlete: ManagedAthlete) => {
     setRoster(r => {
       const next = { ...r, athletes: [...r.athletes, athlete] };
       if (!mockRef.current) saveRoster(next);
       return next;
     });
+    if (!mockRef.current) upsertAthleteInSupabase(user.id, athlete);
     setShowAddModal(false);
     refreshAthlete(athlete);
   };
@@ -1364,6 +1402,7 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
       if (!mockRef.current) saveRoster(next);
       return next;
     });
+    if (!mockRef.current) deleteAthleteFromSupabase(id);
     setStatuses(prev => { const next = new Map(prev); next.delete(id); return next; });
     setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
   };
@@ -1374,6 +1413,7 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
       if (!mockRef.current) saveRoster(next);
       return next;
     });
+    if (!mockRef.current) upsertGroupInSupabase(user.id, group);
     setShowGroupModal(false);
   };
 
@@ -1383,9 +1423,18 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
         groups: r.groups.filter(g => g.id !== id),
         athletes: r.athletes.map(a => ({ ...a, groupIds: a.groupIds.filter(g => g !== id) })),
       };
-      if (!mockRef.current) saveRoster(next);
+      if (!mockRef.current) {
+        saveRoster(next);
+        // Update affected athletes in Supabase
+        next.athletes.forEach(a => {
+          if (a.groupIds !== roster.athletes.find(o => o.id === a.id)?.groupIds) {
+            updateAthleteGroupsInSupabase(a.id, a.groupIds);
+          }
+        });
+      }
       return next;
     });
+    if (!mockRef.current) deleteGroupFromSupabase(id);
   };
 
   const assignGroup = (athleteId: string, groupId: string, assign: boolean) => {
@@ -1399,7 +1448,11 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
             : a.groupIds.filter(g => g !== groupId),
         }),
       };
-      if (!mockRef.current) saveRoster(next);
+      if (!mockRef.current) {
+        saveRoster(next);
+        const updated = next.athletes.find(a => a.id === athleteId);
+        if (updated) updateAthleteGroupsInSupabase(athleteId, updated.groupIds);
+      }
       return next;
     });
     setStatuses(prev => {
@@ -1509,6 +1562,7 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
                 saveRoster(next);
                 return next;
               });
+              upsertAthleteInSupabase(user.id, athlete);
               refreshAthlete(athlete);
             }}
           />
