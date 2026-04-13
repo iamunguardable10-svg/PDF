@@ -230,8 +230,52 @@ export function projectFutureACWR(
     ? recent7.reduce((a, b) => a + b, 0) / recent7.length
     : 0;
 
-  // ── Project day by day ───────────────────────────────────────────────────
-  const projected: ACWRDataPoint[] = [];
+  // ── Handle today: if planned sessions exist but no confirmed load ────────
+  const todayProjected: ACWRDataPoint[] = [];
+  const todayHistIdx = historicalDays.findIndex(d => d.datum === today);
+  const todayHasLoad = todayHistIdx >= 0 && historicalDays[todayHistIdx].taeglLoad > 0;
+
+  if (!todayHasLoad && plannedMap.has(today) && todayHistIdx >= 0) {
+    const dayPlanned = plannedMap.get(today)!;
+    const wd = new Date(today + 'T00:00').getDay();
+    const wdLoads = loadsByWeekday[wd];
+    const weekdayMedian = medianOf(wdLoads);
+    const recentSameWeekdayMedian = medianOf(wdLoads.slice(-4));
+
+    let plannedLoad = 0;
+    const plannedTeLoads: Partial<Record<string, number>> = {};
+    for (const ps of dayPlanned) {
+      const rpe = medianRpeByTE.get(ps.te) ?? 6;
+      const dur = ps.geschaetzteDauer ?? medianDurationByTE.get(ps.te) ?? 90;
+      const load = rpe * dur;
+      plannedLoad += load;
+      plannedTeLoads[ps.te] = (plannedTeLoads[ps.te] ?? 0) + load;
+    }
+    const predictedLoad = Math.round(
+      0.7 * plannedLoad + 0.2 * weekdayMedian + 0.1 * recentSameWeekdayMedian,
+    );
+
+    // Replace today's 0 in extLoads so future rolling avg is correct
+    extLoads[todayHistIdx] = predictedLoad;
+
+    const acute   = rollingAvg(extLoads, todayHistIdx, 7);
+    const chronic = rollingAvg(extLoads, todayHistIdx, 28);
+    const acwr    = (todayHistIdx >= 7 && acute > 0 && chronic > 0) ? acute / chronic : null;
+
+    todayProjected.push({
+      datum:          today,
+      taeglLoad:      predictedLoad,
+      acuteLoad:      Math.round(acute),
+      chronicLoad:    Math.round(chronic),
+      acwr:           acwr !== null ? Math.round(acwr * 100) / 100 : null,
+      chronicFull:    todayHistIdx >= 27,
+      forecastBasis:  `Plan (${dayPlanned.map(p => p.te).join(', ')})`,
+      plannedTeLoads: plannedTeLoads as Partial<Record<TrainingUnit, number>> | undefined,
+    });
+  }
+
+  // ── Project day by day (tomorrow onwards) ────────────────────────────────
+  const projected2: ACWRDataPoint[] = [];
   const current = new Date(lastDate + 'T00:00');
 
   while (true) {
@@ -296,7 +340,7 @@ export function projectFutureACWR(
     const chronic = rollingAvg(extLoads, idx, 28);
     const acwr    = (idx >= 7 && acute > 0 && chronic > 0) ? acute / chronic : null;
 
-    projected.push({
+    projected2.push({
       datum:          iso,
       taeglLoad:      predictedLoad,
       acuteLoad:      Math.round(acute),
@@ -308,5 +352,5 @@ export function projectFutureACWR(
     });
   }
 
-  return projected;
+  return [...todayProjected, ...projected2];
 }

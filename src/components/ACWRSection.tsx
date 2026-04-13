@@ -180,7 +180,7 @@ export function ACWRSection({
         >
           <div className="flex items-center gap-2">
             <span className="text-sm">ℹ️</span>
-            <span className="text-sm font-medium text-gray-300">Was ist der ACWR?</span>
+            <span className="text-sm font-medium text-gray-300">Kennzahlen erklärt</span>
           </div>
           <span className="text-gray-600 text-xs">{showInfo ? '▲' : '▼'}</span>
         </button>
@@ -494,10 +494,10 @@ export function ACWRSection({
           const pct = optMax > 0 ? Math.min(100, (weeklyLoad / optMax) * 100) : 0;
           const minPct = optMax > 0 ? Math.min(100, (optMin / optMax) * 100) : 0;
           const barColor = weeklyLoad < optMin
-            ? '#60a5fa'   // under
+            ? '#60a5fa'
             : weeklyLoad <= optMax
-            ? '#4ade80'   // optimal
-            : '#f87171';  // over
+            ? '#4ade80'
+            : '#f87171';
           return (
             <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800 space-y-2.5">
               <div className="flex items-center justify-between">
@@ -519,19 +519,14 @@ export function ACWRSection({
               </div>
               {chronic > 0 && (
                 <>
-                  {/* Fortschrittsbalken mit Zielzone */}
                   <div className="relative h-2.5 bg-gray-800 rounded-full overflow-hidden">
-                    {/* Zielzone-Highlight */}
                     <div className="absolute top-0 bottom-0 bg-green-900/50 rounded-full"
                       style={{ left: `${minPct}%`, right: '0%' }} />
-                    {/* Aktueller Load */}
                     <div className="absolute top-0 bottom-0 left-0 rounded-full transition-all"
                       style={{ width: `${pct}%`, backgroundColor: barColor }} />
-                    {/* Min-Marker */}
                     <div className="absolute top-0 bottom-0 w-0.5 bg-green-500/60"
                       style={{ left: `${minPct}%` }} />
                   </div>
-                  {/* Spielraum-Hinweis */}
                   <div className="text-xs text-gray-500">
                     {weeklyLoad < optMin && (
                       <span className="text-blue-400">
@@ -551,42 +546,52 @@ export function ACWRSection({
                   </div>
                 </>
               )}
+              <div className="border-t border-gray-800 pt-2 text-xs text-gray-600 leading-relaxed">
+                Summe aller Trainingsloads (RPE × Dauer) der letzten 7 Tage.
+                {chronic > 0 && <> Zielkorridor = Chronic Load × 7 × 0.8–1.3 (optimale ACWR-Zone).</>}
+              </div>
             </div>
           );
         })()}
 
-        {/* Monotony & Strain */}
+        {/* Monotony & Strain — eigene Karte, klar getrennt vom Wochenload */}
         {sessions.length > 0 && strainMonotony.weeklyLoad > 0 && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800">
-              <div className="text-xs text-gray-500 mb-1">Monotonie</div>
-              <div className={`text-xl font-bold ${
-                strainMonotony.monotony < 1.5 ? 'text-green-400'
-                : strainMonotony.monotony < 2 ? 'text-amber-400'
-                : 'text-red-400'
-              }`}>
-                {strainMonotony.monotony.toFixed(2)}
+          <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+            <div className="grid grid-cols-2 divide-x divide-gray-800">
+              <div className="p-3.5 space-y-1">
+                <div className="text-xs text-gray-500">Monotonie</div>
+                <div className={`text-xl font-bold ${
+                  strainMonotony.monotony < 1.5 ? 'text-green-400'
+                  : strainMonotony.monotony < 2 ? 'text-amber-400'
+                  : 'text-red-400'
+                }`}>
+                  {strainMonotony.monotony.toFixed(2)}
+                </div>
+                <div className="text-xs leading-tight" style={{ color: strainMonotony.monotony < 1.5 ? '#4ade80' : strainMonotony.monotony < 2 ? '#fb923c' : '#f87171' }}>
+                  {strainMonotony.monotony < 1.5 ? 'Gute Variation'
+                  : strainMonotony.monotony < 2 ? 'Wenig Variation'
+                  : 'Zu eintönig'}
+                </div>
               </div>
-              <div className="text-xs text-gray-600 mt-1 leading-tight">
-                {strainMonotony.monotony < 1.5 ? 'Gute Variation'
-                : strainMonotony.monotony < 2 ? 'Wenig Variation'
-                : 'Zu eintönig'}
+              <div className="p-3.5 space-y-1">
+                <div className="text-xs text-gray-500">Training Strain</div>
+                <div className={`text-xl font-bold ${
+                  strainMonotony.strain < 3000 ? 'text-green-400'
+                  : strainMonotony.strain < 6000 ? 'text-amber-400'
+                  : 'text-red-400'
+                }`}>
+                  {strainMonotony.strain}
+                </div>
+                <div className="text-xs leading-tight" style={{ color: strainMonotony.strain < 3000 ? '#4ade80' : strainMonotony.strain < 6000 ? '#fb923c' : '#f87171' }}>
+                  {strainMonotony.strain < 3000 ? 'Moderat'
+                  : strainMonotony.strain < 6000 ? 'Erhöht'
+                  : 'Kritisch'}
+                </div>
               </div>
             </div>
-            <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800">
-              <div className="text-xs text-gray-500 mb-1">Training Strain</div>
-              <div className={`text-xl font-bold ${
-                strainMonotony.strain < 3000 ? 'text-green-400'
-                : strainMonotony.strain < 6000 ? 'text-amber-400'
-                : 'text-red-400'
-              }`}>
-                {strainMonotony.strain}
-              </div>
-              <div className="text-xs text-gray-600 mt-1 leading-tight">
-                {strainMonotony.strain < 3000 ? 'Moderat'
-                : strainMonotony.strain < 6000 ? 'Erhöht'
-                : 'Kritisch'}
-              </div>
+            <div className="border-t border-gray-800 px-3.5 py-2.5 text-xs text-gray-600 leading-relaxed">
+              <span className="text-gray-500 font-medium">Monotonie</span> = Ø Tageslast ÷ Standardabweichung (7 Tage) — zeigt wie gleichförmig du trainierst. ·{' '}
+              <span className="text-gray-500 font-medium">Training Strain</span> = Wochenlast × Monotonie — kombiniert Volumen und Eintönigkeit (Foster 1998).
             </div>
           </div>
         )}

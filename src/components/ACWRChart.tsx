@@ -228,7 +228,12 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
   const isMobilePortrait = isMobile && !isLandscape;
 
   const activeData = method === 'ewma' && ewmaData.length > 0 ? ewmaData : data;
-  const filtered   = useMemo(() => activeData.filter(d => d.datum >= cutoff), [activeData, cutoff]);
+  // Exclude today from historical when projection covers today (avoids double-plotting today as 0-load)
+  const projectedHasToday = projectedData.some(p => p.datum === todayISO);
+  const filtered   = useMemo(() =>
+    activeData.filter(d => d.datum >= cutoff && !(projectedHasToday && d.datum === todayISO)),
+    [activeData, cutoff, projectedHasToday, todayISO],
+  );
 
   // Mobile portrait: only 3 forecast days — keeps chart readable on small screens
   const projectedSlice = useMemo(
