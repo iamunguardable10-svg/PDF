@@ -210,6 +210,11 @@ function App() {
 
   const handleAddSession = (s: Session) => setSessions(prev => [...prev, s]);
 
+  const handleDeleteSession = (id: string) => setSessions(prev => prev.filter(s => s.id !== id));
+
+  const handleEditSession = (id: string, rpe: number, dauer: number) =>
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, rpe, dauer, tl: rpe * dauer } : s));
+
   const handleAddPlanned = (newSessions: PlannedSession[]) =>
     setPlannedSessions(prev => {
       const existing = new Set(prev.map(s => `${s.datum}-${s.te}`));
@@ -499,6 +504,8 @@ function App() {
             onConfirmPlanned={handleConfirmPlanned}
             onUpdatePlanned={handleUpdatePlanned}
             onDismissPlanned={handleDismissPlanned}
+            onDeleteSession={handleDeleteSession}
+            onEditSession={handleEditSession}
             onSessionConfirmed={handleSessionConfirmed}
             onLoadMockData={handleLoadMockData}
             playerName={profile.name}

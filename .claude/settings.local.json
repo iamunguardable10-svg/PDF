@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(npm run:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:ui-ux-pro-max-skill.nextlevelbuilder.io)",
+      "Bash(npm install:*)",
+      "Bash(python src/ui-ux-pro-max/scripts/search.py \"fitness athlete health tracking sports performance dark mode mobile\" --design-system -p \"FitFuel\" -f markdown)",
+      "Bash(python src/ui-ux-pro-max/scripts/search.py \"mobile navigation dashboard data visualization\" --domain ux -n 5)",
+      "Bash(python src/ui-ux-pro-max/scripts/search.py \"fitness sports dark\" --domain color -n 3)"
     ]
   }
 }

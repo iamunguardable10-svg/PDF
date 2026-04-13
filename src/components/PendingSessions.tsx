@@ -40,7 +40,8 @@ function SessionCard({
   onDismiss: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [rpe, setRpe] = useState(7);
+  const isSpiel = session.te === 'Spiel';
+  const [rpe, setRpe] = useState(isSpiel ? 10 : 7);
   const [dauer, setDauer] = useState(session.geschaetzteDauer ?? 90);
 
   const today = new Date().toISOString().split('T')[0];
@@ -96,20 +97,30 @@ function SessionCard({
           {session.reminderScheduled && (
             <span className="text-xs text-green-400" title="Erinnerung aktiv">🔔✓</span>
           )}
-          <button
-            onClick={() => setExpanded(e => !e)}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
-            style={{ backgroundColor: color + '33', color }}
-          >
-            {expanded ? 'Schließen' : 'Eintragen'}
-          </button>
+          {(isPast || isToday) && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
+              style={{ backgroundColor: color + '33', color }}
+            >
+              {expanded ? 'Schließen' : 'Eintragen'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Eintragen-Formular */}
-      {expanded && (
+      {/* Eintragen-Formular — nur für vergangene und heutige Sessions */}
+      {expanded && (isPast || isToday) && (
         <div className="border-t border-gray-800 px-4 py-4 space-y-4">
-          <RPEInput value={rpe} onChange={setRpe} />
+          {isSpiel ? (
+            <div className="flex items-center gap-3 bg-red-900/20 border border-red-800/40 rounded-xl px-3 py-2.5">
+              <span className="text-xs text-gray-400">RPE Spiel:</span>
+              <span className="font-black text-red-400 text-lg">10</span>
+              <span className="text-xs text-gray-500">— maximale Wettkampfbelastung</span>
+            </div>
+          ) : (
+            <RPEInput value={rpe} onChange={setRpe} />
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-1.5">

@@ -1347,41 +1347,61 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
 
   const alerts = useMemo(() => generateAlerts(statusList), [statusList]);
 
-  // Roster mutations
+  // Roster mutations — save immediately inside the updater to survive quick navigations
   const addAthlete = (athlete: ManagedAthlete) => {
-    setRoster(r => ({ ...r, athletes: [...r.athletes, athlete] }));
+    setRoster(r => {
+      const next = { ...r, athletes: [...r.athletes, athlete] };
+      if (!mockRef.current) saveRoster(next);
+      return next;
+    });
     setShowAddModal(false);
     refreshAthlete(athlete);
   };
 
   const removeAthlete = (id: string) => {
-    setRoster(r => ({ ...r, athletes: r.athletes.filter(a => a.id !== id) }));
+    setRoster(r => {
+      const next = { ...r, athletes: r.athletes.filter(a => a.id !== id) };
+      if (!mockRef.current) saveRoster(next);
+      return next;
+    });
     setStatuses(prev => { const next = new Map(prev); next.delete(id); return next; });
     setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
   };
 
   const addGroup = (group: AthleteGroup) => {
-    setRoster(r => ({ ...r, groups: [...r.groups, group] }));
+    setRoster(r => {
+      const next = { ...r, groups: [...r.groups, group] };
+      if (!mockRef.current) saveRoster(next);
+      return next;
+    });
     setShowGroupModal(false);
   };
 
   const deleteGroup = (id: string) => {
-    setRoster(r => ({
-      groups: r.groups.filter(g => g.id !== id),
-      athletes: r.athletes.map(a => ({ ...a, groupIds: a.groupIds.filter(g => g !== id) })),
-    }));
+    setRoster(r => {
+      const next = {
+        groups: r.groups.filter(g => g.id !== id),
+        athletes: r.athletes.map(a => ({ ...a, groupIds: a.groupIds.filter(g => g !== id) })),
+      };
+      if (!mockRef.current) saveRoster(next);
+      return next;
+    });
   };
 
   const assignGroup = (athleteId: string, groupId: string, assign: boolean) => {
-    setRoster(r => ({
-      ...r,
-      athletes: r.athletes.map(a => a.id !== athleteId ? a : {
-        ...a,
-        groupIds: assign
-          ? [...new Set([...a.groupIds, groupId])]
-          : a.groupIds.filter(g => g !== groupId),
-      }),
-    }));
+    setRoster(r => {
+      const next = {
+        ...r,
+        athletes: r.athletes.map(a => a.id !== athleteId ? a : {
+          ...a,
+          groupIds: assign
+            ? [...new Set([...a.groupIds, groupId])]
+            : a.groupIds.filter(g => g !== groupId),
+        }),
+      };
+      if (!mockRef.current) saveRoster(next);
+      return next;
+    });
     setStatuses(prev => {
       const cur = prev.get(athleteId);
       if (!cur) return prev;
@@ -1484,7 +1504,11 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
                 groupIds: [],
                 addedAt:  new Date().toISOString().split('T')[0],
               };
-              setRoster(r => ({ ...r, athletes: [...r.athletes, athlete] }));
+              setRoster(r => {
+                const next = { ...r, athletes: [...r.athletes, athlete] };
+                saveRoster(next);
+                return next;
+              });
               refreshAthlete(athlete);
             }}
           />

@@ -87,6 +87,30 @@ export function getCurrentACWR(dataPoints: ACWRDataPoint[]): ACWRDataPoint | nul
   return dataPoints[dataPoints.length - 1];
 }
 
+export interface StrainMonotony {
+  weeklyLoad: number;
+  monotony: number;
+  strain: number;
+}
+
+/** Foster's Training Monotony & Strain (last 7 calendar days, rest days = 0) */
+export function calculateStrainMonotony(dailyLoads: DayLoad[]): StrainMonotony {
+  const loads: number[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const iso = localISO(d);
+    const found = dailyLoads.find(dl => dl.datum === iso);
+    loads.push(found?.taeglLoad ?? 0);
+  }
+  const mean = loads.reduce((s, v) => s + v, 0) / 7;
+  const variance = loads.reduce((s, v) => s + (v - mean) ** 2, 0) / 7;
+  const sd = Math.sqrt(variance);
+  const monotony = sd < 1 ? (mean > 0 ? 1 : 0) : Math.round((mean / sd) * 100) / 100;
+  const weeklyLoad = loads.reduce((s, v) => s + v, 0);
+  const strain = Math.round(weeklyLoad * monotony);
+  return { weeklyLoad, monotony, strain };
+}
+
 export function getACWRZoneLabel(acwr: number): { label: string; color: string; bg: string } {
   if (acwr < ACWR_ZONES.low)  return { label: 'Low Risk',  color: '#60a5fa', bg: 'bg-blue-900/30'  };
   if (acwr <= ACWR_ZONES.high) return { label: 'Optimal',  color: '#4ade80', bg: 'bg-green-900/30' };
@@ -159,7 +183,7 @@ export function projectFutureACWR(
 
   const plannedMap = new Map<string, PlannedSession[]>();
   for (const ps of plannedSessions) {
-    if (!ps.confirmed && ps.datum > today && ps.datum <= endISO) {
+    if (!ps.confirmed && ps.datum >= today && ps.datum <= endISO) {
       if (!plannedMap.has(ps.datum)) plannedMap.set(ps.datum, []);
       plannedMap.get(ps.datum)!.push(ps);
     }

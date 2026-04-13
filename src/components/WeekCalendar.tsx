@@ -10,6 +10,8 @@ interface Props {
   onDismiss?: (id: string) => void;
   onAddPlanned?: (sessions: PlannedSession[]) => void;
   onAddSessionDirect?: (session: Session) => void;
+  onDeleteSession?: (id: string) => void;
+  onEditSession?: (id: string, rpe: number, dauer: number) => void;
   jumpToDate?: string; // ISO date — calendar navigates to the week containing this date
   sport?: string;
 }
@@ -263,50 +265,68 @@ function CreateSessionModal({
             )}
           </div>
 
-          {/* Uhrzeit + Dauer */}
-          <div className={`grid gap-3 ${isPast || te === 'Spiel' ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1.5">
-                Uhrzeit (optional)
-                {te === 'Aufwärmen' && sameDaySpiel?.uhrzeit && (
-                  <span className="ml-1.5 text-violet-400">· Auto</span>
-                )}
-                {te === 'Spiel' && time && plannedSessions?.some(ps => !ps.confirmed && ps.datum === datum && ps.te === 'Aufwärmen') && (
-                  <span className="ml-1.5 text-orange-400">· Warmup wird angepasst</span>
-                )}
-              </label>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
-            </div>
-            {te === 'Spiel' && (
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">
-                  Spieldauer: <span className="text-white font-semibold">{dauer} Min</span>
-                  <span className="ml-1 text-gray-600">({gameConf.label})</span>
-                </label>
-                <input type="range" min={gameConf.min} max={gameConf.max} step={1} value={dauer}
-                  onChange={e => setDauer(Number(e.target.value))}
-                  className="w-full mt-2 accent-orange-500" />
-                <div className="flex justify-between text-xs text-gray-600 mt-1">
-                  <span>{gameConf.min}</span><span>{gameConf.max} Min</span>
-                </div>
-              </div>
-            )}
-            {isPast && te !== 'Spiel' && (
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Dauer: {dauer} Min</label>
-                <input type="range" min={15} max={180} step={15} value={dauer}
-                  onChange={e => setDauer(Number(e.target.value))}
-                  className="w-full mt-2 accent-violet-500" />
-              </div>
-            )}
+          {/* Uhrzeit */}
+          <div>
+            <label className="text-xs text-gray-500 block mb-1.5">
+              Uhrzeit (optional)
+              {te === 'Aufwärmen' && sameDaySpiel?.uhrzeit && (
+                <span className="ml-1.5 text-violet-400">· Auto</span>
+              )}
+              {te === 'Spiel' && time && plannedSessions?.some(ps => !ps.confirmed && ps.datum === datum && ps.te === 'Aufwärmen') && (
+                <span className="ml-1.5 text-orange-400">· Warmup wird angepasst</span>
+              )}
+            </label>
+            <input type="time" value={time} onChange={e => setTime(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 [color-scheme:dark]" />
           </div>
 
-          {/* Auto-Dauer Hinweis für zukünftige Non-Spiel-Sessions */}
+          {/* Dauer */}
+          {te === 'Spiel' && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-gray-500">
+                  Spieldauer <span className="text-gray-600">({gameConf.label})</span>
+                </label>
+                <span className="text-white font-semibold text-xs">{dauer} Min</span>
+              </div>
+              <input type="range" min={gameConf.min} max={gameConf.max} step={1} value={dauer}
+                onChange={e => setDauer(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-xs text-gray-600 mt-1">
+                <span>{gameConf.min}</span><span>{gameConf.max} Min</span>
+              </div>
+            </div>
+          )}
+          {isPast && te !== 'Spiel' && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-gray-500">Dauer</label>
+                <span className="text-white font-semibold text-xs">{dauer} Min</span>
+              </div>
+              <input type="range" min={15} max={180} step={15} value={dauer}
+                onChange={e => setDauer(Number(e.target.value))}
+                className="w-full accent-violet-500" />
+            </div>
+          )}
+
+          {/* Dauer für zukünftige Non-Spiel-Sessions: Auto mit optionalem Override */}
           {!isPast && te !== 'Spiel' && (
-            <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-800/40 rounded-xl px-3 py-2">
-              <span>⏱</span>
-              <span>Dauer wird aus deinem Trainingsverlauf berechnet</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">Geplante Dauer</span>
+                <span className="text-xs font-semibold text-white">
+                  {dauer} Min
+                  <span className="text-gray-600 font-normal ml-1">(Schätzwert)</span>
+                </span>
+              </div>
+              <input
+                type="range" min={15} max={180} step={15} value={dauer}
+                onChange={e => setDauer(Number(e.target.value))}
+                className="w-full accent-violet-500"
+              />
+              <div className="flex justify-between text-xs text-gray-700">
+                <span>15</span><span>60</span><span>120</span><span>180 Min</span>
+              </div>
             </div>
           )}
 
@@ -562,11 +582,115 @@ function SessionModal({
   );
 }
 
+// ─── Modal: absolvierte Session bearbeiten / löschen ─────────────────────────
+
+function DoneSessionModal({
+  session, onClose, onDelete, onEdit,
+}: {
+  session: Session;
+  onClose: () => void;
+  onDelete: () => void;
+  onEdit: (rpe: number, dauer: number) => void;
+}) {
+  const [rpe, setRpe]     = useState(session.rpe);
+  const [dauer, setDauer] = useState(session.dauer);
+  const [confirm, setConfirm] = useState(false);
+  const color    = TE_COLORS[session.te as TrainingUnit] ?? '#6b7280';
+  const emoji    = TE_EMOJI[session.te as TrainingUnit] ?? '💪';
+  const rpeColor = rpe <= 3 ? '#4ade80' : rpe <= 6 ? '#facc15' : '#f87171';
+
+  const dirty = rpe !== session.rpe || dauer !== session.dauer;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm bg-gray-900 rounded-3xl border border-gray-700 shadow-2xl overflow-hidden">
+        <div className="px-5 pt-5 pb-3 flex items-center gap-3" style={{ borderBottom: `2px solid ${color}40` }}>
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl shrink-0"
+            style={{ backgroundColor: color + '33' }}>
+            {emoji}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-white text-sm">{session.te}</div>
+            <div className="text-xs text-gray-400">
+              {fmtWeekday(session.datum)} · {session.dauer} Min · RPE {session.rpe} · {session.tl} AU
+            </div>
+          </div>
+          <button onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-xl text-gray-500 hover:text-white hover:bg-gray-800 transition-colors text-sm shrink-0">
+            ✕
+          </button>
+        </div>
+
+        <div className="px-5 pb-5 pt-4 space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500">RPE</span>
+              <span className="font-bold text-lg" style={{ color: rpeColor }}>{rpe}</span>
+            </div>
+            <input type="range" min={1} max={10} step={1} value={rpe}
+              onChange={e => setRpe(Number(e.target.value))}
+              className="w-full accent-violet-500" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500">Dauer</span>
+              <span className="font-semibold text-white text-sm">{dauer} Min</span>
+            </div>
+            <input type="range" min={5} max={180} step={5} value={dauer}
+              onChange={e => setDauer(Number(e.target.value))}
+              className="w-full accent-violet-500" />
+          </div>
+
+          <div className="bg-gray-800 rounded-2xl p-3 flex justify-between items-center">
+            <span className="text-sm text-gray-400">Training Load</span>
+            <span className="font-bold text-orange-400 text-lg">{rpe * dauer} AU</span>
+          </div>
+
+          {!confirm ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onEdit(rpe, dauer); onClose(); }}
+                disabled={!dirty}
+                className="flex-1 py-2.5 rounded-2xl font-semibold text-sm bg-violet-700 hover:bg-violet-600 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors"
+              >
+                Speichern
+              </button>
+              <button
+                onClick={() => setConfirm(true)}
+                className="px-4 py-2.5 rounded-2xl text-sm text-gray-500 hover:text-red-400 border border-gray-700 hover:border-red-800 transition-colors"
+              >
+                Löschen
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400 text-center">Einheit wirklich löschen?</p>
+              <div className="flex gap-2">
+                <button onClick={() => { onDelete(); onClose(); }}
+                  className="flex-1 py-2.5 rounded-2xl font-semibold text-sm bg-red-700 hover:bg-red-600 text-white transition-colors">
+                  Ja, löschen
+                </button>
+                <button onClick={() => setConfirm(false)}
+                  className="flex-1 py-2.5 rounded-2xl text-sm text-gray-400 border border-gray-700 hover:bg-gray-800 transition-colors">
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Haupt-Komponente ──────────────────────────────────────────────────────────
 
-export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned, onAddSessionDirect, jumpToDate, sport }: Props) {
+export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, onDismiss, onAddPlanned, onAddSessionDirect, onDeleteSession, onEditSession, jumpToDate, sport }: Props) {
   const [weekOffset, setWeekOffset]           = useState(0);
   const [selectedSession, setSelectedSession] = useState<PlannedSession | null>(null);
+  const [selectedDoneSession, setSelectedDoneSession] = useState<Session | null>(null);
   const [createForDay, setCreateForDay]       = useState<string | null>(null);
   const [draggingId, setDraggingId]           = useState<string | null>(null);
   const [dragOverDay, setDragOverDay]         = useState<string | null>(null);
@@ -875,7 +999,10 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
                     isDragging={draggingId === entry.id}
                     onDragStart={entry.session ? (e) => handleDragStart(e, entry.session!) : undefined}
                     onDragEnd={entry.session ? handleDragEnd : undefined}
-                    onClick={entry.session ? () => {
+                    onClick={entry.kind === 'done' && onDeleteSession ? () => {
+                      const s = sessions.find(s => s.id === entry.id);
+                      if (s) setSelectedDoneSession(s);
+                    } : entry.session ? () => {
                       if (!dragHappened.current) setSelectedSession(entry.session!);
                     } : undefined}
                   />
@@ -903,6 +1030,16 @@ export function WeekCalendar({ sessions, plannedSessions, onConfirm, onUpdate, o
           onDismiss={onDismiss}
           initialTab={dropInitialTab ?? undefined}
           plannedSessions={plannedSessions}
+        />
+      )}
+
+      {/* Done Session Modal (edit/delete confirmed sessions) */}
+      {selectedDoneSession && onDeleteSession && (
+        <DoneSessionModal
+          session={selectedDoneSession}
+          onClose={() => setSelectedDoneSession(null)}
+          onDelete={() => onDeleteSession(selectedDoneSession.id)}
+          onEdit={(rpe, dauer) => onEditSession?.(selectedDoneSession.id, rpe, dauer)}
         />
       )}
 

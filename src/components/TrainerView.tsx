@@ -4,7 +4,7 @@ type PlannedEntry = TrainerShareData['planned'];
 import { fetchLiveTrainerData } from '../lib/trainerShare';
 import type { ACWRDataPoint, Session, PlannedSession, TrainingUnit } from '../types/acwr';
 import { TE_EMOJI, TE_COLORS } from '../types/acwr';
-import { getACWRZoneLabel, projectFutureACWR, aggregateDailyLoads, calculateACWR, calculateEWMA } from '../lib/acwrCalculations';
+import { getACWRZoneLabel, projectFutureACWR, aggregateDailyLoads, calculateEWMA } from '../lib/acwrCalculations';
 import type { DayLoad } from '../types/acwr';
 import { ACWRChart } from './ACWRChart';
 import { ACWRForecast } from './ACWRForecast';
@@ -115,16 +115,14 @@ export function TrainerView({ data: staticData, token }: Props) {
     calculateEWMA(sessions28AsSessions),
   [sessions28AsSessions]);
 
-  // Prefer sessions28-based calculation: has real taeglLoad per day → bars work in detail view.
-  // Fall back to pre-encoded acwrHistory only when sessions28 is empty (old share links).
-  const acwrData: ACWRDataPoint[] = useMemo(() => {
-    if (sessions28AsSessions.length > 0) {
-      return calculateACWR(sessions28AsSessions);
-    }
-    return (data?.acwrHistory ?? []).map(p => ({
-      datum: p.d, taeglLoad: 0, acuteLoad: p.a, chronicLoad: p.c, acwr: p.v,
-    }));
-  }, [sessions28AsSessions, data]);
+  // Use server-precomputed acwrHistory (calculated from ALL sessions, not just 28d).
+  // sessions28 is only used for the daily-load bars (TE breakdown) — accurate for last 28 days.
+  const acwrData: ACWRDataPoint[] = useMemo(() =>
+    (data?.acwrHistory ?? []).map(p => ({
+      datum: p.d, taeglLoad: 0, acuteLoad: p.a, chronicLoad: p.c,
+      acwr: p.v, chronicFull: true,
+    })),
+  [data]);
 
   function fmtDate(iso: string) {
     const d = new Date(iso + 'T00:00');
@@ -235,16 +233,22 @@ export function TrainerView({ data: staticData, token }: Props) {
                 </div>
               </div>
 
+              {/* Gauge — scale 0–2, zones at 0.8 (40%) and 1.3 (65%) */}
               <div className="relative h-4 rounded-full overflow-hidden mb-1"
-                style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 32%, #4ade80 40%, #4ade80 72%, #f87171 82%, #f87171 100%)' }}>
+                style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 40%, #4ade80 40%, #4ade80 65%, #f87171 65%, #f87171 100%)' }}>
                 <div className="absolute top-0 bottom-0 flex items-center"
                   style={{ left: `${Math.min(100, Math.max(0, (acwr / 2) * 100))}%`, transform: 'translateX(-50%)' }}>
                   <div className="w-3 h-3 bg-white rounded-full border-2 border-gray-900 shadow" />
                 </div>
               </div>
-              <div className="flex justify-between text-xs text-gray-500 px-0.5">
-                <span>0</span><span className="text-blue-400">0.8</span>
-                <span className="text-green-400">1.0</span><span className="text-red-400">1.3</span><span>2.0</span>
+              <div className="relative h-4">
+                {([0, 0.8, 1.3, 2.0] as const).map(v => (
+                  <span key={v}
+                    className={`absolute text-xs transform -translate-x-1/2 ${v === 0.8 ? 'text-blue-400' : v === 1.3 ? 'text-red-400' : 'text-gray-500'}`}
+                    style={{ left: `${(v / 2) * 100}%` }}>
+                    {v}
+                  </span>
+                ))}
               </div>
 
               <div className="grid grid-cols-2 gap-3 mt-4">

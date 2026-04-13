@@ -14,6 +14,7 @@ interface Props {
   projectedData?: ACWRDataPoint[];
   dailyLoads?: DayLoad[];
   ewmaData?: ACWRDataPoint[];
+  onMethodChange?: (method: 'rolling' | 'ewma') => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -176,8 +177,13 @@ function MirroredRightTick(props: any) {
 
 type Range = 7 | 14 | 30 | 60;
 
-export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData = [] }: Props) {
+export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData = [], onMethodChange }: Props) {
   const [method,      setMethod]      = useState<'rolling' | 'ewma'>('rolling');
+
+  const setMethodAndNotify = (m: 'rolling' | 'ewma') => {
+    setMethod(m);
+    onMethodChange?.(m);
+  };
   const [range,       setRange]       = useState<Range>(() =>
     typeof window !== 'undefined' && window.innerWidth < 640 ? 7 : 60
   );
@@ -416,7 +422,7 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
       <div className="flex gap-1 flex-wrap">
         {/* Method toggle */}
         {ewmaData.length > 0 && (['rolling', 'ewma'] as const).map(m => (
-          <button key={m} onClick={() => setMethod(m)}
+          <button key={m} onClick={() => setMethodAndNotify(m)}
             className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
               method === m ? 'bg-sky-700 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'
             }`}>

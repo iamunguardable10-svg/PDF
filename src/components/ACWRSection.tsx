@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import type { Session, PlannedSession, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
-import { calculateACWR, calculateEWMA, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel, projectFutureACWR } from '../lib/acwrCalculations';
+import { calculateACWR, calculateEWMA, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel, projectFutureACWR, calculateStrainMonotony } from '../lib/acwrCalculations';
 import { CLOUD_ENABLED } from '../lib/supabase';
 import { encodeShareData, createLiveShare, revokeLiveShare, getActiveShare } from '../lib/trainerShare';
 import {
@@ -23,6 +23,8 @@ interface Props {
   onConfirmPlanned: (id: string, rpe: number, dauer: number) => void;
   onUpdatePlanned: (id: string, updates: Partial<PlannedSession>) => void;
   onDismissPlanned: (id: string) => void;
+  onDeleteSession?: (id: string) => void;
+  onEditSession?: (id: string, rpe: number, dauer: number) => void;
   onSessionConfirmed?: () => void;
   onLoadMockData?: () => void;
   playerName: string;
@@ -32,8 +34,9 @@ interface Props {
 
 export function ACWRSection({
   sessions, plannedSessions, onAddSession, onAddPlanned,
-  onConfirmPlanned, onUpdatePlanned, onDismissPlanned, onSessionConfirmed,
-  onLoadMockData, playerName, playerSport = 'Sport', userId,
+  onConfirmPlanned, onUpdatePlanned, onDismissPlanned,
+  onDeleteSession, onEditSession,
+  onSessionConfirmed, onLoadMockData, playerName, playerSport = 'Sport', userId,
 }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -46,13 +49,17 @@ export function ACWRSection({
   // Reminder-Timeouts: id → timeoutId
   const reminderTimeouts = useRef<Map<string, number>>(new Map());
 
+  const [chartMethod, setChartMethod] = useState<'rolling' | 'ewma'>('rolling');
+
   const acwrData      = useMemo(() => calculateACWR(sessions), [sessions]);
   const ewmaData      = useMemo(() => calculateEWMA(sessions), [sessions]);
   const projectedData = useMemo(() => projectFutureACWR(sessions, plannedSessions), [sessions, plannedSessions]);
   const dailyLoads    = useMemo(() => aggregateDailyLoads(sessions), [sessions]);
-  const current       = useMemo(() => getCurrentACWR(acwrData), [acwrData]);
+  const activeACWRData = chartMethod === 'ewma' ? ewmaData : acwrData;
+  const current       = useMemo(() => getCurrentACWR(activeACWRData), [activeACWRData]);
   const acwr       = current?.acwr ?? null;
   const zone       = acwr !== null ? getACWRZoneLabel(acwr) : null;
+  const strainMonotony = useMemo(() => calculateStrainMonotony(dailyLoads), [dailyLoads]);
 
   const last7Days = useMemo(() => {
     const cutoff = new Date();
@@ -221,6 +228,17 @@ export function ACWRSection({
                   <div className="text-gray-500 text-xs mt-0.5">Erhöhtes Verletzungsrisiko</div>
                 </div>
               </div>
+              <div className="border-t border-gray-700 pt-2 space-y-1">
+                <div className="font-semibold text-white">Monotonie & Training Strain</div>
+                <div className="text-gray-400">
+                  <span className="text-gray-300 font-medium">Monotonie</span> = Mittlere Tageslast ÷ Standardabweichung (letzte 7 Tage).
+                  Werte unter 1.5 zeigen gute Variation; über 2.0 ist die Belastung zu gleichförmig — Risiko für Übertraining steigt.
+                </div>
+                <div className="text-gray-400 mt-1">
+                  <span className="text-gray-300 font-medium">Training Strain</span> = Wochenlast × Monotonie (Foster 1998).
+                  Kombiniert Volumen und Eintönigkeit. Unter 3.000 moderat, über 6.000 kritisch.
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -235,6 +253,8 @@ export function ACWRSection({
         onDismissPlanned={handleDismiss}
         onAddPlanned={onAddPlanned}
         onAddSessionDirect={s => { onAddSession(s); onSessionConfirmed?.(); }}
+        onDeleteSession={onDeleteSession}
+        onEditSession={onEditSession}
         jumpToDate={calendarJumpDate}
         sport={playerSport}
       />
@@ -389,43 +409,44 @@ export function ACWRSection({
               </div>
             </div>
 
-            {/* Horizontale Gauge-Leiste */}
-            <div className="relative h-5">
-              {/* Gradient-Balken */}
-              <div className="absolute inset-0 rounded-full overflow-hidden"
-                style={{ background: 'linear-gradient(to right, #60a5fa 0%, #60a5fa 32%, #4ade80 40%, #4ade80 72%, #f87171 82%, #f87171 100%)' }}
-              />
-              {/* Zonen-Labels */}
-              <div className="absolute inset-0 flex items-center">
-                <div className="absolute" style={{ left: '32%', transform: 'translateX(-50%)' }}>
-                  <div className="w-px h-3 bg-gray-900/60 mx-auto" />
-                </div>
-                <div className="absolute" style={{ left: '72%', transform: 'translateX(-50%)' }}>
-                  <div className="w-px h-3 bg-gray-900/60 mx-auto" />
-                </div>
-              </div>
-              {/* Zeiger */}
-              {(() => {
-                const clampedACWR = Math.max(0, Math.min(2, acwr));
-                const pct = (clampedACWR / 2) * 100;
-                return (
-                  <div
-                    className="absolute top-0 bottom-0 flex items-center"
-                    style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}
-                  >
-                    <div className="w-3 h-3 bg-white rounded-full border-2 border-gray-900 shadow-lg" />
+            {/* Horizontale Gauge-Leiste — scale 0 to 2.0 */}
+            {(() => {
+              // Map ACWR 0–2 linearly to 0–100%
+              const toP = (v: number) => `${(v / 2) * 100}%`;
+              const clampedACWR = Math.max(0, Math.min(2, acwr));
+              const markerPct = (clampedACWR / 2) * 100;
+              return (
+                <>
+                  <div className="relative h-5">
+                    <div className="absolute inset-0 rounded-full overflow-hidden"
+                      style={{ background: `linear-gradient(to right, #60a5fa 0%, #60a5fa ${toP(0.8)}, #4ade80 ${toP(0.8)}, #4ade80 ${toP(1.3)}, #f87171 ${toP(1.3)}, #f87171 100%)` }}
+                    />
+                    {/* Zone dividers */}
+                    {[0.8, 1.3].map(v => (
+                      <div key={v} className="absolute top-0 bottom-0 w-px bg-gray-900/50"
+                        style={{ left: toP(v) }} />
+                    ))}
+                    {/* Marker */}
+                    <div className="absolute top-0 bottom-0 flex items-center"
+                      style={{ left: `${markerPct}%`, transform: 'translateX(-50%)' }}>
+                      <div className="w-3 h-3 bg-white rounded-full border-2 border-gray-900 shadow-lg" />
+                    </div>
                   </div>
-                );
-              })()}
-            </div>
-            {/* Skalenbeschriftung */}
-            <div className="flex justify-between text-xs text-gray-500 -mt-1 px-0.5">
-              <span>0</span>
-              <span className="text-blue-400">0.8</span>
-              <span className="text-green-400">1.0</span>
-              <span className="text-red-400">1.3</span>
-              <span>2.0</span>
-            </div>
+                  {/* Scale labels — positioned absolutely to match values */}
+                  <div className="relative h-4 -mt-0.5">
+                    {([0, 0.8, 1.3, 2.0] as const).map(v => (
+                      <span key={v}
+                        className={`absolute text-xs transform -translate-x-1/2 ${
+                          v === 0.8 ? 'text-blue-400' : v === 1.3 ? 'text-red-400' : 'text-gray-500'
+                        }`}
+                        style={{ left: toP(v) }}>
+                        {v}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -533,13 +554,49 @@ export function ACWRSection({
             </div>
           );
         })()}
+
+        {/* Monotony & Strain */}
+        {sessions.length > 0 && strainMonotony.weeklyLoad > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800">
+              <div className="text-xs text-gray-500 mb-1">Monotonie</div>
+              <div className={`text-xl font-bold ${
+                strainMonotony.monotony < 1.5 ? 'text-green-400'
+                : strainMonotony.monotony < 2 ? 'text-amber-400'
+                : 'text-red-400'
+              }`}>
+                {strainMonotony.monotony.toFixed(2)}
+              </div>
+              <div className="text-xs text-gray-600 mt-1 leading-tight">
+                {strainMonotony.monotony < 1.5 ? 'Gute Variation'
+                : strainMonotony.monotony < 2 ? 'Wenig Variation'
+                : 'Zu eintönig'}
+              </div>
+            </div>
+            <div className="bg-gray-900 rounded-2xl p-3.5 border border-gray-800">
+              <div className="text-xs text-gray-500 mb-1">Training Strain</div>
+              <div className={`text-xl font-bold ${
+                strainMonotony.strain < 3000 ? 'text-green-400'
+                : strainMonotony.strain < 6000 ? 'text-amber-400'
+                : 'text-red-400'
+              }`}>
+                {strainMonotony.strain}
+              </div>
+              <div className="text-xs text-gray-600 mt-1 leading-tight">
+                {strainMonotony.strain < 3000 ? 'Moderat'
+                : strainMonotony.strain < 6000 ? 'Erhöht'
+                : 'Kritisch'}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Chart */}
       {sessions.length > 0 && (
         <div className="bg-gray-900/50 rounded-3xl p-6 border border-gray-800">
           <h3 className="text-sm font-semibold text-white mb-4">ACWR Verlauf</h3>
-          <ACWRChart data={acwrData} projectedData={projectedData} dailyLoads={dailyLoads} ewmaData={ewmaData} />
+          <ACWRChart data={acwrData} projectedData={projectedData} dailyLoads={dailyLoads} ewmaData={ewmaData} onMethodChange={setChartMethod} />
         </div>
       )}
 
