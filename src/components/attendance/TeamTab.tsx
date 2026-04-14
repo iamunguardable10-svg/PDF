@@ -182,7 +182,29 @@ export function TeamTab({ userId, userName, onGoToJoin }: Props) {
   }
 
   if (loading) {
-    return <div className="py-12 text-center text-gray-500 text-sm">Laden...</div>;
+    return (
+      <div className="space-y-4 animate-pulse">
+        {/* Skeleton sub-tabs */}
+        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-2xl p-1">
+          <div className="skeleton flex-1 h-8 rounded-xl" />
+          <div className="skeleton flex-1 h-8 rounded-xl opacity-50" />
+        </div>
+        {/* Skeleton calendar */}
+        <div className="skeleton h-48 rounded-2xl" />
+        {/* Skeleton session cards */}
+        {[1, 2, 3].map(i => (
+          <div key={i} className="bg-gray-800 border border-gray-700/50 rounded-xl px-4 py-3 space-y-2">
+            <div className="flex justify-between items-start">
+              <div className="space-y-1.5 flex-1">
+                <div className="skeleton h-4 w-2/3 rounded" />
+                <div className="skeleton h-3 w-1/3 rounded opacity-60" />
+              </div>
+              <div className="skeleton h-5 w-16 rounded-full" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   if (myTeams.length === 0) {
@@ -488,7 +510,7 @@ function AthleteSessionCard({
 
   return (
     <button onClick={onTap}
-      className={`w-full bg-gray-800 border ${info.border} rounded-xl px-4 py-3 text-left hover:border-violet-600 transition-colors`}>
+      className={`w-full bg-gray-800 border ${info.border} rounded-xl px-4 py-3 text-left hover:border-violet-600 transition-colors card-lift`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-white truncate">{session.title}</p>

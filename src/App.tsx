@@ -40,9 +40,17 @@ import type { User } from '@supabase/supabase-js';
 
 type Tab = 'dashboard' | 'tagebuch' | 'acwr' | 'team';
 
+const TAB_ORDER: Tab[] = ['dashboard', 'tagebuch', 'acwr', 'team'];
+
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [prevTab, setPrevTab] = useState<Tab>('dashboard');
+
+  function navigateTab(tab: Tab) {
+    setPrevTab(activeTab);
+    setActiveTab(tab);
+  }
   const [showSettings, setShowSettings] = useState(false);
 
   // Landing page — show once to new visitors
@@ -350,7 +358,7 @@ function App() {
         userId={loggedInUser.id}
         userName={profile.name || loggedInUser.email || 'Athlet'}
         userSport={profile.sport || ''}
-        onJoined={() => { window.location.hash = ''; setCurrentHash(''); setActiveTab('team'); }}
+        onJoined={() => { window.location.hash = ''; setCurrentHash(''); navigateTab('team'); }}
         onBack={() => { window.location.hash = ''; setCurrentHash(''); }}
       />
     );
@@ -401,7 +409,7 @@ function App() {
             ] as const).map(t => (
               <button
                 key={t.id}
-                onClick={() => setActiveTab(t.id)}
+                onClick={() => navigateTab(t.id)}
                 className={`relative px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   activeTab === t.id
                     ? 'bg-violet-600 text-white shadow-sm'
@@ -452,7 +460,8 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-4 pb-24 sm:pb-6 space-y-4">
+      <main className="max-w-6xl mx-auto px-4 py-4 pb-24 sm:pb-6">
+        <div key={activeTab} className="page-enter space-y-4">
 
         {/* ── ERNÄHRUNG ── */}
         {activeTab === 'dashboard' && (
@@ -555,6 +564,7 @@ function App() {
             userId={loggedInUser?.id}
           />
         )}
+        </div>
       </main>
 
       {showSettings && (
@@ -568,38 +578,46 @@ function App() {
       {showTour && !userId && <AppTour onDone={handleTourDone} />}
 
       {/* Bottom navigation — mobile only */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-[#0d0e14]/95 backdrop-blur-xl border-t border-white/5">
-        <div className="flex items-stretch h-16">
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-[#0a0b0f]/90 backdrop-blur-2xl border-t border-white/5"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="flex items-stretch h-[60px] px-2">
           {([
             { id: 'dashboard', label: 'Ernährung', icon: '🥗', badge: 0 },
             { id: 'tagebuch',  label: 'Tagebuch',  icon: '📒', badge: 0 },
             { id: 'acwr',      label: 'ACWR',       icon: '📊', badge: pendingCount },
             { id: 'team',      label: 'Team',        icon: '🏆', badge: 0 },
-          ] as const).map(t => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-all ${
-                activeTab === t.id ? 'text-violet-400' : 'text-gray-600'
-              }`}
-            >
-              <span className={`text-xl transition-transform ${activeTab === t.id ? 'scale-110' : ''}`}>{t.icon}</span>
-              <span className={`text-[10px] font-medium ${activeTab === t.id ? 'text-violet-400' : 'text-gray-600'}`}>
-                {t.label}
-              </span>
-              {t.badge > 0 && (
-                <span className="absolute top-2 right-[calc(50%-14px)] w-4 h-4 bg-orange-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-                  {t.badge}
+          ] as const).map(t => {
+            const isActive = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => navigateTab(t.id)}
+                className="relative flex-1 flex flex-col items-center justify-center gap-0.5 tap-feedback"
+              >
+                {/* Active pill background */}
+                {isActive && (
+                  <span className="absolute inset-x-2 top-1.5 bottom-1.5 rounded-2xl bg-violet-600/15 border border-violet-500/20" />
+                )}
+                {/* Icon */}
+                <span className={`relative text-xl leading-none ${isActive ? 'nav-icon-active' : ''}`}>
+                  {t.icon}
                 </span>
-              )}
-              {activeTab === t.id && (
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-violet-500 rounded-full" />
-              )}
-            </button>
-          ))}
+                {/* Label */}
+                <span className={`relative text-[10px] font-semibold tracking-wide transition-colors duration-200 ${
+                  isActive ? 'text-violet-400' : 'text-gray-600'
+                }`}>
+                  {t.label}
+                </span>
+                {/* Badge */}
+                {t.badge > 0 && (
+                  <span className="absolute top-1.5 right-3 min-w-[16px] h-4 bg-orange-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold px-1">
+                    {t.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
-        {/* iOS safe area */}
-        <div className="h-safe-bottom bg-[#0d0e14]/95" />
       </nav>
 
       {showAuthModal && CLOUD_ENABLED && (

@@ -1,4 +1,28 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+
+/** Animates a number from 0 to target over ~600ms */
+function useAnimatedNumber(target: number | null): number | null {
+  const [display, setDisplay] = useState<number | null>(null);
+  const rafRef = useRef<number>(0);
+  const animate = useCallback(() => {
+    if (target === null) { setDisplay(null); return; }
+    const start = performance.now();
+    const duration = 600;
+    const from = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const ease = 1 - Math.pow(1 - t, 3); // ease-out-cubic
+      setDisplay(Math.round(from + (target - from) * ease));
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [target]);
+  useEffect(() => {
+    animate();
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [animate]);
+  return display;
+}
 import type { Session, PlannedSession, DayLoad } from '../types/acwr';
 import { TE_COLORS } from '../types/acwr';
 import { calculateACWR, calculateEWMA, aggregateDailyLoads, getCurrentACWR, getACWRZoneLabel, projectFutureACWR, calculateStrainMonotony } from '../lib/acwrCalculations';
@@ -125,6 +149,10 @@ export function ACWRSection({
   const acwr       = current?.acwr ?? null;
   const zone       = acwr !== null ? getACWRZoneLabel(acwr) : null;
   const strainMonotony = useMemo(() => calculateStrainMonotony(dailyLoads), [dailyLoads]);
+
+  // Animated numbers for ACWR display
+  const animatedAcute   = useAnimatedNumber(current?.acuteLoad ?? null);
+  const animatedChronic = useAnimatedNumber(current?.chronicLoad ?? null);
 
   const last7Days = useMemo(() => {
     const cutoff = new Date();
@@ -542,11 +570,11 @@ export function ACWRSection({
               <span className="text-xs text-gray-600">7d Ø</span>
             </div>
             <div className="text-xl font-bold text-blue-400">
-              {current?.acuteLoad ?? '—'}
+              {animatedAcute ?? '—'}
               <span className="text-xs font-normal text-gray-500 ml-1">AU</span>
             </div>
             <div className="mt-2 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-400 rounded-full transition-all"
+              <div className="h-full bg-blue-400 rounded-full gauge-fill"
                 style={{ width: `${Math.min(100, ((current?.acuteLoad ?? 0) / 1500) * 100)}%` }} />
             </div>
           </div>
@@ -558,11 +586,11 @@ export function ACWRSection({
               <span className="text-xs text-gray-600">28d Ø</span>
             </div>
             <div className="text-xl font-bold text-amber-400">
-              {current?.chronicLoad ?? '—'}
+              {animatedChronic ?? '—'}
               <span className="text-xs font-normal text-gray-500 ml-1">AU</span>
             </div>
             <div className="mt-2 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-              <div className="h-full bg-amber-400 rounded-full transition-all"
+              <div className="h-full bg-amber-400 rounded-full gauge-fill"
                 style={{ width: `${Math.min(100, ((current?.chronicLoad ?? 0) / 1500) * 100)}%` }} />
             </div>
           </div>

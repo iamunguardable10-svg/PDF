@@ -114,7 +114,7 @@ export function TeamChat({ mode, userId, userName }: Props) {
         {grouped.map(msg => {
           const isMe = msg.senderUserId === userId;
           return (
-            <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} ${msg.showName ? 'mt-3' : 'mt-0.5'}`}>
+            <div key={msg.id} className={`flex flex-col msg-enter ${isMe ? 'items-end' : 'items-start'} ${msg.showName ? 'mt-3' : 'mt-0.5'}`}>
               {/* Sender name */}
               {msg.showName && (
                 <span className={`text-[11px] font-medium mb-0.5 px-1 ${isMe ? 'text-violet-400' : 'text-gray-400'}`}>
