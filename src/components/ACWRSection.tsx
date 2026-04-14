@@ -54,13 +54,23 @@ export function ACWRSection({
 
   const [chartMethod, setChartMethod] = useState<'rolling' | 'ewma'>('rolling');
 
-  // Attendance sessions (trainer-created) — shown as planned sessions in personal calendar
+  // Attendance sessions + records — trainer-created sessions shown in personal calendar
   const [attendanceSessions, setAttendanceSessions] = useState<AttendanceSession[]>([]);
+  const [attendanceCancelledIds, setAttendanceCancelledIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!userId || !CLOUD_ENABLED) return;
     let cancelled = false;
-    loadMySessions(userId).then(ss => { if (!cancelled) setAttendanceSessions(ss); });
+    Promise.all([
+      loadMySessions(userId),
+      import('../lib/attendanceStorage').then(m => m.loadMyRecords(userId)),
+    ]).then(([ss, records]) => {
+      if (cancelled) return;
+      setAttendanceSessions(ss);
+      setAttendanceCancelledIds(new Set(
+        records.filter(r => r.overrideStatus === 'no').map(r => r.sessionId),
+      ));
+    });
     return () => { cancelled = true; };
   }, [userId]);
 
@@ -71,11 +81,12 @@ export function ACWRSection({
     Regeneration: 'Prävention', Sonstiges: 'Team',
   };
 
-  // Derive planned sessions from attendance sessions so they appear in the personal calendar
+  // Derive planned sessions — excludes cancelled + already confirmed
   const attendancePlanned = useMemo((): PlannedSession[] => {
     const today = new Date().toISOString().split('T')[0];
     return attendanceSessions
       .filter(s => s.datum >= today)
+      .filter(s => !attendanceCancelledIds.has(s.id))
       .filter(s => !sessions.some(rs => rs.id === `confirmed-att_${s.id}`))
       .map(s => {
         const te: TrainingUnit = s.trainingType ? (ATT_TE_MAP[s.trainingType] ?? 'Team') : 'Team';
@@ -97,7 +108,7 @@ export function ACWRSection({
         };
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendanceSessions, sessions]);
+  }, [attendanceSessions, attendanceCancelledIds, sessions]);
 
   const allPlannedSessions = useMemo(
     () => [...plannedSessions, ...attendancePlanned],
@@ -106,7 +117,8 @@ export function ACWRSection({
 
   const acwrData      = useMemo(() => calculateACWR(sessions), [sessions]);
   const ewmaData      = useMemo(() => calculateEWMA(sessions), [sessions]);
-  const projectedData = useMemo(() => projectFutureACWR(sessions, plannedSessions), [sessions, plannedSessions]);
+  // Use allPlannedSessions so attendance sessions are included in the ACWR forecast
+  const projectedData = useMemo(() => projectFutureACWR(sessions, allPlannedSessions), [sessions, allPlannedSessions]);
   const dailyLoads    = useMemo(() => aggregateDailyLoads(sessions), [sessions]);
   const activeACWRData = chartMethod === 'ewma' ? ewmaData : acwrData;
   const current       = useMemo(() => getCurrentACWR(activeACWRData), [activeACWRData]);
