@@ -248,7 +248,7 @@ export async function createSession(input: CreateSessionInput): Promise<Attendan
     .select()
     .single();
 
-  if (error || !data) return null;
+  if (error || !data) { console.error('[createSession] insert att_sessions failed:', error); return null; }
 
   // Create session_athletes + att_records for each participant
   if (input.memberIds.length > 0) {
