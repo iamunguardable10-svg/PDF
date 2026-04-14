@@ -8,12 +8,15 @@ import {
   requestNotificationPermission, getNotificationPermission,
   scheduleSessionReminder, cancelReminder, sendTestNotification,
 } from '../lib/notifications';
+import { loadMySessions, loadMyTeamMemberships } from '../lib/attendanceStorage';
+import type { AttendanceSession, AttendanceTeam } from '../types/attendance';
 import { ACWRChart } from './ACWRChart';
 import { ACWRForecast } from './ACWRForecast';
 import { SessionForm } from './SessionForm';
 import { TrainerPlanUpload } from './TrainerPlanUpload';
 import { PendingSessions } from './PendingSessions';
 import { TrainingOverview } from './TrainingOverview';
+import { WeekCalendar } from './attendance/WeekCalendar';
 
 interface Props {
   sessions: Session[];
@@ -50,6 +53,32 @@ export function ACWRSection({
   const reminderTimeouts = useRef<Map<string, number>>(new Map());
 
   const [chartMethod, setChartMethod] = useState<'rolling' | 'ewma'>('rolling');
+
+  // Attendance sessions (trainer-created) for the calendar
+  const [attendanceSessions, setAttendanceSessions] = useState<AttendanceSession[]>([]);
+  const [attendanceTeams, setAttendanceTeams] = useState<AttendanceTeam[]>([]);
+
+  useEffect(() => {
+    if (!userId || !CLOUD_ENABLED) return;
+    let cancelled = false;
+    Promise.all([loadMySessions(userId), loadMyTeamMemberships(userId)]).then(async ([ss, memberships]) => {
+      if (cancelled) return;
+      setAttendanceSessions(ss);
+      const teamIds = [...new Set(memberships.map(m => m.teamId))];
+      if (teamIds.length === 0) return;
+      const { supabase } = await import('../lib/supabase');
+      const { data } = await supabase.from('att_teams').select('*').in('id', teamIds);
+      if (!cancelled && data) {
+        setAttendanceTeams((data as Record<string, unknown>[]).map(r => ({
+          id: r.id as string, trainerId: r.trainer_id as string,
+          name: r.name as string, sport: r.sport as string,
+          color: r.color as string, inviteToken: r.invite_token as string | null,
+          inviteActive: r.invite_active as boolean, createdAt: r.created_at as string,
+        })));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [userId]);
 
   const acwrData      = useMemo(() => calculateACWR(sessions), [sessions]);
   const ewmaData      = useMemo(() => calculateEWMA(sessions), [sessions]);
@@ -258,6 +287,24 @@ export function ACWRSection({
         jumpToDate={calendarJumpDate}
         sport={playerSport}
       />
+
+      {/* Team-Einheiten Kalender (read-only, vom Trainer erstellt) */}
+      {CLOUD_ENABLED && attendanceSessions.length > 0 && (
+        <div className="bg-gray-900/50 rounded-3xl border border-gray-800 overflow-hidden">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-800">
+            <h3 className="text-sm font-semibold text-white">Team-Einheiten</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Vom Trainer geplante Einheiten</p>
+          </div>
+          <div className="p-3">
+            <WeekCalendar
+              sessions={attendanceSessions}
+              teams={attendanceTeams}
+              readOnly
+              onSessionClick={() => {}}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Trainer-Plan Import */}
       <TrainerPlanUpload

@@ -81,9 +81,10 @@ interface Props {
   sessions: AttendanceSession[];
   teams: AttendanceTeam[];
   isMock?: boolean;
+  readOnly?: boolean;
   onSessionClick: (s: AttendanceSession) => void;
-  onAddSession: (datum: string, time?: string) => void;
-  onSessionsChanged: () => void;
+  onAddSession?: (datum: string, time?: string) => void;
+  onSessionsChanged?: () => void;
 }
 
 interface DragState {
@@ -104,7 +105,7 @@ function teamColor(team: AttendanceTeam | undefined, teams: AttendanceTeam[]): s
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function WeekCalendar({ sessions, teams, isMock, onSessionClick, onAddSession, onSessionsChanged }: Props) {
+export function WeekCalendar({ sessions, teams, isMock, readOnly, onSessionClick, onAddSession, onSessionsChanged }: Props) {
   const [weekStart, setWeekStart] = useState(() => isoToMonday(new Date()));
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dragOffsets, setDragOffsets] = useState<Record<string, number>>({});
@@ -151,7 +152,7 @@ export function WeekCalendar({ sessions, teams, isMock, onSessionClick, onAddSes
   // ── Drag handlers ──────────────────────────────────────────────────────────
 
   const onPointerDown = useCallback((e: React.PointerEvent, session: AttendanceSession) => {
-    if (isMock) return;
+    if (isMock || readOnly) return;
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     const startMin = session.startTime ? timeToMinutes(session.startTime) : START_H * 60 + 60;
@@ -199,7 +200,7 @@ export function WeekCalendar({ sessions, teams, isMock, onSessionClick, onAddSes
   // ── Click on day column to add session ─────────────────────────────────────
 
   function handleColumnClick(e: React.MouseEvent, iso: string) {
-    if (dragging) return;
+    if (dragging || readOnly || !onAddSession) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const relY  = e.clientY - rect.top;
     const mins  = pxToMinutes(relY);
@@ -288,7 +289,7 @@ export function WeekCalendar({ sessions, teams, isMock, onSessionClick, onAddSes
             return (
               <div
                 key={iso}
-                className={`relative border-l border-gray-800 cursor-crosshair ${isToday ? 'bg-violet-950/10' : ''}`}
+                className={`relative border-l border-gray-800 ${readOnly ? 'cursor-default' : 'cursor-crosshair'} ${isToday ? 'bg-violet-950/10' : ''}`}
                 style={{ gridColumn: colIdx + 2, gridRow: '1', height: `${TOTAL_H * HOUR_PX}px` }}
                 onClick={e => handleColumnClick(e, iso)}
               >
@@ -362,7 +363,7 @@ export function WeekCalendar({ sessions, teams, isMock, onSessionClick, onAddSes
               {t.name}
             </div>
           ))}
-          {!isMock && (
+          {!isMock && !readOnly && (
             <p className="text-xs text-gray-600 ml-auto">Einheit ziehen zum Verschieben</p>
           )}
         </div>
