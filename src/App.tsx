@@ -40,15 +40,11 @@ import type { User } from '@supabase/supabase-js';
 
 type Tab = 'dashboard' | 'tagebuch' | 'acwr' | 'team';
 
-const TAB_ORDER: Tab[] = ['dashboard', 'tagebuch', 'acwr', 'team'];
-
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [prevTab, setPrevTab] = useState<Tab>('dashboard');
 
   function navigateTab(tab: Tab) {
-    setPrevTab(activeTab);
     setActiveTab(tab);
   }
   const [showSettings, setShowSettings] = useState(false);
