@@ -122,7 +122,7 @@ export async function loadMyTeamMemberships(userId: string): Promise<AttendanceT
     .eq('athlete_user_id', userId);
 
   // Secondary: find memberships where trainer added athlete from roster
-  // Uses SECURITY DEFINER RPC to bypass RLS on trainer_roster + live_shares
+  // Uses SECURITY DEFINER RPC to bypass RLS on trainer_roster + trainer_shares
   const { data: rosterRows } = await supabase
     .rpc('get_roster_team_memberships', { p_user_id: userId });
 
