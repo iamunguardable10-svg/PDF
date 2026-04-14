@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { AttendanceTeam, AttendanceTeamMember, AttendanceTrainingType } from '../../types/attendance';
-import type { ManagedAthlete } from '../../types/trainerDashboard';
+import type { ManagedAthlete, AthleteGroup } from '../../types/trainerDashboard';
 import { createSession } from '../../lib/attendanceStorage';
 
 const TRAINING_TYPES: AttendanceTrainingType[] = [
@@ -20,14 +20,16 @@ interface Props {
   teams: AttendanceTeam[];
   membersByTeam: Record<string, AttendanceTeamMember[]>;
   roster: ManagedAthlete[];
+  groups: AthleteGroup[];
+  prefillDatum?: string;
   onCreated: () => void;
   onClose: () => void;
 }
 
-export function SessionPlanner({ trainerId, teams, membersByTeam, roster, onCreated, onClose }: Props) {
+export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups, prefillDatum, onCreated, onClose }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [datum, setDatum] = useState(() => new Date().toISOString().split('T')[0]);
+  const [datum, setDatum] = useState(() => prefillDatum ?? new Date().toISOString().split('T')[0]);
   const [startTime, setStartTime] = useState('17:00');
   const [endTime, setEndTime] = useState('19:00');
   const [location, setLocation] = useState('');
@@ -36,10 +38,14 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, onCrea
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teams[0]?.id ?? '');
   const [participantMode, setParticipantMode] = useState<ParticipantMode>('team');
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(groups[0]?.id ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const teamMembers = selectedTeamId ? (membersByTeam[selectedTeamId] ?? []) : [];
+  const groupMembers = selectedGroupId
+    ? roster.filter(a => a.groupIds.includes(selectedGroupId))
+    : [];
 
   function toggleMember(id: string) {
     setSelectedMemberIds(prev => {
@@ -58,15 +64,15 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, onCrea
         id: m.id, userId: m.athleteUserId, rosterId: m.athleteRosterId, name: m.name,
       }));
     }
+    if (participantMode === 'group') {
+      return groupMembers.map(a => ({ id: a.id, rosterId: a.id, name: a.name }));
+    }
     if (participantMode === 'individual') {
       return teamMembers
         .filter(m => selectedMemberIds.has(m.id))
         .map(m => ({ id: m.id, userId: m.athleteUserId, rosterId: m.athleteRosterId, name: m.name }));
     }
-    // group = subset from roster not in team
-    return roster
-      .filter(a => selectedMemberIds.has(a.id))
-      .map(a => ({ id: a.id, rosterId: a.id, name: a.name }));
+    return [];
   }
 
   async function handleSave() {
@@ -169,49 +175,86 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, onCrea
           )}
 
           {/* Teilnehmer-Modus */}
-          {selectedTeamId && (
-            <div>
-              <label className="text-xs text-gray-400 mb-2 block">Teilnehmer</label>
-              <div className="flex gap-2 mb-3">
-                {(['team', 'individual'] as ParticipantMode[]).map(m => (
-                  <button key={m} onClick={() => { setParticipantMode(m); setSelectedMemberIds(new Set()); }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                      participantMode === m
-                        ? 'bg-violet-600 text-white border-transparent'
-                        : 'border-gray-700 text-gray-400 hover:border-gray-500'
+          <div>
+            <label className="text-xs text-gray-400 mb-2 block">Teilnehmer</label>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {selectedTeamId && (
+                <button onClick={() => { setParticipantMode('team'); setSelectedMemberIds(new Set()); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                    participantMode === 'team' ? 'bg-violet-600 text-white border-transparent' : 'border-gray-700 text-gray-400 hover:border-gray-500'
+                  }`}>
+                  Ganzes Team ({teamMembers.length})
+                </button>
+              )}
+              {groups.length > 0 && (
+                <button onClick={() => { setParticipantMode('group'); setSelectedMemberIds(new Set()); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                    participantMode === 'group' ? 'bg-violet-600 text-white border-transparent' : 'border-gray-700 text-gray-400 hover:border-gray-500'
+                  }`}>
+                  Gruppe
+                </button>
+              )}
+              {selectedTeamId && (
+                <button onClick={() => { setParticipantMode('individual'); setSelectedMemberIds(new Set()); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                    participantMode === 'individual' ? 'bg-violet-600 text-white border-transparent' : 'border-gray-700 text-gray-400 hover:border-gray-500'
+                  }`}>
+                  Auswahl
+                </button>
+              )}
+            </div>
+
+            {/* Gruppen-Selector */}
+            {participantMode === 'group' && groups.length > 0 && (
+              <div className="space-y-2">
+                <select value={selectedGroupId} onChange={e => setSelectedGroupId(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-500">
+                  {groups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name} ({roster.filter(a => a.groupIds.includes(g.id)).length} Spieler)</option>
+                  ))}
+                </select>
+                {selectedGroupId && (
+                  <div className="flex flex-wrap gap-1">
+                    {groupMembers.map(a => (
+                      <span key={a.id} className="px-2 py-0.5 bg-gray-800 border border-gray-700 rounded-lg text-xs text-gray-300">
+                        {a.name}
+                      </span>
+                    ))}
+                    {groupMembers.length === 0 && (
+                      <span className="text-xs text-gray-500">Keine Spieler in dieser Gruppe</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Einzelauswahl aus Team */}
+            {participantMode === 'individual' && teamMembers.length > 0 && (
+              <div className="space-y-1">
+                <div className="flex gap-2 mb-2">
+                  <button onClick={selectAll} className="text-xs text-violet-400 hover:text-violet-300">Alle</button>
+                  <span className="text-gray-600 text-xs">·</span>
+                  <button onClick={clearAll} className="text-xs text-gray-500 hover:text-gray-400">Keine</button>
+                  <span className="text-xs text-gray-500 ml-auto">{selectedMemberIds.size} ausgewählt</span>
+                </div>
+                {teamMembers.map(m => (
+                  <button key={m.id} onClick={() => toggleMember(m.id)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-sm border transition-colors ${
+                      selectedMemberIds.has(m.id)
+                        ? 'border-violet-600 bg-violet-950/40 text-white'
+                        : 'border-gray-800 text-gray-400 hover:border-gray-600'
                     }`}>
-                    {m === 'team' ? `Ganzes Team (${teamMembers.length})` : 'Auswahl'}
+                    <span className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-xs ${
+                      selectedMemberIds.has(m.id) ? 'bg-violet-600 text-white' : 'bg-gray-700'
+                    }`}>
+                      {selectedMemberIds.has(m.id) ? '✓' : ''}
+                    </span>
+                    {m.name}
                   </button>
                 ))}
               </div>
-
-              {participantMode === 'individual' && teamMembers.length > 0 && (
-                <div className="space-y-1">
-                  <div className="flex gap-2 mb-2">
-                    <button onClick={selectAll} className="text-xs text-violet-400 hover:text-violet-300">Alle</button>
-                    <span className="text-gray-600 text-xs">·</span>
-                    <button onClick={clearAll} className="text-xs text-gray-500 hover:text-gray-400">Keine</button>
-                    <span className="text-xs text-gray-500 ml-auto">{selectedMemberIds.size} ausgewählt</span>
-                  </div>
-                  {teamMembers.map(m => (
-                    <button key={m.id} onClick={() => toggleMember(m.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-sm border transition-colors ${
-                        selectedMemberIds.has(m.id)
-                          ? 'border-violet-600 bg-violet-950/40 text-white'
-                          : 'border-gray-800 text-gray-400 hover:border-gray-600'
-                      }`}>
-                      <span className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-xs ${
-                        selectedMemberIds.has(m.id) ? 'bg-violet-600 text-white' : 'bg-gray-700'
-                      }`}>
-                        {selectedMemberIds.has(m.id) ? '✓' : ''}
-                      </span>
-                      {m.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Beschreibung */}
           <div>

@@ -233,9 +233,11 @@ export function projectFutureACWR(
   // ── Handle today: if planned sessions exist but no confirmed load ────────
   const todayProjected: ACWRDataPoint[] = [];
   const todayHistIdx = historicalDays.findIndex(d => d.datum === today);
-  const todayHasLoad = todayHistIdx >= 0 && historicalDays[todayHistIdx].taeglLoad > 0;
+  const todayHistLoad = todayHistIdx >= 0 ? historicalDays[todayHistIdx].taeglLoad : 0;
 
-  if (!todayHasLoad && plannedMap.has(today) && todayHistIdx >= 0) {
+  // Show today as projected when: there are planned sessions for today
+  // (regardless of whether a session was already done — add planned on top of existing load)
+  if (plannedMap.has(today) && todayHistIdx >= 0) {
     const dayPlanned = plannedMap.get(today)!;
     const wd = new Date(today + 'T00:00').getDay();
     const wdLoads = loadsByWeekday[wd];
@@ -251,16 +253,23 @@ export function projectFutureACWR(
       plannedLoad += load;
       plannedTeLoads[ps.te] = (plannedTeLoads[ps.te] ?? 0) + load;
     }
-    const predictedLoad = Math.round(
+    const plannedEstimate = Math.round(
       0.7 * plannedLoad + 0.2 * weekdayMedian + 0.1 * recentSameWeekdayMedian,
     );
 
-    // Replace today's 0 in extLoads so future rolling avg is correct
+    // Total = already-done load today + estimated planned load
+    const predictedLoad = todayHistLoad + plannedEstimate;
+
+    // Replace today in extLoads so future rolling avg uses total
     extLoads[todayHistIdx] = predictedLoad;
 
     const acute   = rollingAvg(extLoads, todayHistIdx, 7);
     const chronic = rollingAvg(extLoads, todayHistIdx, 28);
     const acwr    = (todayHistIdx >= 7 && acute > 0 && chronic > 0) ? acute / chronic : null;
+
+    const basisLabel = todayHistLoad > 0
+      ? `${todayHistLoad} bereits + Plan (${dayPlanned.map(p => p.te).join(', ')})`
+      : `Plan (${dayPlanned.map(p => p.te).join(', ')})`;
 
     todayProjected.push({
       datum:          today,
@@ -269,7 +278,7 @@ export function projectFutureACWR(
       chronicLoad:    Math.round(chronic),
       acwr:           acwr !== null ? Math.round(acwr * 100) / 100 : null,
       chronicFull:    todayHistIdx >= 27,
-      forecastBasis:  `Plan (${dayPlanned.map(p => p.te).join(', ')})`,
+      forecastBasis:  basisLabel,
       plannedTeLoads: plannedTeLoads as Partial<Record<TrainingUnit, number>> | undefined,
     });
   }

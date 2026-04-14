@@ -1626,6 +1626,8 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
             trainerId={user.id}
             trainerName={trainerName}
             roster={roster.athletes}
+            groups={roster.groups}
+            isMock={isMockLoaded}
           />
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { AttendanceTeam, AttendanceTeamMember, AttendanceSession } from '../../types/attendance';
-import type { ManagedAthlete } from '../../types/trainerDashboard';
+import type { ManagedAthlete, AthleteGroup } from '../../types/trainerDashboard';
 import {
   loadTeams, createTeam, deleteTeam, regenerateTeamInvite,
   loadTeamMembers, addMemberFromRoster, removeMember,
@@ -11,28 +11,67 @@ import { SessionDetail } from './SessionDetail';
 import { TeamChat } from './TeamChat';
 
 const TEAM_COLORS = [
-  { key: 'violet', bg: '#7c3aed', label: 'Violett' },
-  { key: 'sky',    bg: '#0284c7', label: 'Blau' },
-  { key: 'emerald',bg: '#059669', label: 'Grün' },
-  { key: 'rose',   bg: '#e11d48', label: 'Rot' },
-  { key: 'amber',  bg: '#d97706', label: 'Orange' },
+  { key: 'violet', bg: '#7c3aed' },
+  { key: 'sky',    bg: '#0284c7' },
+  { key: 'emerald',bg: '#059669' },
+  { key: 'rose',   bg: '#e11d48' },
+  { key: 'amber',  bg: '#d97706' },
 ];
 
+// ── Mock data ────────────────────────────────────────────────────────────────
+
+function buildMockAttendanceSessions(trainerId: string): { teams: AttendanceTeam[]; sessions: AttendanceSession[] } {
+  const today = new Date();
+  const d = (offset: number) => {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() + offset);
+    return dt.toISOString().split('T')[0];
+  };
+  const teams: AttendanceTeam[] = [
+    { id: 'mock-team-1', trainerId, name: 'U19 Herren', sport: 'Basketball', color: 'violet',
+      inviteToken: null, inviteActive: false, createdAt: today.toISOString() },
+    { id: 'mock-team-2', trainerId, name: 'Guards', sport: 'Basketball', color: 'sky',
+      inviteToken: null, inviteActive: false, createdAt: today.toISOString() },
+  ];
+  const sessions: AttendanceSession[] = [
+    { id: 'ms1', trainerId, title: 'Teamtraining', description: '', datum: d(0), startTime: '17:00', endTime: '19:00',
+      location: 'Sporthalle Nord', radiusM: 100, teamId: 'mock-team-1', trainingType: 'Training', coachNote: '', createdAt: '' },
+    { id: 'ms2', trainerId, title: 'Taktik & Video', description: '', datum: d(2), startTime: '16:00', endTime: '17:30',
+      location: 'Vereinsheim', radiusM: 100, teamId: 'mock-team-1', trainingType: 'Taktik', coachNote: '', createdAt: '' },
+    { id: 'ms3', trainerId, title: 'Ligaspiel vs. TuS', description: '', datum: d(4), startTime: '18:00', endTime: '20:30',
+      location: 'Auswärtshalle', radiusM: 150, teamId: 'mock-team-1', trainingType: 'Spiel', coachNote: '', createdAt: '' },
+    { id: 'ms4', trainerId, title: 'Guard-Training', description: '', datum: d(1), startTime: '15:00', endTime: '16:30',
+      location: 'Sporthalle Nord', radiusM: 100, teamId: 'mock-team-2', trainingType: 'Training', coachNote: '', createdAt: '' },
+    { id: 'ms5', trainerId, title: 'S&C Guards', description: '', datum: d(-2), startTime: '07:00', endTime: '08:30',
+      location: 'Kraftraum', radiusM: 80, teamId: 'mock-team-2', trainingType: 'S&C', coachNote: '', createdAt: '' },
+  ];
+  return { teams, sessions };
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 type TeamTab = 'sessions' | 'members' | 'chat';
+type SessionView = 'list' | 'calendar';
 
 interface Props {
   trainerId: string;
   trainerName: string;
   roster: ManagedAthlete[];
+  groups: AthleteGroup[];
+  isMock?: boolean;
 }
 
-export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export function AttendanceModule({ trainerId, trainerName, roster, groups, isMock }: Props) {
   const [teams, setTeams] = useState<AttendanceTeam[]>([]);
   const [membersByTeam, setMembersByTeam] = useState<Record<string, AttendanceTeamMember[]>>({});
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamTab, setTeamTab] = useState<TeamTab>('sessions');
+  const [sessionView, setSessionView] = useState<SessionView>('list');
   const [showPlanner, setShowPlanner] = useState(false);
+  const [plannerPrefill, setPlannerPrefill] = useState<string | undefined>();
   const [showNewTeam, setShowNewTeam] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamSport, setNewTeamSport] = useState('');
@@ -40,8 +79,17 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
   const [openSession, setOpenSession] = useState<AttendanceSession | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [addingFromRoster, setAddingFromRoster] = useState(false);
+  const [calMonth, setCalMonth] = useState(() => new Date());
+  const [calSelectedDay, setCalSelectedDay] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
+    if (isMock) {
+      const { teams: mt, sessions: ms } = buildMockAttendanceSessions(trainerId);
+      setTeams(mt);
+      setSessions(ms);
+      if (!selectedTeamId) setSelectedTeamId(mt[0].id);
+      return;
+    }
     const [ts, ss] = await Promise.all([
       loadTeams(trainerId),
       loadTrainerSessions(trainerId),
@@ -49,19 +97,19 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
     setTeams(ts);
     setSessions(ss);
     if (ts.length > 0 && !selectedTeamId) setSelectedTeamId(ts[0].id);
-  }, [trainerId, selectedTeamId]);
+  }, [trainerId, selectedTeamId, isMock]);
 
   useEffect(() => { reload(); }, [reload]);
 
   useEffect(() => {
-    if (!selectedTeamId) return;
+    if (!selectedTeamId || isMock) return;
     loadTeamMembers(selectedTeamId).then(m => {
       setMembersByTeam(prev => ({ ...prev, [selectedTeamId]: m }));
     });
-  }, [selectedTeamId]);
+  }, [selectedTeamId, isMock]);
 
   async function handleCreateTeam() {
-    if (!newTeamName.trim()) return;
+    if (!newTeamName.trim() || isMock) return;
     const team = await createTeam(trainerId, newTeamName.trim(), newTeamSport.trim(), newTeamColor);
     if (team) {
       setTeams(prev => [...prev, team]);
@@ -73,20 +121,20 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
   }
 
   async function handleDeleteTeam(teamId: string) {
+    if (isMock) return;
     await deleteTeam(teamId);
     setTeams(prev => prev.filter(t => t.id !== teamId));
     setSelectedTeamId(teams.find(t => t.id !== teamId)?.id ?? null);
   }
 
   async function handleRegenInvite(teamId: string) {
+    if (isMock) return;
     const token = await regenerateTeamInvite(teamId);
-    if (token) {
-      setTeams(prev => prev.map(t => t.id === teamId ? { ...t, inviteToken: token } : t));
-    }
+    if (token) setTeams(prev => prev.map(t => t.id === teamId ? { ...t, inviteToken: token } : t));
   }
 
   async function handleAddFromRoster(athlete: ManagedAthlete) {
-    if (!selectedTeamId) return;
+    if (!selectedTeamId || isMock) return;
     const member = await addMemberFromRoster(selectedTeamId, athlete.id, athlete.name, athlete.sport ?? '');
     if (member) {
       setMembersByTeam(prev => ({
@@ -97,7 +145,7 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
   }
 
   async function handleRemoveMember(memberId: string) {
-    if (!selectedTeamId) return;
+    if (!selectedTeamId || isMock) return;
     await removeMember(memberId);
     setMembersByTeam(prev => ({
       ...prev,
@@ -113,16 +161,63 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
     });
   }
 
+  function openPlannerForDay(day: string) {
+    setPlannerPrefill(day);
+    setShowPlanner(true);
+  }
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+
   const selectedTeam = teams.find(t => t.id === selectedTeamId) ?? null;
   const teamMembers = selectedTeamId ? (membersByTeam[selectedTeamId] ?? []) : [];
   const teamSessions = sessions.filter(s => s.teamId === selectedTeamId);
   const today = new Date().toISOString().split('T')[0];
   const upcoming = teamSessions.filter(s => s.datum >= today).sort((a, b) => a.datum.localeCompare(b.datum));
   const past = teamSessions.filter(s => s.datum < today).sort((a, b) => b.datum.localeCompare(a.datum));
-
   const rosterNotInTeam = roster.filter(a =>
     !teamMembers.some(m => m.athleteRosterId === a.id || m.athleteUserId === a.id)
   );
+
+  // Calendar helpers
+  function calDays() {
+    const year = calMonth.getFullYear();
+    const month = calMonth.getMonth();
+    const first = new Date(year, month, 1).getDay();
+    const startOffset = (first === 0 ? 6 : first - 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells: (number | null)[] = Array(startOffset).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  }
+
+  function sessionDaysInMonth() {
+    const year = calMonth.getFullYear();
+    const month = calMonth.getMonth();
+    return new Map(
+      teamSessions
+        .map(s => ({ s, d: new Date(s.datum + 'T12:00:00') }))
+        .filter(({ d }) => d.getFullYear() === year && d.getMonth() === month)
+        .reduce((acc, { s }) => {
+          const day = new Date(s.datum + 'T12:00:00').getDate();
+          if (!acc.has(day)) acc.set(day, []);
+          acc.get(day)!.push(s);
+          return acc;
+        }, new Map<number, AttendanceSession[]>())
+    );
+  }
+
+  function dayToISO(day: number) {
+    const y = calMonth.getFullYear();
+    const m = String(calMonth.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-${String(day).padStart(2, '0')}`;
+  }
+
+  const sessionsByDay = sessionDaysInMonth();
+  const todayDate = new Date();
+
+  const calSelectedSessions = calSelectedDay
+    ? teamSessions.filter(s => s.datum === calSelectedDay)
+    : [];
 
   function formatDate(d: string) {
     const date = new Date(d + 'T12:00:00');
@@ -133,12 +228,20 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
     return date.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-4">
+      {isMock && (
+        <div className="bg-amber-950/30 border border-amber-800/50 rounded-xl px-3 py-2 text-xs text-amber-300 text-center">
+          Demo-Modus aktiv — Änderungen werden nicht gespeichert
+        </div>
+      )}
+
       {/* Team selector */}
       <div className="flex items-center gap-2 flex-wrap">
         {teams.map(t => (
-          <button key={t.id} onClick={() => { setSelectedTeamId(t.id); setTeamTab('sessions'); }}
+          <button key={t.id} onClick={() => { setSelectedTeamId(t.id); setTeamTab('sessions'); setCalSelectedDay(null); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition-colors ${
               selectedTeamId === t.id
                 ? 'bg-violet-600 text-white border-transparent'
@@ -149,14 +252,16 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
             {t.name}
           </button>
         ))}
-        <button onClick={() => setShowNewTeam(true)}
-          className="px-3 py-1.5 text-xs text-gray-500 border border-dashed border-gray-700 rounded-xl hover:border-gray-500 hover:text-gray-300 transition-colors">
-          + Team
-        </button>
+        {!isMock && (
+          <button onClick={() => setShowNewTeam(true)}
+            className="px-3 py-1.5 text-xs text-gray-500 border border-dashed border-gray-700 rounded-xl hover:border-gray-500 hover:text-gray-300 transition-colors">
+            + Team
+          </button>
+        )}
       </div>
 
       {/* New team form */}
-      {showNewTeam && (
+      {showNewTeam && !isMock && (
         <div className="bg-gray-800 border border-gray-700 rounded-2xl p-4 space-y-3">
           <h3 className="text-sm font-medium text-white">Neues Team</h3>
           <input value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
@@ -193,33 +298,37 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
               <div>
                 <h2 className="text-base font-semibold text-white">{selectedTeam.name}</h2>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {teamMembers.length} Mitglieder · {upcoming.length} bevorstehende Einheiten
+                  {teamMembers.length} Mitglieder · {upcoming.length} bevorstehend
                 </p>
               </div>
-              <button onClick={() => handleDeleteTeam(selectedTeam.id)}
-                className="text-gray-600 hover:text-red-400 text-xs transition-colors">
-                Team löschen
-              </button>
+              {!isMock && (
+                <button onClick={() => handleDeleteTeam(selectedTeam.id)}
+                  className="text-gray-600 hover:text-red-400 text-xs transition-colors">
+                  Löschen
+                </button>
+              )}
             </div>
 
             {/* Invite link */}
-            <div className="mt-3 flex items-center gap-2">
-              <div className="flex-1 bg-gray-900 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 truncate font-mono">
-                {selectedTeam.inviteToken
-                  ? `…#team-join/${selectedTeam.inviteToken.slice(0, 12)}…`
-                  : 'Kein Link aktiv'}
-              </div>
-              {selectedTeam.inviteToken && (
-                <button onClick={() => copyInviteLink(selectedTeam.inviteToken!)}
-                  className="px-2.5 py-1.5 bg-gray-700 text-xs text-gray-300 rounded-lg hover:bg-gray-600 transition-colors whitespace-nowrap">
-                  {copiedToken ? '✓ Kopiert' : 'Link kopieren'}
+            {!isMock && (
+              <div className="mt-3 flex items-center gap-2">
+                <div className="flex-1 bg-gray-900 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 truncate font-mono">
+                  {selectedTeam.inviteToken
+                    ? `…#team-join/${selectedTeam.inviteToken.slice(0, 12)}…`
+                    : 'Kein Link aktiv'}
+                </div>
+                {selectedTeam.inviteToken && (
+                  <button onClick={() => copyInviteLink(selectedTeam.inviteToken!)}
+                    className="px-2.5 py-1.5 bg-gray-700 text-xs text-gray-300 rounded-lg hover:bg-gray-600 transition-colors whitespace-nowrap">
+                    {copiedToken ? '✓ Kopiert' : 'Link kopieren'}
+                  </button>
+                )}
+                <button onClick={() => handleRegenInvite(selectedTeam.id)}
+                  className="px-2.5 py-1.5 bg-gray-700 text-xs text-gray-300 rounded-lg hover:bg-gray-600 transition-colors">
+                  ↺
                 </button>
-              )}
-              <button onClick={() => handleRegenInvite(selectedTeam.id)}
-                className="px-2.5 py-1.5 bg-gray-700 text-xs text-gray-300 rounded-lg hover:bg-gray-600 transition-colors">
-                ↺
-              </button>
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Team sub-tabs */}
@@ -237,30 +346,152 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
           {/* Sessions tab */}
           {teamTab === 'sessions' && (
             <div className="space-y-3">
-              <button onClick={() => setShowPlanner(true)}
-                className="w-full py-3 bg-violet-600 text-white rounded-2xl text-sm font-medium hover:bg-violet-500 transition-colors">
-                + Neue Einheit
-              </button>
-
-              {upcoming.length === 0 && past.length === 0 && (
-                <p className="text-center text-gray-600 text-sm py-8">Noch keine Einheiten geplant</p>
-              )}
-
-              {upcoming.length > 0 && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-2 px-1">Bevorstehend</p>
-                  <div className="space-y-2">
-                    {upcoming.map(s => <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />)}
-                  </div>
+              {/* List / Calendar toggle + New button */}
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setShowPlanner(true); setPlannerPrefill(undefined); }}
+                  className="flex-1 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-500 transition-colors">
+                  + Neue Einheit
+                </button>
+                <div className="flex bg-gray-800 border border-gray-700 rounded-xl p-1 gap-1">
+                  <button onClick={() => setSessionView('list')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sessionView === 'list' ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+                    ≡ Liste
+                  </button>
+                  <button onClick={() => setSessionView('calendar')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sessionView === 'calendar' ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+                    🗓 Kalender
+                  </button>
                 </div>
+              </div>
+
+              {/* List View */}
+              {sessionView === 'list' && (
+                <>
+                  {upcoming.length === 0 && past.length === 0 && (
+                    <p className="text-center text-gray-600 text-sm py-8">Noch keine Einheiten geplant</p>
+                  )}
+                  {upcoming.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2 px-1">Bevorstehend</p>
+                      <div className="space-y-2">
+                        {upcoming.map(s => <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />)}
+                      </div>
+                    </div>
+                  )}
+                  {past.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2 px-1 mt-4">Vergangen</p>
+                      <div className="space-y-2 opacity-70">
+                        {past.slice(0, 6).map(s => <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />)}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
-              {past.length > 0 && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-2 px-1 mt-4">Vergangen</p>
-                  <div className="space-y-2 opacity-70">
-                    {past.slice(0, 5).map(s => <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />)}
+              {/* Calendar View */}
+              {sessionView === 'calendar' && (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-4">
+                  {/* Month nav */}
+                  <div className="flex items-center justify-between">
+                    <button onClick={() => { setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1)); setCalSelectedDay(null); }}
+                      className="text-gray-400 hover:text-white px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors">‹</button>
+                    <p className="text-sm font-medium text-white">
+                      {calMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+                    </p>
+                    <button onClick={() => { setCalMonth(m => new Date(m.getFullYear(), m.getMonth() + 1)); setCalSelectedDay(null); }}
+                      className="text-gray-400 hover:text-white px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors">›</button>
                   </div>
+
+                  {/* Day headers */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {['Mo','Di','Mi','Do','Fr','Sa','So'].map(d => (
+                      <div key={d} className="text-center text-xs text-gray-600 font-medium py-1">{d}</div>
+                    ))}
+                  </div>
+
+                  {/* Day grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {calDays().map((day, i) => {
+                      if (!day) return <div key={i} />;
+                      const iso = dayToISO(day);
+                      const isToday = day === todayDate.getDate() &&
+                        calMonth.getMonth() === todayDate.getMonth() &&
+                        calMonth.getFullYear() === todayDate.getFullYear();
+                      const hasSessions = sessionsByDay.has(day);
+                      const isSelected = calSelectedDay === iso;
+                      const sessionCount = sessionsByDay.get(day)?.length ?? 0;
+                      return (
+                        <button key={i} onClick={() => setCalSelectedDay(isSelected ? null : iso)}
+                          className={`aspect-square flex flex-col items-center justify-center rounded-xl text-xs relative transition-colors ${
+                            isSelected ? 'bg-violet-600 text-white' :
+                            isToday ? 'bg-violet-900/50 text-violet-300 font-bold' :
+                            hasSessions ? 'bg-gray-800 text-gray-200 hover:bg-gray-700' :
+                            'text-gray-500 hover:bg-gray-800 hover:text-gray-300'
+                          }`}>
+                          {day}
+                          {hasSessions && (
+                            <span className={`absolute bottom-1 flex gap-0.5 ${isSelected ? 'opacity-80' : ''}`}>
+                              {Array.from({ length: Math.min(sessionCount, 3) }).map((_, j) => (
+                                <span key={j} className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-violet-400'}`} />
+                              ))}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected day sessions */}
+                  {calSelectedDay && (
+                    <div className="border-t border-gray-800 pt-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-400">
+                          {new Date(calSelectedDay + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </p>
+                        <button onClick={() => openPlannerForDay(calSelectedDay)}
+                          className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
+                          + Einheit hinzufügen
+                        </button>
+                      </div>
+                      {calSelectedSessions.length === 0 ? (
+                        <p className="text-xs text-gray-600 py-2">Keine Einheiten an diesem Tag</p>
+                      ) : (
+                        calSelectedSessions.map(s => (
+                          <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* No-day-selected: show all month sessions */}
+                  {!calSelectedDay && (
+                    <div className="border-t border-gray-800 pt-3 space-y-1">
+                      <p className="text-xs text-gray-500 mb-2">
+                        {teamSessions.filter(s => {
+                          const d = new Date(s.datum + 'T12:00:00');
+                          return d.getFullYear() === calMonth.getFullYear() && d.getMonth() === calMonth.getMonth();
+                        }).length} Einheiten in {calMonth.toLocaleDateString('de-DE', { month: 'long' })}
+                      </p>
+                      {teamSessions
+                        .filter(s => {
+                          const d = new Date(s.datum + 'T12:00:00');
+                          return d.getFullYear() === calMonth.getFullYear() && d.getMonth() === calMonth.getMonth();
+                        })
+                        .sort((a, b) => a.datum.localeCompare(b.datum))
+                        .map(s => (
+                          <button key={s.id} onClick={() => setOpenSession(s)}
+                            className="w-full flex items-center gap-3 px-3 py-2 bg-gray-800 rounded-xl border border-gray-700 hover:border-violet-600 transition-colors text-left">
+                            <span className="text-xs text-gray-500 w-6 flex-shrink-0 font-mono">
+                              {new Date(s.datum + 'T12:00:00').getDate()}
+                            </span>
+                            <span className="flex-1 text-sm text-white truncate">{s.title}</span>
+                            {s.startTime && <span className="text-xs text-gray-500">{s.startTime}</span>}
+                            {s.trainingType && <TypeBadge type={s.trainingType} />}
+                          </button>
+                        ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -271,7 +502,9 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
             <div className="space-y-3">
               <div className="space-y-1">
                 {teamMembers.length === 0 && (
-                  <p className="text-center text-gray-600 text-sm py-4">Noch keine Mitglieder</p>
+                  <p className="text-center text-gray-600 text-sm py-4">
+                    {isMock ? 'Demo: Mitglieder laden…' : 'Noch keine Mitglieder'}
+                  </p>
                 )}
                 {teamMembers.map(m => (
                   <div key={m.id} className="flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5 border border-gray-700">
@@ -280,19 +513,19 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-white truncate">{m.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {m.sport || 'Kein Sport'} · {m.athleteUserId ? 'App-verknüpft' : 'Roster'}
-                      </p>
+                      <p className="text-xs text-gray-500">{m.sport || 'Kein Sport'} · {m.athleteUserId ? 'App-verknüpft' : 'Roster'}</p>
                     </div>
-                    <button onClick={() => handleRemoveMember(m.id)}
-                      className="text-gray-600 hover:text-red-400 text-xs transition-colors">
-                      Entfernen
-                    </button>
+                    {!isMock && (
+                      <button onClick={() => handleRemoveMember(m.id)}
+                        className="text-gray-600 hover:text-red-400 text-xs transition-colors">
+                        Entfernen
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
 
-              {rosterNotInTeam.length > 0 && (
+              {!isMock && rosterNotInTeam.length > 0 && (
                 <div>
                   <button onClick={() => setAddingFromRoster(v => !v)}
                     className="w-full py-2 text-xs text-gray-400 border border-dashed border-gray-700 rounded-xl hover:border-gray-500 transition-colors">
@@ -318,7 +551,7 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
           )}
 
           {/* Chat tab */}
-          {teamTab === 'chat' && (
+          {teamTab === 'chat' && !isMock && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden" style={{ height: '420px' }}>
               <TeamChat
                 mode={{ kind: 'team', teamId: selectedTeam.id }}
@@ -327,10 +560,15 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
               />
             </div>
           )}
+          {teamTab === 'chat' && isMock && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 text-center text-gray-500 text-sm">
+              Chat nicht im Demo-Modus verfügbar
+            </div>
+          )}
         </>
       )}
 
-      {teams.length === 0 && !showNewTeam && (
+      {teams.length === 0 && !showNewTeam && !isMock && (
         <div className="text-center py-12">
           <p className="text-gray-500 text-sm mb-4">Noch keine Teams erstellt</p>
           <button onClick={() => setShowNewTeam(true)}
@@ -347,12 +585,14 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
           teams={teams}
           membersByTeam={membersByTeam}
           roster={roster}
+          groups={groups}
+          prefillDatum={plannerPrefill}
           onCreated={reload}
-          onClose={() => setShowPlanner(false)}
+          onClose={() => { setShowPlanner(false); setPlannerPrefill(undefined); }}
         />
       )}
 
-      {openSession && (
+      {openSession && !isMock && (
         <SessionDetail
           session={openSession}
           trainerId={trainerId}
@@ -360,8 +600,33 @@ export function AttendanceModule({ trainerId, trainerName, roster }: Props) {
           onDeleted={() => { setOpenSession(null); reload(); }}
         />
       )}
+
+      {openSession && isMock && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm space-y-3">
+            <div className="flex justify-between items-start">
+              <h3 className="text-base font-semibold text-white">{openSession.title}</h3>
+              <button onClick={() => setOpenSession(null)} className="text-gray-500 hover:text-white">×</button>
+            </div>
+            <p className="text-xs text-gray-400">{formatDate(openSession.datum)}{openSession.startTime ? ` · ${openSession.startTime}` : ''}</p>
+            {openSession.location && <p className="text-xs text-gray-500">{openSession.location}</p>}
+            <p className="text-xs text-amber-400 text-center mt-3">Demo-Modus: Details nicht verfügbar</p>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function TypeBadge({ type }: { type: string }) {
+  const colors: Record<string, string> = {
+    Training: 'text-violet-400', Spiel: 'text-rose-400', Wettkampf: 'text-orange-400',
+    'S&C': 'text-emerald-400', Taktik: 'text-blue-400', Videoanalyse: 'text-sky-400',
+    Regeneration: 'text-teal-400', Sonstiges: 'text-gray-400',
+  };
+  return <span className={`text-xs font-medium flex-shrink-0 ${colors[type] ?? 'text-gray-400'}`}>{type}</span>;
 }
 
 function SessionCard({
@@ -371,11 +636,6 @@ function SessionCard({
   onClick: () => void;
   formatDate: (d: string) => string;
 }) {
-  const typeColors: Record<string, string> = {
-    Training: 'text-violet-400', Spiel: 'text-rose-400', Wettkampf: 'text-orange-400',
-    'S&C': 'text-emerald-400', Taktik: 'text-blue-400', Videoanalyse: 'text-sky-400',
-    Regeneration: 'text-teal-400', Sonstiges: 'text-gray-400',
-  };
   return (
     <button onClick={onClick}
       className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-left hover:border-violet-600 transition-colors">
@@ -388,11 +648,7 @@ function SessionCard({
           </p>
           {session.location && <p className="text-xs text-gray-500 mt-0.5">{session.location}</p>}
         </div>
-        {session.trainingType && (
-          <span className={`text-xs font-medium flex-shrink-0 ${typeColors[session.trainingType] ?? 'text-gray-400'}`}>
-            {session.trainingType}
-          </span>
-        )}
+        {session.trainingType && <TypeBadge type={session.trainingType} />}
       </div>
     </button>
   );
