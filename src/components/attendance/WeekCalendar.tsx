@@ -182,7 +182,7 @@ export function WeekCalendar({ sessions, teams, isMock, readOnly, onSessionClick
         startTime: minutesToTime(newStartMin),
         endTime:   minutesToTime(newEndMin),
       });
-      onSessionsChanged();
+      onSessionsChanged?.();
     }
   }, [dragging, isMock, onSessionsChanged]);
 

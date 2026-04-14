@@ -333,14 +333,6 @@ export function TeamTab({ userId, userName, onGoToJoin }: Props) {
   );
 }
 
-function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    expected: 'bg-gray-500', maybe: 'bg-yellow-500', no: 'bg-red-500',
-    present: 'bg-emerald-500', late: 'bg-amber-500', partial: 'bg-yellow-500',
-    excused_absent: 'bg-blue-500', unexcused_absent: 'bg-red-600',
-  };
-  return <span className={`w-2 h-2 rounded-full flex-shrink-0 ${colors[status] ?? 'bg-gray-500'}`} />;
-}
 
 function AthleteSessionCard({
   session, status, record, formatDate, onTap,
