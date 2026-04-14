@@ -142,7 +142,7 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
 
   async function handleAddFromRoster(athlete: ManagedAthlete) {
     if (!selectedTeamId || isMock) return;
-    const member = await addMemberFromRoster(selectedTeamId, athlete.id, athlete.name, athlete.sport ?? '');
+    const member = await addMemberFromRoster(selectedTeamId, athlete.id, athlete.name, athlete.sport ?? '', athlete.token);
     if (member) {
       setMembersByTeam(prev => ({
         ...prev,

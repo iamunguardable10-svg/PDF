@@ -137,15 +137,41 @@ export function TeamTab({ userId, userName, onGoToJoin }: Props) {
 
   if (myTeams.length === 0) {
     return (
-      <div className="py-12 text-center space-y-4">
-        <div className="text-4xl">🏆</div>
-        <p className="text-gray-400 text-sm">Du bist noch in keinem Team</p>
-        {onGoToJoin && (
-          <button onClick={onGoToJoin}
-            className="px-4 py-2 bg-violet-600 text-white rounded-xl text-sm hover:bg-violet-500 transition-colors">
-            Team beitreten
-          </button>
-        )}
+      <div className="py-10 px-4 space-y-5">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 text-center space-y-3">
+          <div className="w-12 h-12 bg-violet-950/60 border border-violet-800/40 rounded-2xl flex items-center justify-center text-2xl mx-auto">🏆</div>
+          <div>
+            <p className="text-white text-sm font-semibold mb-1">Kein Team gefunden</p>
+            <p className="text-gray-500 text-xs leading-relaxed">
+              Dein Trainer fügt dich direkt hinzu — du siehst das Team dann automatisch hier.
+              Alternativ kannst du mit einem Einladungslink beitreten.
+            </p>
+          </div>
+          {onGoToJoin && (
+            <button onClick={onGoToJoin}
+              className="px-4 py-2.5 border border-gray-700 text-gray-400 rounded-xl text-sm hover:border-gray-500 hover:text-white transition-colors">
+              Mit Link beitreten
+            </button>
+          )}
+        </div>
+
+        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4 space-y-2">
+          <p className="text-xs text-gray-500 font-medium">So funktioniert es</p>
+          <div className="space-y-2.5 text-xs text-gray-400">
+            <div className="flex gap-2.5 items-start">
+              <span className="w-5 h-5 rounded-full bg-violet-900/60 border border-violet-700/40 flex-shrink-0 flex items-center justify-center text-violet-300 font-bold text-xs">1</span>
+              <span>Dein Trainer fügt dich in seiner Trainer-Ansicht zum Team hinzu</span>
+            </div>
+            <div className="flex gap-2.5 items-start">
+              <span className="w-5 h-5 rounded-full bg-violet-900/60 border border-violet-700/40 flex-shrink-0 flex items-center justify-center text-violet-300 font-bold text-xs">2</span>
+              <span>Das Team erscheint automatisch hier – kein Einladungslink nötig</span>
+            </div>
+            <div className="flex gap-2.5 items-start">
+              <span className="w-5 h-5 rounded-full bg-violet-900/60 border border-violet-700/40 flex-shrink-0 flex items-center justify-center text-violet-300 font-bold text-xs">3</span>
+              <span>Du siehst alle geplanten Einheiten und kannst Zu-/Absagen verwalten</span>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

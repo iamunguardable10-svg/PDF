@@ -114,11 +114,68 @@ export async function loadTeamMembers(teamId: string): Promise<AttendanceTeamMem
 
 export async function loadMyTeamMemberships(userId: string): Promise<AttendanceTeamMember[]> {
   if (!CLOUD_ENABLED) return [];
-  const { data } = await supabase
+
+  // Primary: direct user_id match
+  const { data: direct } = await supabase
     .from('att_team_members')
     .select('*')
     .eq('athlete_user_id', userId);
-  return (data ?? []).map(rowToMember);
+
+  // Secondary: resolve via live-share token (handles trainer-added-from-roster members)
+  const { data: shares } = await supabase
+    .from('live_shares')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  let rosterLinked: AttendanceTeamMember[] = [];
+  if (shares && shares.length > 0) {
+    const tokens = shares.map((s: Record<string, unknown>) => s.id as string);
+    // Find roster entries whose token matches any of this athlete's live-share tokens
+    const { data: rosterRows } = await supabase
+      .from('trainer_roster')
+      .select('id')
+      .in('token', tokens);
+
+    if (rosterRows && rosterRows.length > 0) {
+      const rosterIds = rosterRows.map((r: Record<string, unknown>) => r.id as string);
+      const { data: rosterMembers } = await supabase
+        .from('att_team_members')
+        .select('*')
+        .in('athlete_roster_id', rosterIds)
+        .is('athlete_user_id', null); // only un-linked ones
+
+      if (rosterMembers && rosterMembers.length > 0) {
+        rosterLinked = rosterMembers.map(rowToMember);
+        // Self-heal: stamp athlete_user_id so future queries find them directly
+        const ids = rosterMembers.map((r: Record<string, unknown>) => r.id as string);
+        supabase
+          .from('att_team_members')
+          .update({ athlete_user_id: userId })
+          .in('id', ids)
+          .then(() => {});
+      }
+    }
+  }
+
+  // Merge, deduplicate by team_id
+  const seen = new Set<string>();
+  const all: AttendanceTeamMember[] = [];
+  for (const m of [...(direct ?? []).map(rowToMember), ...rosterLinked]) {
+    const key = m.teamId + '_' + m.id;
+    if (!seen.has(key)) { seen.add(key); all.push(m); }
+  }
+  return all;
+}
+
+/** Resolve a live-share token to its Supabase auth user_id */
+async function resolveUserIdFromToken(token: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('live_shares')
+    .select('user_id')
+    .eq('id', token)
+    .single();
+  return (data as Record<string, unknown> | null)?.user_id as string ?? null;
 }
 
 export async function addMemberFromRoster(
@@ -126,12 +183,17 @@ export async function addMemberFromRoster(
   rosterId: string,
   name: string,
   sport: string,
+  athleteToken?: string,
 ): Promise<AttendanceTeamMember | null> {
   if (!CLOUD_ENABLED) return null;
+  const athleteUserId = athleteToken ? await resolveUserIdFromToken(athleteToken) : null;
   const id = 'tm_' + randomId();
   const { data, error } = await supabase
     .from('att_team_members')
-    .insert({ id, team_id: teamId, athlete_roster_id: rosterId, name, sport })
+    .insert({
+      id, team_id: teamId, athlete_roster_id: rosterId, name, sport,
+      ...(athleteUserId ? { athlete_user_id: athleteUserId } : {}),
+    })
     .select()
     .single();
   if (error || !data) return null;
