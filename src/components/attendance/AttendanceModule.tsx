@@ -52,7 +52,6 @@ function buildMockAttendanceSessions(trainerId: string): { teams: AttendanceTeam
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type TeamTab = 'sessions' | 'members' | 'chat';
-type SessionView = 'list' | 'calendar';
 
 interface Props {
   trainerId: string;
@@ -70,7 +69,6 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamTab, setTeamTab] = useState<TeamTab>('sessions');
-  const [sessionView, setSessionView] = useState<SessionView>('list');
   const [showPlanner, setShowPlanner] = useState(false);
   const [plannerPrefill, setPlannerPrefill] = useState<string | undefined>();
   const [plannerPrefillTime, setPlannerPrefillTime] = useState<string | undefined>();
@@ -307,59 +305,33 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
           {/* Sessions tab */}
           {teamTab === 'sessions' && (
             <div className="space-y-3">
-              {/* List / Calendar toggle + New button */}
-              <div className="flex items-center gap-2">
-                <button onClick={() => { setShowPlanner(true); setPlannerPrefill(undefined); setPlannerPrefillTime(undefined); }}
-                  className="flex-1 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-500 transition-colors">
-                  + Neue Einheit
-                </button>
-                <div className="flex bg-gray-800 border border-gray-700 rounded-xl p-1 gap-1">
-                  <button onClick={() => setSessionView('list')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sessionView === 'list' ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
-                    ≡ Liste
-                  </button>
-                  <button onClick={() => setSessionView('calendar')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sessionView === 'calendar' ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
-                    🗓 Kalender
-                  </button>
+              {/* New session button */}
+              <button onClick={() => { setShowPlanner(true); setPlannerPrefill(undefined); setPlannerPrefillTime(undefined); }}
+                className="w-full py-2.5 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-500 transition-colors">
+                + Neue Einheit
+              </button>
+
+              {/* Week calendar — always visible, shows all teams */}
+              <WeekCalendar
+                sessions={sessions}
+                teams={teams}
+                isMock={isMock}
+                onSessionClick={s => setOpenSession(s)}
+                onAddSession={(datum, time) => openPlannerForDay(datum, time)}
+                onSessionsChanged={reload}
+              />
+
+              {/* Compact upcoming list for selected team */}
+              {upcoming.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-2 px-1">Nächste Einheiten — {selectedTeam?.name}</p>
+                  <div className="space-y-2">
+                    {upcoming.slice(0, 5).map(s => <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />)}
+                  </div>
                 </div>
-              </div>
-
-              {/* List View */}
-              {sessionView === 'list' && (
-                <>
-                  {upcoming.length === 0 && past.length === 0 && (
-                    <p className="text-center text-gray-600 text-sm py-8">Noch keine Einheiten geplant</p>
-                  )}
-                  {upcoming.length > 0 && (
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2 px-1">Bevorstehend</p>
-                      <div className="space-y-2">
-                        {upcoming.map(s => <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />)}
-                      </div>
-                    </div>
-                  )}
-                  {past.length > 0 && (
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2 px-1 mt-4">Vergangen</p>
-                      <div className="space-y-2 opacity-70">
-                        {past.slice(0, 6).map(s => <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />)}
-                      </div>
-                    </div>
-                  )}
-                </>
               )}
-
-              {/* Calendar View — week/hourly planner showing ALL team sessions */}
-              {sessionView === 'calendar' && (
-                <WeekCalendar
-                  sessions={sessions}
-                  teams={teams}
-                  isMock={isMock}
-                  onSessionClick={s => setOpenSession(s)}
-                  onAddSession={(datum, time) => openPlannerForDay(datum, time)}
-                  onSessionsChanged={reload}
-                />
+              {upcoming.length === 0 && past.length === 0 && (
+                <p className="text-center text-gray-600 text-sm py-4">Noch keine Einheiten — im Kalender auf einen Tag klicken</p>
               )}
             </div>
           )}
