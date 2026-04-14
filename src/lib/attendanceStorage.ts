@@ -50,7 +50,7 @@ export async function createTeam(
     .insert({ id, trainer_id: trainerId, name, sport, color, invite_token: inviteToken })
     .select()
     .single();
-  if (error || !data) return null;
+  if (error || !data) { console.error('[createTeam]', JSON.stringify(error)); return null; }
   return rowToTeam(data);
 }
 
