@@ -142,14 +142,17 @@ export interface SupabaseGroup {
 export async function loadRosterFromSupabase(
   trainerId: string,
 ): Promise<{ athletes: SupabaseAthlete[]; groups: SupabaseGroup[] }> {
-  if (!CLOUD_ENABLED) return { athletes: [], groups: [] };
-  const [{ data: athletes }, { data: groups }] = await Promise.all([
+  if (!CLOUD_ENABLED) { console.warn('[loadRoster] CLOUD_ENABLED=false'); return { athletes: [], groups: [] }; }
+  const [rosterRes, groupsRes] = await Promise.all([
     supabase.from('trainer_roster').select('*').eq('trainer_id', trainerId),
     supabase.from('trainer_groups').select('*').eq('trainer_id', trainerId),
   ]);
+  if (rosterRes.error) console.error('[loadRoster] trainer_roster error:', JSON.stringify(rosterRes.error));
+  if (groupsRes.error) console.error('[loadRoster] trainer_groups error:', JSON.stringify(groupsRes.error));
+  console.log('[loadRoster] athletes:', rosterRes.data?.length ?? 0, 'groups:', groupsRes.data?.length ?? 0);
   return {
-    athletes: (athletes ?? []) as SupabaseAthlete[],
-    groups:   (groups   ?? []) as SupabaseGroup[],
+    athletes: (rosterRes.data ?? []) as SupabaseAthlete[],
+    groups:   (groupsRes.data ?? []) as SupabaseGroup[],
   };
 }
 

@@ -224,8 +224,9 @@ export interface CreateSessionInput {
 }
 
 export async function createSession(input: CreateSessionInput): Promise<AttendanceSession | null> {
-  if (!CLOUD_ENABLED) return null;
+  if (!CLOUD_ENABLED) { console.warn('[createSession] CLOUD_ENABLED=false'); return null; }
   const sessionId = 'as_' + randomId();
+  console.log('[createSession] inserting', { sessionId, trainerId: input.trainerId, datum: input.datum });
 
   const { data, error } = await supabase
     .from('att_sessions')
@@ -248,7 +249,10 @@ export async function createSession(input: CreateSessionInput): Promise<Attendan
     .select()
     .single();
 
-  if (error || !data) return null;
+  if (error || !data) {
+    console.error('[createSession] FAILED', JSON.stringify(error));
+    return null;
+  }
 
   // Create session_athletes + att_records for each participant
   if (input.memberIds.length > 0) {
