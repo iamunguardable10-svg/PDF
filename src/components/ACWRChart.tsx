@@ -71,7 +71,9 @@ function ACWRDot(props: { cx?: number; cy?: number; payload?: ChartPoint }) {
 
 function ProjectedDot(props: { cx?: number; cy?: number; payload?: ChartPoint }) {
   const { cx, cy, payload } = props;
-  if (!payload || payload.projectedAcwr == null || !payload.isProjected || cx == null || cy == null) return null;
+  if (!payload || payload.projectedAcwr == null || cx == null || cy == null) return null;
+  // Show on projected future points, or on today's merge point (projectedAcwr differs from actual acwr)
+  if (!payload.isProjected && payload.acwr === payload.projectedAcwr) return null;
   return <circle cx={cx} cy={cy} r={3} fill="transparent" stroke={zoneColor(payload.projectedAcwr)} strokeWidth={1.5} strokeDasharray="2 2" />;
 }
 
@@ -228,17 +230,35 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
   const isMobilePortrait = isMobile && !isLandscape;
 
   const activeData = method === 'ewma' && ewmaData.length > 0 ? ewmaData : data;
-  // Exclude today from historical when projection covers today (avoids double-plotting today as 0-load)
-  const projectedHasToday = projectedData.some(p => p.datum === todayISO);
-  const filtered   = useMemo(() =>
-    activeData.filter(d => d.datum >= cutoff && !(projectedHasToday && d.datum === todayISO)),
-    [activeData, cutoff, projectedHasToday, todayISO],
+
+  const projectedHasToday   = projectedData.some(p => p.datum === todayISO);
+  // Today has real load if there's a historical point with taeglLoad > 0
+  const todayHasHistLoad    = activeData.some(p => p.datum === todayISO && p.taeglLoad > 0);
+  // When today has BOTH real load AND a projection → keep historical today, merge projected onto it
+  const mergeTodayProjection = projectedHasToday && todayHasHistLoad;
+
+  const filtered = useMemo(() =>
+    activeData.filter(d =>
+      d.datum >= cutoff &&
+      // Only exclude today from historical when projection covers today AND today has no real load
+      !(projectedHasToday && !todayHasHistLoad && d.datum === todayISO)
+    ),
+    [activeData, cutoff, projectedHasToday, todayHasHistLoad, todayISO],
   );
 
   // Mobile portrait: only 3 forecast days — keeps chart readable on small screens
-  const projectedSlice = useMemo(
-    () => isMobilePortrait ? projectedData.slice(0, 3) : projectedData,
-    [projectedData, isMobilePortrait],
+  // When merging today's projection onto its historical bar, exclude today from projectedSlice
+  const projectedSlice = useMemo(() => {
+    const slice = mergeTodayProjection
+      ? projectedData.filter(p => p.datum !== todayISO)
+      : projectedData;
+    return isMobilePortrait ? slice.slice(0, 3) : slice;
+  }, [projectedData, isMobilePortrait, mergeTodayProjection, todayISO]);
+
+  // Pre-find projected-today for ghost dot + planned bars injection
+  const projectedToday = useMemo(
+    () => mergeTodayProjection ? projectedData.find(p => p.datum === todayISO) : undefined,
+    [projectedData, mergeTodayProjection, todayISO],
   );
 
   // ── Build unified chart data ───────────────────────────────────────────────
@@ -249,6 +269,19 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
     const historical: ChartPoint[] = filtered.map((pt, idx) => {
       const day    = loadMap.get(pt.datum);
       const isLast = idx === filtered.length - 1;
+      // When today has both real load and a projection, inject planned bars + ghost dot
+      const isTodayMerge = pt.datum === todayISO && mergeTodayProjection && projectedToday;
+      const plannedBars = isTodayMerge
+        ? {
+            Team_p:       projectedToday.plannedTeLoads?.['Team']       ?? 0,
+            'S&C_p':      projectedToday.plannedTeLoads?.['S&C']        ?? 0,
+            Spiel_p:      projectedToday.plannedTeLoads?.['Spiel']      ?? 0,
+            Aufwärmen_p:  projectedToday.plannedTeLoads?.['Aufwärmen']  ?? 0,
+            Indi_p:       projectedToday.plannedTeLoads?.['Indi']       ?? 0,
+            Schulsport_p: projectedToday.plannedTeLoads?.['Schulsport'] ?? 0,
+            Prävention_p: projectedToday.plannedTeLoads?.['Prävention'] ?? 0,
+          }
+        : zeroPlan;
       return {
         datum:         formatDatum(pt.datum),
         Team:          day?.loads['Team']       ?? 0,
@@ -258,12 +291,14 @@ export function ACWRChart({ data, projectedData = [], dailyLoads = [], ewmaData 
         Indi:          day?.loads['Indi']        ?? 0,
         Schulsport:    day?.loads['Schulsport']  ?? 0,
         Prävention:    day?.loads['Prävention']  ?? 0,
-        ...zeroPlan,
+        ...plannedBars,
         taeglLoad:     pt.taeglLoad,
         acuteLoad:     pt.acwr !== null ? pt.acuteLoad  : null,
         chronicLoad:   pt.acwr !== null ? pt.chronicLoad : null,
         acwr:          pt.acwr,
-        projectedAcwr: (isLast && projectedSlice.length > 0) ? (pt.acwr ?? undefined) : undefined,
+        projectedAcwr: isTodayMerge
+          ? (projectedToday.acwr ?? undefined)
+          : (isLast && projectedSlice.length > 0) ? (pt.acwr ?? undefined) : undefined,
         isProjected:   false,
         high: 1.3, low: 0.8, mid: 1.0,
         chronicFull:   pt.chronicFull,
