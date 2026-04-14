@@ -82,6 +82,7 @@ interface Props {
   teams: AttendanceTeam[];
   isMock?: boolean;
   readOnly?: boolean;
+  cancelledSessionIds?: Set<string>;
   onSessionClick: (s: AttendanceSession) => void;
   onAddSession?: (datum: string, time?: string) => void;
   onSessionsChanged?: () => void;
@@ -105,7 +106,7 @@ function teamColor(team: AttendanceTeam | undefined, teams: AttendanceTeam[]): s
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function WeekCalendar({ sessions, teams, isMock, readOnly, onSessionClick, onAddSession, onSessionsChanged }: Props) {
+export function WeekCalendar({ sessions, teams, isMock, readOnly, cancelledSessionIds, onSessionClick, onAddSession, onSessionsChanged }: Props) {
   const [weekStart, setWeekStart] = useState(() => isoToMonday(new Date()));
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dragOffsets, setDragOffsets] = useState<Record<string, number>>({});
@@ -316,14 +317,22 @@ export function WeekCalendar({ sessions, teams, isMock, readOnly, onSessionClick
                   const top    = sessionTopPx(s) + (dragOffsets[s.id] ?? 0);
                   const height = sessionHeightPx(s);
                   const isDragging = dragging?.sessionId === s.id;
+                  const isCancelled = cancelledSessionIds?.has(s.id) ?? false;
 
                   return (
                     <div
                       key={s.id}
-                      className={`absolute left-1 right-1 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing z-20 transition-shadow ${
-                        isDragging ? 'shadow-2xl shadow-black/60 opacity-90 ring-2 ring-violet-400' : 'hover:brightness-110'
+                      className={`absolute left-1 right-1 rounded-lg overflow-hidden z-20 transition-shadow ${
+                        readOnly ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
+                      } ${isDragging ? 'shadow-2xl shadow-black/60 opacity-90 ring-2 ring-violet-400' : 'hover:brightness-110'} ${
+                        isCancelled ? 'opacity-50' : ''
                       }`}
-                      style={{ top: `${top}px`, height: `${Math.max(24, height)}px`, backgroundColor: color + '22', borderLeft: `3px solid ${typeColor}` }}
+                      style={{
+                        top: `${top}px`,
+                        height: `${Math.max(24, height)}px`,
+                        backgroundColor: isCancelled ? '#1f0000' : color + '22',
+                        borderLeft: `3px solid ${isCancelled ? '#ef4444' : typeColor}`,
+                      }}
                       onPointerDown={e => onPointerDown(e, s)}
                       onClick={e => {
                         e.stopPropagation();
@@ -331,15 +340,20 @@ export function WeekCalendar({ sessions, teams, isMock, readOnly, onSessionClick
                       }}
                     >
                       <div className="px-1 py-0.5 h-full flex flex-col justify-start overflow-hidden">
-                        <p className="text-[10px] sm:text-xs font-semibold leading-tight truncate" style={{ color: typeColor }}>
-                          {s.title}
-                        </p>
+                        <div className="flex items-start justify-between gap-0.5">
+                          <p className="text-[10px] sm:text-xs font-semibold leading-tight truncate flex-1" style={{ color: isCancelled ? '#ef4444' : typeColor }}>
+                            {s.title}
+                          </p>
+                          {isCancelled && (
+                            <span className="text-[9px] text-red-400 font-bold flex-shrink-0 leading-tight">✕</span>
+                          )}
+                        </div>
                         {height >= 36 && (
                           <p className="text-[9px] sm:text-xs text-gray-400 leading-tight truncate">
-                            {s.startTime}{s.endTime ? `–${s.endTime}` : ''}
+                            {isCancelled ? 'Abgesagt' : `${s.startTime ?? ''}${s.endTime ? `–${s.endTime}` : ''}`}
                           </p>
                         )}
-                        {height >= 52 && team && (
+                        {height >= 52 && team && !isCancelled && (
                           <p className="text-[9px] sm:text-xs leading-tight truncate" style={{ color: color }}>
                             {team.name}
                           </p>

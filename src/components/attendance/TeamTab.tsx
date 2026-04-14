@@ -216,6 +216,7 @@ export function TeamTab({ userId, userName, onGoToJoin }: Props) {
                 sessions={selectedTeamId ? sessions.filter(s => s.teamId === selectedTeamId) : sessions}
                 teams={myTeams}
                 readOnly
+                cancelledSessionIds={new Set(records.filter(r => r.overrideStatus === 'no').map(r => r.sessionId))}
                 onSessionClick={openOverride}
               />
             </div>
