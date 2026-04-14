@@ -17,6 +17,8 @@ import { decodeShareData } from './lib/trainerShare';
 import { TrainerView } from './components/TrainerView';
 import { TrainerDashboard } from './components/TrainerDashboard';
 import { InviteAccept } from './components/InviteAccept';
+import { TeamTab } from './components/attendance/TeamTab';
+import { TeamJoinScreen } from './components/attendance/TeamJoinScreen';
 import { loadProfile, saveProfile } from './lib/profileStorage';
 import { loadFoodLog, saveFoodLog } from './lib/foodStorage';
 import { loadSessions, saveSessions, loadPlannedSessions, savePlannedSessions } from './lib/trainingStorage';
@@ -36,7 +38,7 @@ import type { FoodEntry } from './types/food';
 import type { NutritionForecast as NutritionForecastData } from './lib/foodApi';
 import type { User } from '@supabase/supabase-js';
 
-type Tab = 'dashboard' | 'tagebuch' | 'acwr';
+type Tab = 'dashboard' | 'tagebuch' | 'acwr' | 'team';
 
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash);
@@ -339,6 +341,21 @@ function App() {
 
   const loggedInUser = user && user !== 'loading' ? user as User : null;
 
+  /* ── Team join gate ── */
+  const teamJoinHash = currentHash.match(/^#team-join\/(.+)$/)?.[1];
+  if (teamJoinHash && loggedInUser) {
+    return (
+      <TeamJoinScreen
+        token={teamJoinHash}
+        userId={loggedInUser.id}
+        userName={profile.name || loggedInUser.email || 'Athlet'}
+        userSport={profile.sport || ''}
+        onJoined={() => { window.location.hash = ''; setCurrentHash(''); setActiveTab('team'); }}
+        onBack={() => { window.location.hash = ''; setCurrentHash(''); }}
+      />
+    );
+  }
+
   /* ── Invite acceptance gate (athletes, before coach gate) ── */
   const inviteHash = currentHash.match(/^#invite\/(.+)$/)?.[1];
   if (inviteHash) {
@@ -380,6 +397,7 @@ function App() {
               { id: 'dashboard', label: 'Ernährung', icon: '🥗', badge: 0 },
               { id: 'tagebuch',  label: 'Tagebuch',  icon: '📒', badge: 0 },
               { id: 'acwr',      label: 'ACWR',       icon: '📊', badge: pendingCount },
+              { id: 'team',      label: 'Team',        icon: '🏆', badge: 0 },
             ] as const).map(t => (
               <button
                 key={t.id}
@@ -494,6 +512,30 @@ function App() {
           />
         )}
 
+        {/* ── TEAM ── */}
+        {activeTab === 'team' && loggedInUser && (
+          <TeamTab
+            userId={loggedInUser.id}
+            userName={profile.name || loggedInUser.email || 'Athlet'}
+            onGoToJoin={() => {
+              const token = prompt('Team-Beitrittslink einfügen:');
+              if (!token) return;
+              const match = token.match(/#team-join\/([A-Za-z0-9_-]+)/);
+              const code = match ? match[1] : token.trim();
+              if (code) { window.location.hash = `#team-join/${code}`; setCurrentHash(`#team-join/${code}`); }
+            }}
+          />
+        )}
+        {activeTab === 'team' && !loggedInUser && (
+          <div className="text-center py-12">
+            <p className="text-gray-400 text-sm mb-4">Melde dich an um Teams beizutreten</p>
+            <button onClick={() => setShowAuthModal(true)}
+              className="px-4 py-2 bg-violet-600 text-white rounded-xl text-sm hover:bg-violet-500 transition-colors">
+              Anmelden
+            </button>
+          </div>
+        )}
+
         {/* ── ACWR ── */}
         {activeTab === 'acwr' && (
           <ACWRSection
@@ -532,6 +574,7 @@ function App() {
             { id: 'dashboard', label: 'Ernährung', icon: '🥗', badge: 0 },
             { id: 'tagebuch',  label: 'Tagebuch',  icon: '📒', badge: 0 },
             { id: 'acwr',      label: 'ACWR',       icon: '📊', badge: pendingCount },
+            { id: 'team',      label: 'Team',        icon: '🏆', badge: 0 },
           ] as const).map(t => (
             <button
               key={t.id}

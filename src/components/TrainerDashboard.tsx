@@ -12,6 +12,7 @@ import {
   loadRosterFromSupabase, upsertAthleteInSupabase, deleteAthleteFromSupabase,
   upsertGroupInSupabase, deleteGroupFromSupabase, updateAthleteGroupsInSupabase,
 } from '../lib/trainerShare';
+import { AttendanceModule } from './attendance/AttendanceModule';
 import { CLOUD_ENABLED } from '../lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { TrainerView } from './TrainerView';
@@ -1153,7 +1154,7 @@ function UebersichtTab({ statuses, selectedIds, histories, groups, onOpenAthlete
 
 // ── Main TrainerDashboard ────────────────────────────────────────────────────
 
-type Tab = 'kader' | 'gruppen' | 'uebersicht';
+type Tab = 'kader' | 'gruppen' | 'uebersicht' | 'planung';
 
 // ── Mock data for debugging ───────────────────────────────────────────────────
 
@@ -1495,6 +1496,7 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
     { key: 'kader',      label: 'Kader' },
     { key: 'gruppen',    label: 'Gruppen' },
     { key: 'uebersicht', label: 'Übersicht' },
+    { key: 'planung',    label: 'Planung' },
   ];
 
   return (
@@ -1617,6 +1619,13 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
             histories={histories}
             groups={roster.groups}
             onOpenAthlete={setOpenAthleteToken}
+          />
+        )}
+        {tab === 'planung' && (
+          <AttendanceModule
+            trainerId={user.id}
+            trainerName={trainerName}
+            roster={roster.athletes}
           />
         )}
       </div>
