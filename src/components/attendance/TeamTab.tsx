@@ -6,6 +6,7 @@ import {
   submitAthleteOverride, clearAthleteOverride,
 } from '../../lib/attendanceStorage';
 import { TeamChat } from './TeamChat';
+import { WeekCalendar } from './WeekCalendar';
 
 const ABSENCE_REASONS: { value: AbsenceReason; label: string }[] = [
   { value: 'verletzt',  label: 'Verletzt' },
@@ -100,7 +101,7 @@ export function TeamTab({ userId, userName, onGoToJoin }: Props) {
 
   async function handleSaveOverride() {
     if (!overrideModal) return;
-    if (overrideStatus === 'no' && !overrideReason) return;
+    if (overrideStatus === 'no' && (!overrideReason || !overrideNote.trim())) return;
     setSaving(true);
     await submitAthleteOverride(overrideModal.session.id, userId, overrideStatus, overrideReason as AbsenceReason | undefined, overrideNote);
     await Promise.all([loadMySessions(userId), loadMyRecords(userId)]).then(([ss, rs]) => {
@@ -182,6 +183,18 @@ export function TeamTab({ userId, userName, onGoToJoin }: Props) {
       {/* Sessions tab */}
       {subTab === 'sessions' && (
         <div className="space-y-4">
+          {/* Week calendar — all team sessions */}
+          {sessions.length > 0 && (
+            <div className="bg-gray-900/50 rounded-2xl border border-gray-800 overflow-hidden">
+              <WeekCalendar
+                sessions={selectedTeamId ? sessions.filter(s => s.teamId === selectedTeamId) : sessions}
+                teams={myTeams}
+                readOnly
+                onSessionClick={openOverride}
+              />
+            </div>
+          )}
+
           {upcoming.length === 0 && cancelled.length === 0 && (
             <p className="text-center text-gray-600 text-sm py-8">Keine bevorstehenden Einheiten</p>
           )}
@@ -303,10 +316,17 @@ export function TeamTab({ userId, userName, onGoToJoin }: Props) {
 
                     {/* Note */}
                     <div>
-                      <p className="text-xs text-gray-400 mb-1">Nachricht an Trainer <span className="text-gray-600">(optional)</span></p>
+                      <p className="text-xs text-gray-400 mb-1">
+                        Nachricht an Trainer
+                        {overrideStatus === 'no'
+                          ? <span className="text-red-500 ml-1">*</span>
+                          : <span className="text-gray-600"> (optional)</span>}
+                      </p>
                       <textarea value={overrideNote} onChange={e => setOverrideNote(e.target.value)}
-                        rows={2} placeholder="Kurze Info..."
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500 resize-none" />
+                        rows={2} placeholder={overrideStatus === 'no' ? 'Bitte kurz erklären...' : 'Kurze Info...'}
+                        className={`w-full bg-gray-800 border rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500 resize-none ${
+                          overrideStatus === 'no' && !overrideNote.trim() ? 'border-red-800' : 'border-gray-700'
+                        }`} />
                     </div>
 
                     <div className="flex gap-2">
@@ -317,7 +337,7 @@ export function TeamTab({ userId, userName, onGoToJoin }: Props) {
                         </button>
                       )}
                       <button onClick={handleSaveOverride}
-                        disabled={saving || (overrideStatus === 'no' && !overrideReason)}
+                        disabled={saving || (overrideStatus === 'no' && (!overrideReason || !overrideNote.trim()))}
                         className="flex-1 py-2.5 text-sm bg-violet-600 text-white rounded-xl font-medium disabled:opacity-40 hover:bg-violet-500 transition-colors">
                         {saving ? 'Speichern...' : 'Bestätigen'}
                       </button>
