@@ -9,6 +9,7 @@ import {
 import { SessionPlanner } from './SessionPlanner';
 import { SessionDetail } from './SessionDetail';
 import { TeamChat } from './TeamChat';
+import { WeekCalendar } from './WeekCalendar';
 
 const TEAM_COLORS = [
   { key: 'violet', bg: '#7c3aed' },
@@ -72,6 +73,7 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
   const [sessionView, setSessionView] = useState<SessionView>('list');
   const [showPlanner, setShowPlanner] = useState(false);
   const [plannerPrefill, setPlannerPrefill] = useState<string | undefined>();
+  const [plannerPrefillTime, setPlannerPrefillTime] = useState<string | undefined>();
   const [showNewTeam, setShowNewTeam] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamSport, setNewTeamSport] = useState('');
@@ -79,8 +81,6 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
   const [openSession, setOpenSession] = useState<AttendanceSession | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [addingFromRoster, setAddingFromRoster] = useState(false);
-  const [calMonth, setCalMonth] = useState(() => new Date());
-  const [calSelectedDay, setCalSelectedDay] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (isMock) {
@@ -161,8 +161,9 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
     });
   }
 
-  function openPlannerForDay(day: string) {
+  function openPlannerForDay(day: string, time?: string) {
     setPlannerPrefill(day);
+    setPlannerPrefillTime(time);
     setShowPlanner(true);
   }
 
@@ -178,46 +179,6 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
     !teamMembers.some(m => m.athleteRosterId === a.id || m.athleteUserId === a.id)
   );
 
-  // Calendar helpers
-  function calDays() {
-    const year = calMonth.getFullYear();
-    const month = calMonth.getMonth();
-    const first = new Date(year, month, 1).getDay();
-    const startOffset = (first === 0 ? 6 : first - 1);
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const cells: (number | null)[] = Array(startOffset).fill(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-    return cells;
-  }
-
-  function sessionDaysInMonth() {
-    const year = calMonth.getFullYear();
-    const month = calMonth.getMonth();
-    return new Map(
-      teamSessions
-        .map(s => ({ s, d: new Date(s.datum + 'T12:00:00') }))
-        .filter(({ d }) => d.getFullYear() === year && d.getMonth() === month)
-        .reduce((acc, { s }) => {
-          const day = new Date(s.datum + 'T12:00:00').getDate();
-          if (!acc.has(day)) acc.set(day, []);
-          acc.get(day)!.push(s);
-          return acc;
-        }, new Map<number, AttendanceSession[]>())
-    );
-  }
-
-  function dayToISO(day: number) {
-    const y = calMonth.getFullYear();
-    const m = String(calMonth.getMonth() + 1).padStart(2, '0');
-    return `${y}-${m}-${String(day).padStart(2, '0')}`;
-  }
-
-  const sessionsByDay = sessionDaysInMonth();
-  const todayDate = new Date();
-
-  const calSelectedSessions = calSelectedDay
-    ? teamSessions.filter(s => s.datum === calSelectedDay)
-    : [];
 
   function formatDate(d: string) {
     const date = new Date(d + 'T12:00:00');
@@ -241,7 +202,7 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
       {/* Team selector */}
       <div className="flex items-center gap-2 flex-wrap">
         {teams.map(t => (
-          <button key={t.id} onClick={() => { setSelectedTeamId(t.id); setTeamTab('sessions'); setCalSelectedDay(null); }}
+          <button key={t.id} onClick={() => { setSelectedTeamId(t.id); setTeamTab('sessions'); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition-colors ${
               selectedTeamId === t.id
                 ? 'bg-violet-600 text-white border-transparent'
@@ -348,7 +309,7 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
             <div className="space-y-3">
               {/* List / Calendar toggle + New button */}
               <div className="flex items-center gap-2">
-                <button onClick={() => { setShowPlanner(true); setPlannerPrefill(undefined); }}
+                <button onClick={() => { setShowPlanner(true); setPlannerPrefill(undefined); setPlannerPrefillTime(undefined); }}
                   className="flex-1 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-500 transition-colors">
                   + Neue Einheit
                 </button>
@@ -389,110 +350,16 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
                 </>
               )}
 
-              {/* Calendar View */}
+              {/* Calendar View — week/hourly planner showing ALL team sessions */}
               {sessionView === 'calendar' && (
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-4">
-                  {/* Month nav */}
-                  <div className="flex items-center justify-between">
-                    <button onClick={() => { setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1)); setCalSelectedDay(null); }}
-                      className="text-gray-400 hover:text-white px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors">‹</button>
-                    <p className="text-sm font-medium text-white">
-                      {calMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
-                    </p>
-                    <button onClick={() => { setCalMonth(m => new Date(m.getFullYear(), m.getMonth() + 1)); setCalSelectedDay(null); }}
-                      className="text-gray-400 hover:text-white px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors">›</button>
-                  </div>
-
-                  {/* Day headers */}
-                  <div className="grid grid-cols-7 gap-1">
-                    {['Mo','Di','Mi','Do','Fr','Sa','So'].map(d => (
-                      <div key={d} className="text-center text-xs text-gray-600 font-medium py-1">{d}</div>
-                    ))}
-                  </div>
-
-                  {/* Day grid */}
-                  <div className="grid grid-cols-7 gap-1">
-                    {calDays().map((day, i) => {
-                      if (!day) return <div key={i} />;
-                      const iso = dayToISO(day);
-                      const isToday = day === todayDate.getDate() &&
-                        calMonth.getMonth() === todayDate.getMonth() &&
-                        calMonth.getFullYear() === todayDate.getFullYear();
-                      const hasSessions = sessionsByDay.has(day);
-                      const isSelected = calSelectedDay === iso;
-                      const sessionCount = sessionsByDay.get(day)?.length ?? 0;
-                      return (
-                        <button key={i} onClick={() => setCalSelectedDay(isSelected ? null : iso)}
-                          className={`aspect-square flex flex-col items-center justify-center rounded-xl text-xs relative transition-colors ${
-                            isSelected ? 'bg-violet-600 text-white' :
-                            isToday ? 'bg-violet-900/50 text-violet-300 font-bold' :
-                            hasSessions ? 'bg-gray-800 text-gray-200 hover:bg-gray-700' :
-                            'text-gray-500 hover:bg-gray-800 hover:text-gray-300'
-                          }`}>
-                          {day}
-                          {hasSessions && (
-                            <span className={`absolute bottom-1 flex gap-0.5 ${isSelected ? 'opacity-80' : ''}`}>
-                              {Array.from({ length: Math.min(sessionCount, 3) }).map((_, j) => (
-                                <span key={j} className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-violet-400'}`} />
-                              ))}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Selected day sessions */}
-                  {calSelectedDay && (
-                    <div className="border-t border-gray-800 pt-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-400">
-                          {new Date(calSelectedDay + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
-                        </p>
-                        <button onClick={() => openPlannerForDay(calSelectedDay)}
-                          className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
-                          + Einheit hinzufügen
-                        </button>
-                      </div>
-                      {calSelectedSessions.length === 0 ? (
-                        <p className="text-xs text-gray-600 py-2">Keine Einheiten an diesem Tag</p>
-                      ) : (
-                        calSelectedSessions.map(s => (
-                          <SessionCard key={s.id} session={s} onClick={() => setOpenSession(s)} formatDate={formatDate} />
-                        ))
-                      )}
-                    </div>
-                  )}
-
-                  {/* No-day-selected: show all month sessions */}
-                  {!calSelectedDay && (
-                    <div className="border-t border-gray-800 pt-3 space-y-1">
-                      <p className="text-xs text-gray-500 mb-2">
-                        {teamSessions.filter(s => {
-                          const d = new Date(s.datum + 'T12:00:00');
-                          return d.getFullYear() === calMonth.getFullYear() && d.getMonth() === calMonth.getMonth();
-                        }).length} Einheiten in {calMonth.toLocaleDateString('de-DE', { month: 'long' })}
-                      </p>
-                      {teamSessions
-                        .filter(s => {
-                          const d = new Date(s.datum + 'T12:00:00');
-                          return d.getFullYear() === calMonth.getFullYear() && d.getMonth() === calMonth.getMonth();
-                        })
-                        .sort((a, b) => a.datum.localeCompare(b.datum))
-                        .map(s => (
-                          <button key={s.id} onClick={() => setOpenSession(s)}
-                            className="w-full flex items-center gap-3 px-3 py-2 bg-gray-800 rounded-xl border border-gray-700 hover:border-violet-600 transition-colors text-left">
-                            <span className="text-xs text-gray-500 w-6 flex-shrink-0 font-mono">
-                              {new Date(s.datum + 'T12:00:00').getDate()}
-                            </span>
-                            <span className="flex-1 text-sm text-white truncate">{s.title}</span>
-                            {s.startTime && <span className="text-xs text-gray-500">{s.startTime}</span>}
-                            {s.trainingType && <TypeBadge type={s.trainingType} />}
-                          </button>
-                        ))}
-                    </div>
-                  )}
-                </div>
+                <WeekCalendar
+                  sessions={sessions}
+                  teams={teams}
+                  isMock={isMock}
+                  onSessionClick={s => setOpenSession(s)}
+                  onAddSession={(datum, time) => openPlannerForDay(datum, time)}
+                  onSessionsChanged={reload}
+                />
               )}
             </div>
           )}
@@ -587,8 +454,9 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
           roster={roster}
           groups={groups}
           prefillDatum={plannerPrefill}
+          prefillTime={plannerPrefillTime}
           onCreated={reload}
-          onClose={() => { setShowPlanner(false); setPlannerPrefill(undefined); }}
+          onClose={() => { setShowPlanner(false); setPlannerPrefill(undefined); setPlannerPrefillTime(undefined); }}
         />
       )}
 

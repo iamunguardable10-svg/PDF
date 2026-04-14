@@ -22,16 +22,24 @@ interface Props {
   roster: ManagedAthlete[];
   groups: AthleteGroup[];
   prefillDatum?: string;
+  prefillTime?: string;
   onCreated: () => void;
   onClose: () => void;
 }
 
-export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups, prefillDatum, onCreated, onClose }: Props) {
-  const [title, setTitle] = useState('');
+export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups, prefillDatum, prefillTime, onCreated, onClose }: Props) {
+  const [titleCustomized, setTitleCustomized] = useState(false);
+  const [title, setTitle] = useState('Training');
   const [description, setDescription] = useState('');
   const [datum, setDatum] = useState(() => prefillDatum ?? new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState('17:00');
-  const [endTime, setEndTime] = useState('19:00');
+  const [startTime, setStartTime] = useState(prefillTime ?? '17:00');
+  const [endTime, setEndTime] = useState(() => {
+    if (prefillTime) {
+      const [h, m] = prefillTime.split(':').map(Number);
+      return `${String(h + 2).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+    return '19:00';
+  });
   const [location, setLocation] = useState('');
   const [trainingType, setTrainingType] = useState<AttendanceTrainingType | ''>('Training');
   const [coachNote, setCoachNote] = useState('');
@@ -41,6 +49,11 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
   const [selectedGroupId, setSelectedGroupId] = useState<string>(groups[0]?.id ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  function pickType(t: AttendanceTrainingType) {
+    setTrainingType(t);
+    if (!titleCustomized) setTitle(t);
+  }
 
   const teamMembers = selectedTeamId ? (membersByTeam[selectedTeamId] ?? []) : [];
   const groupMembers = selectedGroupId
@@ -110,20 +123,12 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
         </div>
 
         <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4">
-          {/* Titel */}
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Titel *</label>
-            <input value={title} onChange={e => setTitle(e.target.value)}
-              placeholder="z.B. Teamtraining U19"
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
-          </div>
-
           {/* Typ */}
           <div>
             <label className="text-xs text-gray-400 mb-2 block">Typ</label>
             <div className="flex flex-wrap gap-2">
               {TRAINING_TYPES.map(t => (
-                <button key={t} onClick={() => setTrainingType(t)}
+                <button key={t} onClick={() => pickType(t)}
                   className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                     trainingType === t
                       ? `${COLORS[t]} text-white border-transparent`
@@ -133,6 +138,14 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Titel (optional override) */}
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Titel <span className="text-gray-600">(optional anpassen)</span></label>
+            <input value={title} onChange={e => { setTitle(e.target.value); setTitleCustomized(true); }}
+              placeholder="Wird aus Typ übernommen"
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
           </div>
 
           {/* Datum & Zeit */}
@@ -279,7 +292,7 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
         <div className="px-4 pb-4 pt-3 border-t border-gray-800 flex-shrink-0">
           <button onClick={handleSave} disabled={saving || !title.trim() || !datum}
             className="w-full py-3 bg-violet-600 text-white rounded-xl font-medium text-sm disabled:opacity-40 hover:bg-violet-500 transition-colors">
-            {saving ? 'Speichern...' : 'Einheit erstellen'}
+            {saving ? 'Speichern...' : '✓ Einheit erstellen'}
           </button>
         </div>
       </div>
