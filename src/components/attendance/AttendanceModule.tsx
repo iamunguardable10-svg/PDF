@@ -76,6 +76,8 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamSport, setNewTeamSport] = useState('');
   const [newTeamColor, setNewTeamColor] = useState('violet');
+  const [teamCreateError, setTeamCreateError] = useState('');
+  const [teamCreating, setTeamCreating] = useState(false);
   const [openSession, setOpenSession] = useState<AttendanceSession | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [addingFromRoster, setAddingFromRoster] = useState(false);
@@ -107,14 +109,21 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
   }, [selectedTeamId, isMock]);
 
   async function handleCreateTeam() {
-    if (!newTeamName.trim() || isMock) return;
+    if (!newTeamName.trim()) return;
+    if (isMock) { setTeamCreateError('Im Demo-Modus nicht möglich'); return; }
+    setTeamCreating(true);
+    setTeamCreateError('');
     const team = await createTeam(trainerId, newTeamName.trim(), newTeamSport.trim(), newTeamColor);
+    setTeamCreating(false);
     if (team) {
       setTeams(prev => [...prev, team]);
       setSelectedTeamId(team.id);
       setShowNewTeam(false);
       setNewTeamName('');
       setNewTeamSport('');
+      setTeamCreateError('');
+    } else {
+      setTeamCreateError('Fehler beim Erstellen — Supabase-Verbindung prüfen');
     }
   }
 
@@ -211,39 +220,44 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
             {t.name}
           </button>
         ))}
-        {!isMock && (
-          <button onClick={() => setShowNewTeam(true)}
-            className="px-3 py-1.5 text-xs text-gray-500 border border-dashed border-gray-700 rounded-xl hover:border-gray-500 hover:text-gray-300 transition-colors">
-            + Team
-          </button>
-        )}
+        <button onClick={() => { setShowNewTeam(true); setTeamCreateError(''); }}
+          className="px-3 py-1.5 text-xs text-gray-500 border border-dashed border-gray-700 rounded-xl hover:border-gray-500 hover:text-gray-300 transition-colors">
+          + Team
+        </button>
       </div>
 
       {/* New team form */}
-      {showNewTeam && !isMock && (
+      {showNewTeam && (
         <div className="bg-gray-800 border border-gray-700 rounded-2xl p-4 space-y-3">
           <h3 className="text-sm font-medium text-white">Neues Team</h3>
+          {isMock && (
+            <p className="text-xs text-amber-400 bg-amber-950/30 border border-amber-800/40 rounded-xl px-3 py-2">
+              Demo-Modus deaktivieren um echte Teams zu erstellen
+            </p>
+          )}
           <input value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
-            placeholder="Team-Name *"
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
+            onKeyDown={e => e.key === 'Enter' && handleCreateTeam()}
+            placeholder="Team-Name *" disabled={isMock}
+            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500 disabled:opacity-40" />
           <input value={newTeamSport} onChange={e => setNewTeamSport(e.target.value)}
-            placeholder="Sportart (optional)"
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
+            placeholder="Sportart (optional)" disabled={isMock}
+            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500 disabled:opacity-40" />
           <div className="flex gap-2">
             {TEAM_COLORS.map(c => (
-              <button key={c.key} onClick={() => setNewTeamColor(c.key)}
-                className={`w-7 h-7 rounded-full transition-transform ${newTeamColor === c.key ? 'ring-2 ring-white scale-110' : ''}`}
+              <button key={c.key} onClick={() => setNewTeamColor(c.key)} disabled={isMock}
+                className={`w-7 h-7 rounded-full transition-transform disabled:opacity-40 ${newTeamColor === c.key ? 'ring-2 ring-white scale-110' : ''}`}
                 style={{ backgroundColor: c.bg }} />
             ))}
           </div>
+          {teamCreateError && <p className="text-xs text-red-400">{teamCreateError}</p>}
           <div className="flex gap-2">
-            <button onClick={() => setShowNewTeam(false)}
-              className="flex-1 py-2 text-sm border border-gray-600 text-gray-400 rounded-xl hover:border-gray-500">
+            <button onClick={() => { setShowNewTeam(false); setTeamCreateError(''); }}
+              className="flex-1 py-2.5 text-sm border border-gray-600 text-gray-400 rounded-xl hover:border-gray-500 transition-colors">
               Abbrechen
             </button>
-            <button onClick={handleCreateTeam} disabled={!newTeamName.trim()}
-              className="flex-1 py-2 text-sm bg-violet-600 text-white rounded-xl disabled:opacity-40 hover:bg-violet-500 font-medium">
-              Erstellen
+            <button onClick={handleCreateTeam} disabled={!newTeamName.trim() || teamCreating || isMock}
+              className="flex-1 py-2.5 text-sm bg-violet-600 text-white rounded-xl disabled:opacity-40 hover:bg-violet-500 font-medium transition-colors">
+              {teamCreating ? 'Erstelle...' : 'Erstellen'}
             </button>
           </div>
         </div>
@@ -427,6 +441,7 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
           groups={groups}
           prefillDatum={plannerPrefill}
           prefillTime={plannerPrefillTime}
+          isMock={isMock}
           onCreated={reload}
           onClose={() => { setShowPlanner(false); setPlannerPrefill(undefined); setPlannerPrefillTime(undefined); }}
         />

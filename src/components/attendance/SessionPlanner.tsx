@@ -23,11 +23,12 @@ interface Props {
   groups: AthleteGroup[];
   prefillDatum?: string;
   prefillTime?: string;
+  isMock?: boolean;
   onCreated: () => void;
   onClose: () => void;
 }
 
-export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups, prefillDatum, prefillTime, onCreated, onClose }: Props) {
+export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups, prefillDatum, prefillTime, isMock, onCreated, onClose }: Props) {
   const [titleCustomized, setTitleCustomized] = useState(false);
   const [title, setTitle] = useState('Training');
   const [description, setDescription] = useState('');
@@ -89,6 +90,7 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
   }
 
   async function handleSave() {
+    if (isMock) { setError('Demo-Modus: Einheiten werden nicht gespeichert'); return; }
     if (!title.trim()) { setError('Titel fehlt'); return; }
     if (!datum) { setError('Datum fehlt'); return; }
     setSaving(true);

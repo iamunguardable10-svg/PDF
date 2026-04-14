@@ -21,6 +21,7 @@ export function TrainerView({ data: staticData, token }: Props) {
   const [loading, setLoading]     = useState(!!token);
   const [error, setError]         = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [chartMethod, setChartMethod] = useState<'rolling' | 'ewma'>('rolling');
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -50,14 +51,6 @@ export function TrainerView({ data: staticData, token }: Props) {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const currentPoint = useMemo(() => {
-    const active = [...(data?.acwrHistory ?? [])].reverse().find(p => p.v !== null);
-    return active ?? null;
-  }, [data]);
-
-  const acwr = currentPoint?.v ?? null;
-  const zone = acwr !== null ? getACWRZoneLabel(acwr) : null;
-
   const next14Days = useMemo(() => Array.from({ length: 14 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() + i);
     return d.toISOString().split('T')[0];
@@ -78,7 +71,7 @@ export function TrainerView({ data: staticData, token }: Props) {
       .slice(0, 10),
   [data]);
 
-  // Reconstruct Session[] from sessions28 for projection
+  // Reconstruct Session[] from sessions28 for chart bars + EWMA
   const sessions28AsSessions = useMemo<Session[]>(() =>
     (data?.sessions28 ?? []).map((s, i) => ({
       id: `ts-${i}`,
@@ -103,26 +96,29 @@ export function TrainerView({ data: staticData, token }: Props) {
     })),
   [data]);
 
-  const projectedData = useMemo(() =>
-    projectFutureACWR(sessions28AsSessions, plannedAsPS),
-  [sessions28AsSessions, plannedAsPS]);
+  const projectedData   = useMemo(() => projectFutureACWR(sessions28AsSessions, plannedAsPS), [sessions28AsSessions, plannedAsPS]);
+  const trainerDailyLoads = useMemo<DayLoad[]>(() => aggregateDailyLoads(sessions28AsSessions), [sessions28AsSessions]);
+  const trainerEwmaData   = useMemo(() => calculateEWMA(sessions28AsSessions), [sessions28AsSessions]);
 
-  const trainerDailyLoads = useMemo<DayLoad[]>(() =>
-    aggregateDailyLoads(sessions28AsSessions),
-  [sessions28AsSessions]);
-
-  const trainerEwmaData = useMemo(() =>
-    calculateEWMA(sessions28AsSessions),
-  [sessions28AsSessions]);
-
-  // Use server-precomputed acwrHistory (calculated from ALL sessions, not just 28d).
-  // sessions28 is only used for the daily-load bars (TE breakdown) — accurate for last 28 days.
+  // Server-precomputed rolling ACWR history (all-time). EWMA computed locally from 28d.
   const acwrData: ACWRDataPoint[] = useMemo(() =>
     (data?.acwrHistory ?? []).map(p => ({
       datum: p.d, taeglLoad: 0, acuteLoad: p.a, chronicLoad: p.c,
       acwr: p.v, chronicFull: true,
     })),
   [data]);
+
+  // Active data for the status header follows the chart's selected method
+  const activeHistory = useMemo(() =>
+    chartMethod === 'ewma' && trainerEwmaData.length > 0 ? trainerEwmaData : acwrData,
+  [chartMethod, trainerEwmaData, acwrData]);
+
+  const currentPoint = useMemo(() =>
+    [...activeHistory].reverse().find(p => p.acwr !== null) ?? null,
+  [activeHistory]);
+
+  const acwr = currentPoint?.acwr ?? null;
+  const zone = acwr !== null ? getACWRZoneLabel(acwr) : null;
 
   function fmtDate(iso: string) {
     const d = new Date(iso + 'T00:00');
@@ -255,13 +251,13 @@ export function TrainerView({ data: staticData, token }: Props) {
                 <div className="bg-gray-900 rounded-2xl p-3 border border-gray-800">
                   <div className="text-xs text-gray-500 mb-1">Acute Load (7d Ø)</div>
                   <div className="text-lg font-bold text-blue-400">
-                    {currentPoint?.a ?? '—'} <span className="text-xs font-normal text-gray-500">AU</span>
+                    {currentPoint?.acuteLoad != null ? Math.round(currentPoint.acuteLoad) : '—'} <span className="text-xs font-normal text-gray-500">AU</span>
                   </div>
                 </div>
                 <div className="bg-gray-900 rounded-2xl p-3 border border-gray-800">
                   <div className="text-xs text-gray-500 mb-1">Chronic Load (28d Ø)</div>
                   <div className="text-lg font-bold text-amber-400">
-                    {currentPoint?.c ?? '—'} <span className="text-xs font-normal text-gray-500">AU</span>
+                    {currentPoint?.chronicLoad != null ? Math.round(currentPoint.chronicLoad) : '—'} <span className="text-xs font-normal text-gray-500">AU</span>
                   </div>
                 </div>
               </div>
@@ -280,6 +276,7 @@ export function TrainerView({ data: staticData, token }: Props) {
               projectedData={projectedData}
               dailyLoads={trainerDailyLoads}
               ewmaData={trainerEwmaData}
+              onMethodChange={setChartMethod}
             />
           </div>
         )}
@@ -289,8 +286,8 @@ export function TrainerView({ data: staticData, token }: Props) {
           <ACWRForecast
             projected={projectedData}
             currentAcwr={acwr}
-            currentAcute={currentPoint.a}
-            currentChronic={currentPoint.c}
+            currentAcute={currentPoint.acuteLoad ?? null}
+            currentChronic={currentPoint.chronicLoad ?? null}
             plannedCount={(data?.planned ?? []).length}
           />
         )}

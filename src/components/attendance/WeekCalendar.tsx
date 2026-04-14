@@ -4,7 +4,7 @@ import { updateSession } from '../../lib/attendanceStorage';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const HOUR_PX  = 64;   // px per hour
+const HOUR_PX  = 56;   // px per hour
 const START_H  = 6;    // 06:00
 const END_H    = 23;   // 23:00
 const TOTAL_H  = END_H - START_H;
@@ -109,9 +109,25 @@ export function WeekCalendar({ sessions, teams, isMock, onSessionClick, onAddSes
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dragOffsets, setDragOffsets] = useState<Record<string, number>>({});
   const gridRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const todayISO = toISO(new Date());
+
+  // Auto-scroll to show earliest session this week (or 08:00 default)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const weekISOs = new Set(weekDays.map(toISO));
+    const weekSessions = sessions.filter(s => weekISOs.has(s.datum) && s.startTime);
+    const earliest = weekSessions.reduce<number | null>((min, s) => {
+      const m = timeToMinutes(s.startTime!);
+      return min === null || m < min ? m : min;
+    }, null);
+    const targetMin = earliest != null ? Math.max(START_H * 60, earliest - 30) : 8 * 60;
+    el.scrollTop = minutesToPx(targetMin);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStart]);
 
   function prevWeek() { setWeekStart(d => addDays(d, -7)); }
   function nextWeek() { setWeekStart(d => addDays(d, 7)); }
@@ -225,7 +241,7 @@ export function WeekCalendar({ sessions, teams, isMock, onSessionClick, onAddSes
       </div>
 
       {/* Scrollable grid */}
-      <div className="overflow-y-auto flex-1" style={{ maxHeight: '520px' }}>
+      <div ref={scrollRef} className="overflow-y-auto flex-1" style={{ maxHeight: 'min(520px, 60vh)' }}>
         <div
           ref={gridRef}
           className="relative grid select-none"
@@ -313,17 +329,17 @@ export function WeekCalendar({ sessions, teams, isMock, onSessionClick, onAddSes
                         if (!isDragging) onSessionClick(s);
                       }}
                     >
-                      <div className="px-1.5 py-1 h-full flex flex-col justify-start overflow-hidden">
-                        <p className="text-xs font-semibold leading-tight truncate" style={{ color: typeColor }}>
+                      <div className="px-1 py-0.5 h-full flex flex-col justify-start overflow-hidden">
+                        <p className="text-[10px] sm:text-xs font-semibold leading-tight truncate" style={{ color: typeColor }}>
                           {s.title}
                         </p>
-                        {height >= 40 && (
-                          <p className="text-xs text-gray-400 leading-tight truncate">
+                        {height >= 36 && (
+                          <p className="text-[9px] sm:text-xs text-gray-400 leading-tight truncate">
                             {s.startTime}{s.endTime ? `–${s.endTime}` : ''}
                           </p>
                         )}
-                        {height >= 56 && team && (
-                          <p className="text-xs leading-tight truncate" style={{ color: color }}>
+                        {height >= 52 && team && (
+                          <p className="text-[9px] sm:text-xs leading-tight truncate" style={{ color: color }}>
                             {team.name}
                           </p>
                         )}
