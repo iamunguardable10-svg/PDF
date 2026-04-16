@@ -10,6 +10,7 @@ import { SessionPlanner } from './SessionPlanner';
 import { SessionDetail } from './SessionDetail';
 import { TeamChat } from './TeamChat';
 import { WeekCalendar } from './WeekCalendar';
+import { DepartmentCalendar } from './DepartmentCalendar';
 
 const TEAM_COLORS = [
   { key: 'violet', bg: '#7c3aed' },
@@ -52,6 +53,7 @@ function buildMockAttendanceSessions(trainerId: string): { teams: AttendanceTeam
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type TeamTab = 'sessions' | 'members' | 'chat';
+type ModuleView = 'teams' | 'department';
 
 interface Props {
   trainerId: string;
@@ -82,6 +84,7 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
   const [openSession, setOpenSession] = useState<AttendanceSession | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [addingFromRoster, setAddingFromRoster] = useState(false);
+  const [moduleView, setModuleView] = useState<ModuleView>('teams');
 
   const reload = useCallback(async () => {
     if (isMock) {
@@ -223,6 +226,47 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
           Demo-Modus aktiv — Änderungen werden nicht gespeichert
         </div>
       )}
+
+      {/* Module-level view toggle — show Department tab when a team has departmentId */}
+      {teams.some(t => t.departmentId) && (
+        <div className="flex gap-1 bg-gray-800/60 rounded-xl p-1 self-start">
+          <button
+            onClick={() => setModuleView('teams')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              moduleView === 'teams'
+                ? 'bg-gray-700 text-white'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}>
+            Meine Teams
+          </button>
+          <button
+            onClick={() => setModuleView('department')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              moduleView === 'department'
+                ? 'bg-violet-700 text-white'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}>
+            Abteilungskalender
+          </button>
+        </div>
+      )}
+
+      {/* Department Calendar view */}
+      {moduleView === 'department' && (() => {
+        // Use the selected team's departmentId, or fall back to the first team with one
+        const deptId = selectedTeam?.departmentId
+          ?? teams.find(t => t.departmentId)?.departmentId;
+        if (!deptId) return null;
+        return (
+          <DepartmentCalendar
+            departmentId={deptId}
+            teams={teams}
+          />
+        );
+      })()}
+
+      {/* Teams view — hidden when Department view is active */}
+      {moduleView === 'teams' && <>
 
       {/* Team selector */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -450,7 +494,9 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
         </div>
       )}
 
-      {/* Modals */}
+      </> /* end moduleView === 'teams' */}
+
+      {/* Modals — always rendered regardless of module view */}
       {showPlanner && (
         <SessionPlanner
           trainerId={trainerId}

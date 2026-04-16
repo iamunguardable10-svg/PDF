@@ -1087,3 +1087,33 @@ export async function loadEventCoaches(sessionId: string): Promise<{ userId: str
     role:   (r.role as string) ?? '',
   }));
 }
+
+/**
+ * Bulk-load facility info for a list of sessions.
+ * Returns a map of sessionId → { facilityName, unitName } using the
+ * event_facility_bookings → facility_units → facilities join chain.
+ * Sessions with no booking are simply absent from the map.
+ */
+export async function loadFacilityInfoBulk(
+  sessionIds: string[],
+): Promise<Record<string, { facilityName: string; unitName: string }>> {
+  if (!CLOUD_ENABLED || sessionIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('event_facility_bookings')
+    .select('session_id, facility_units(name, facilities(name))')
+    .in('session_id', sessionIds);
+  if (error) { console.warn('[loadFacilityInfoBulk]', error.message); return {}; }
+  const map: Record<string, { facilityName: string; unitName: string }> = {};
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
+    const sid  = row.session_id as string;
+    const unit = row.facility_units as Record<string, unknown> | null;
+    if (unit) {
+      const fac = unit.facilities as Record<string, unknown> | null;
+      map[sid] = {
+        unitName:     (unit.name as string) ?? '',
+        facilityName: (fac?.name as string) ?? '',
+      };
+    }
+  }
+  return map;
+}
