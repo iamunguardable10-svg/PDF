@@ -52,6 +52,7 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
   const [selectedGroupId, setSelectedGroupId] = useState<string>(groups[0]?.id ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [facilityWarning, setFacilityWarning] = useState('');
   const [facilities, setFacilities] = useState<FacilityWithUnits[]>([]);
   const [facilityUnitId, setFacilityUnitId] = useState<string>('');
 
@@ -106,6 +107,7 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
     if (!datum) { setError('Datum fehlt'); return; }
     setSaving(true);
     setError('');
+    setFacilityWarning('');
     const participants = buildParticipants();
     // Pick up org/dept from the selected team so they're dual-written to att_sessions
     const selectedTeam = teams.find(t => t.id === selectedTeamId);
@@ -127,6 +129,12 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
     });
     setSaving(false);
     if (!result) { setError('Speichern fehlgeschlagen'); return; }
+    if (result.facilityError) {
+      // Session was saved but no room was booked — show warning before closing
+      setFacilityWarning(result.facilityError);
+      onCreated(); // refresh the list so the new session appears
+      return;      // keep modal open so the user sees the warning
+    }
     onCreated();
     onClose();
   }
@@ -326,14 +334,27 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
           </div>
 
           {error && <p className="text-red-400 text-xs">{error}</p>}
+          {facilityWarning && (
+            <div className="bg-amber-950/40 border border-amber-800 rounded-xl px-3 py-2.5 space-y-1">
+              <p className="text-amber-400 text-xs font-medium">Einheit gespeichert — Hallenbuchung fehlgeschlagen</p>
+              <p className="text-amber-500/80 text-xs">{facilityWarning}</p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="px-4 pb-4 pt-3 border-t border-gray-800 flex-shrink-0">
-          <button onClick={handleSave} disabled={saving || !title.trim() || !datum}
-            className="w-full py-3 bg-violet-600 text-white rounded-xl font-medium text-sm disabled:opacity-40 hover:bg-violet-500 transition-colors">
-            {saving ? 'Speichern...' : '✓ Einheit erstellen'}
-          </button>
+          {facilityWarning ? (
+            <button onClick={onClose}
+              className="w-full py-3 bg-gray-700 text-white rounded-xl font-medium text-sm hover:bg-gray-600 transition-colors">
+              Schließen
+            </button>
+          ) : (
+            <button onClick={handleSave} disabled={saving || !title.trim() || !datum}
+              className="w-full py-3 bg-violet-600 text-white rounded-xl font-medium text-sm disabled:opacity-40 hover:bg-violet-500 transition-colors">
+              {saving ? 'Speichern...' : '✓ Einheit erstellen'}
+            </button>
+          )}
         </div>
       </div>
     </div>

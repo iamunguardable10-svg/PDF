@@ -406,6 +406,98 @@ export async function loadCoachNamesBulk(
   return map;
 }
 
+// ── Facility conflict check ───────────────────────────────────────────────────
+
+/**
+ * Result returned by checkFacilityConflict.
+ * hasConflict = true → caller must NOT insert/update event_facility_bookings.
+ */
+export interface FacilityConflictResult {
+  hasConflict: boolean;
+  /** Human-readable description for display in the UI. null when no conflict. */
+  reason: string | null;
+}
+
+/**
+ * Check whether a facility unit is available for [startsAt, endsAt).
+ *
+ * Two checks are performed in parallel:
+ *  1. Booking overlap — another event_facility_bookings row for the same unit
+ *     whose [starts_at, ends_at) overlaps the requested window.
+ *  2. Blackout overlap — a facility_blackouts row (facility-wide or unit-
+ *     specific) whose [starts_at, ends_at) overlaps the requested window.
+ *
+ * For the blackout check the parent facility_id is resolved from facility_units
+ * first so we can catch facility-wide blackouts (facility_unit_id IS NULL).
+ *
+ * @param unitId          - facility_units.id to check
+ * @param startsAt        - UTC ISO start of the requested slot
+ * @param endsAt          - UTC ISO end   of the requested slot
+ * @param excludeSessionId - when editing an existing session, pass its id to
+ *                          prevent it from conflicting with itself
+ */
+export async function checkFacilityConflict(
+  unitId:           string,
+  startsAt:         string,
+  endsAt:           string,
+  excludeSessionId?: string,
+): Promise<FacilityConflictResult> {
+  if (!CLOUD_ENABLED) return { hasConflict: false, reason: null };
+
+  // ── 1. Booking overlap ────────────────────────────────────────────────────
+  // Overlap condition: existing.starts_at < endsAt AND existing.ends_at > startsAt
+  let bookingQuery = supabase
+    .from('event_facility_bookings')
+    .select('session_id', { count: 'exact', head: true })
+    .eq('facility_unit_id', unitId)
+    .lt('starts_at', endsAt)
+    .gt('ends_at', startsAt);
+
+  if (excludeSessionId) {
+    bookingQuery = bookingQuery.neq('session_id', excludeSessionId);
+  }
+
+  // ── 2a. Resolve facility_id for blackout check ────────────────────────────
+  const unitLookup = supabase
+    .from('facility_units')
+    .select('facility_id')
+    .eq('id', unitId)
+    .maybeSingle();
+
+  const [bookingResult, unitResult] = await Promise.all([bookingQuery, unitLookup]);
+
+  if ((bookingResult.count ?? 0) > 0) {
+    return {
+      hasConflict: true,
+      reason: 'Die gewählte Einheit ist in diesem Zeitraum bereits gebucht.',
+    };
+  }
+
+  // ── 2b. Blackout overlap ──────────────────────────────────────────────────
+  const facilityId = (unitResult.data as Record<string, unknown> | null)?.facility_id as string | null;
+  if (facilityId) {
+    const { count: blackoutCount, error: blErr } = await supabase
+      .from('facility_blackouts')
+      .select('id', { count: 'exact', head: true })
+      .eq('facility_id', facilityId)
+      // facility-wide (null) OR unit-specific
+      .or(`facility_unit_id.is.null,facility_unit_id.eq.${unitId}`)
+      .lt('starts_at', endsAt)
+      .gt('ends_at', startsAt);
+
+    if (blErr) console.warn('[checkFacilityConflict] blackout query:', blErr.message);
+
+    if ((blackoutCount ?? 0) > 0) {
+      return {
+        hasConflict: true,
+        reason: 'Der gewählte Zeitraum liegt in einer Sperrzeit dieser Halle.',
+      };
+    }
+  }
+
+  return { hasConflict: false, reason: null };
+}
+
 /**
  * Load the currently booked facility_unit_id for a session.
  * Returns null when no booking exists or when the session has no booking yet.

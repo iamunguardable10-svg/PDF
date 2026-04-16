@@ -5,6 +5,30 @@ import type {
   AttendanceOverrideStatus, AbsenceReason, FinalAttendanceStatus,
   AthleteAttendanceStats, AttendanceAlert, AttendanceAlertLevel,
 } from '../types/attendance';
+import { checkFacilityConflict } from './organizationStorage';
+
+// ── Session operation result types ────────────────────────────────────────────
+
+/**
+ * Returned by createSession().
+ * session is always populated on success.
+ * facilityError is set when the session was saved but the facility booking
+ * was skipped due to a conflict or blackout — the UI should show this as a
+ * warning (session exists, but no room is reserved).
+ */
+export interface SessionCreateResult {
+  session: AttendanceSession;
+  facilityError?: string;
+}
+
+/**
+ * Returned by updateSession().
+ * facilityError is set when the facility booking could not be updated due
+ * to a conflict or blackout.  All other fields were still written normally.
+ */
+export interface SessionUpdateResult {
+  facilityError?: string;
+}
 
 function randomId(len = 20): string {
   const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -338,7 +362,7 @@ export interface CreateSessionInput {
   memberIds: Array<{ id: string; userId?: string; rosterId?: string; name: string }>;
 }
 
-export async function createSession(input: CreateSessionInput): Promise<AttendanceSession | null> {
+export async function createSession(input: CreateSessionInput): Promise<SessionCreateResult | null> {
   if (!CLOUD_ENABLED) { console.warn('[createSession] CLOUD_ENABLED=false'); return null; }
   const sessionId = 'as_' + randomId();
   console.log('[createSession] inserting', { sessionId, trainerId: input.trainerId, datum: input.datum });
@@ -346,6 +370,18 @@ export async function createSession(input: CreateSessionInput): Promise<Attendan
   // ── Compute new-model timestamps (Europe/Berlin → UTC ISO) ──────────────────
   const startsAt = input.startTime ? berlinToISO(input.datum, input.startTime) : null;
   const endsAt   = input.endTime   ? berlinToISO(input.datum, input.endTime)   : null;
+
+  // ── Facility conflict pre-check ──────────────────────────────────────────────
+  // Run before any DB write. If a conflict is found, the session is still
+  // created (no hard block on the session itself) but the facility booking
+  // is skipped and the caller receives facilityError to show the user.
+  let facilityError: string | undefined;
+  if (input.facilityUnitId && startsAt && endsAt) {
+    const conflict = await checkFacilityConflict(input.facilityUnitId, startsAt, endsAt);
+    if (conflict.hasConflict) {
+      facilityError = conflict.reason ?? 'Hallenkonflikt: Buchung konnte nicht gespeichert werden.';
+    }
+  }
 
   const { data, error } = await supabase
     .from('att_sessions')
@@ -403,8 +439,8 @@ export async function createSession(input: CreateSessionInput): Promise<Attendan
     }),
   );
 
-  // event_facility_bookings: only when a facility unit is selected
-  if (input.facilityUnitId && startsAt && endsAt) {
+  // event_facility_bookings: only when a facility unit is selected AND no conflict
+  if (input.facilityUnitId && startsAt && endsAt && !facilityError) {
     sideWrites.push(
       supabase.from('event_facility_bookings').insert({
         id:               'efb_' + randomId(),
@@ -440,21 +476,23 @@ export async function createSession(input: CreateSessionInput): Promise<Attendan
 
   await Promise.all(sideWrites);
 
-  return rowToSession(data);
+  return { session: rowToSession(data), facilityError };
 }
 
 export async function updateSession(
   sessionId: string,
   // trainerId is now includable so event_coaches can be resynced on trainer change
   patch: Partial<Omit<CreateSessionInput, 'memberIds'>>,
-): Promise<void> {
-  if (!CLOUD_ENABLED) return;
+): Promise<SessionUpdateResult> {
+  if (!CLOUD_ENABLED) return {};
 
   // ── Read-first ────────────────────────────────────────────────────────────
   // We always fetch the current row when any field that drives a side-table
   // write is touched.  This lets us (a) fill in missing date/time components
   // when computing starts_at/ends_at, and (b) detect actual changes for
   // event_teams / event_coaches so we don't do unnecessary deletes.
+  // We also fetch the current facility_unit_id so that when only timestamps
+  // change we can re-check conflict against the existing booking's unit.
   const needsReadFirst =
     patch.datum          !== undefined ||
     patch.startTime      !== undefined ||
@@ -464,13 +502,22 @@ export async function updateSession(
     patch.facilityUnitId !== undefined;
 
   let cur: Record<string, unknown> = {};
+  let curFacilityUnitId: string | null = null;
   if (needsReadFirst) {
-    const { data } = await supabase
-      .from('att_sessions')
-      .select('datum, start_time, end_time, team_id, trainer_id')
-      .eq('id', sessionId)
-      .single();
-    cur = (data as Record<string, unknown> | null) ?? {};
+    const [sessionResult, bookingResult] = await Promise.all([
+      supabase
+        .from('att_sessions')
+        .select('datum, start_time, end_time, team_id, trainer_id')
+        .eq('id', sessionId)
+        .single(),
+      supabase
+        .from('event_facility_bookings')
+        .select('facility_unit_id')
+        .eq('session_id', sessionId)
+        .maybeSingle(),
+    ]);
+    cur = (sessionResult.data as Record<string, unknown> | null) ?? {};
+    curFacilityUnitId = (bookingResult.data as Record<string, unknown> | null)?.facility_unit_id as string | null ?? null;
   }
 
   // ── Effective merged values (patch wins over current DB) ──────────────────
@@ -551,8 +598,34 @@ export async function updateSession(
     })());
   }
 
+  // ── Facility conflict check ───────────────────────────────────────────────
+  // We check when:
+  //   (a) the caller explicitly sets a new facilityUnitId, or
+  //   (b) timestamps change and there is already a booking on this session.
+  // In both cases the session update proceeds; only the booking is blocked.
+  let facilityError: string | undefined;
+
+  const targetUnitId = patch.facilityUnitId !== undefined ? patch.facilityUnitId : curFacilityUnitId;
+  const newStartsAt  = effectiveDatum && effectiveStartTime ? berlinToISO(effectiveDatum, effectiveStartTime) : null;
+  const newEndsAt    = effectiveDatum && effectiveEndTime   ? berlinToISO(effectiveDatum, effectiveEndTime)   : null;
+
+  const shouldCheckConflict =
+    targetUnitId && newStartsAt && newEndsAt &&
+    (patch.facilityUnitId !== undefined ||
+     patch.datum !== undefined ||
+     patch.startTime !== undefined ||
+     patch.endTime !== undefined);
+
+  if (shouldCheckConflict && targetUnitId && newStartsAt && newEndsAt) {
+    const conflict = await checkFacilityConflict(targetUnitId, newStartsAt, newEndsAt, sessionId);
+    if (conflict.hasConflict) {
+      facilityError = conflict.reason ?? 'Hallenkonflikt: Buchung konnte nicht gespeichert werden.';
+    }
+  }
+
   // event_facility_bookings — replace when facilityUnitId is explicitly patched
-  if (patch.facilityUnitId !== undefined) {
+  // (skipped entirely when a conflict was detected)
+  if (patch.facilityUnitId !== undefined && !facilityError) {
     sideGroups.push((async () => {
       await supabase.from('event_facility_bookings').delete().eq('session_id', sessionId);
       if (patch.facilityUnitId && effectiveDatum && effectiveStartTime && effectiveEndTime) {
@@ -565,9 +638,19 @@ export async function updateSession(
         });
       }
     })());
+  } else if (patch.facilityUnitId === undefined && curFacilityUnitId && newStartsAt && newEndsAt && !facilityError) {
+    // Timestamps changed but unit is the same — update the existing booking's timestamps
+    sideGroups.push((async () => {
+      await supabase
+        .from('event_facility_bookings')
+        .update({ starts_at: newStartsAt, ends_at: newEndsAt })
+        .eq('session_id', sessionId);
+    })());
   }
 
   if (sideGroups.length > 0) await Promise.all(sideGroups);
+
+  return { facilityError };
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {

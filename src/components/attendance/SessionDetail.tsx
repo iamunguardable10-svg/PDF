@@ -50,6 +50,7 @@ export function SessionDetail({ session, trainerId, onClose, onDeleted }: Props)
   const [facilities, setFacilities] = useState<FacilityWithUnits[]>([]);
   const [facilityUnitId, setFacilityUnitId] = useState<string>('');
   const [savingFacility, setSavingFacility] = useState(false);
+  const [facilityError, setFacilityError] = useState<string>('');
 
   const reload = useCallback(async () => {
     const recs = await loadSessionRecords(session.id);
@@ -73,9 +74,14 @@ export function SessionDetail({ session, trainerId, onClose, onDeleted }: Props)
 
   async function handleFacilitySave(newUnitId: string) {
     setSavingFacility(true);
+    setFacilityError('');
     // Pass empty string as null (clears booking), non-empty triggers upsert
-    await updateSession(session.id, { facilityUnitId: newUnitId || undefined });
-    setFacilityUnitId(newUnitId);
+    const result = await updateSession(session.id, { facilityUnitId: newUnitId || undefined });
+    if (result.facilityError) {
+      setFacilityError(result.facilityError);
+    } else {
+      setFacilityUnitId(newUnitId);
+    }
     setSavingFacility(false);
   }
 
@@ -244,6 +250,9 @@ export function SessionDetail({ session, trainerId, onClose, onDeleted }: Props)
                 <span className="text-xs text-gray-500 self-center">Speichern...</span>
               )}
             </div>
+            {facilityError && (
+              <p className="text-amber-400 text-xs mt-1.5">{facilityError}</p>
+            )}
           </div>
         )}
 
