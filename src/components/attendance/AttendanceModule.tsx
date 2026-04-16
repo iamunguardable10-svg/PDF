@@ -11,6 +11,7 @@ import { SessionDetail } from './SessionDetail';
 import { TeamChat } from './TeamChat';
 import { WeekCalendar } from './WeekCalendar';
 import { DepartmentCalendar } from './DepartmentCalendar';
+import { FacilityCalendar } from './FacilityCalendar';
 
 const TEAM_COLORS = [
   { key: 'violet', bg: '#7c3aed' },
@@ -53,7 +54,7 @@ function buildMockAttendanceSessions(trainerId: string): { teams: AttendanceTeam
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type TeamTab = 'sessions' | 'members' | 'chat';
-type ModuleView = 'teams' | 'department';
+type ModuleView = 'teams' | 'department' | 'facility';
 
 interface Props {
   trainerId: string;
@@ -227,9 +228,9 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
         </div>
       )}
 
-      {/* Module-level view toggle — show Department tab when a team has departmentId */}
-      {teams.some(t => t.departmentId) && (
-        <div className="flex gap-1 bg-gray-800/60 rounded-xl p-1 self-start">
+      {/* Module-level view toggle — extra tabs appear when org data is present */}
+      {(teams.some(t => t.departmentId) || teams.some(t => t.organizationId)) && (
+        <div className="flex gap-1 bg-gray-800/60 rounded-xl p-1 self-start flex-wrap">
           <button
             onClick={() => setModuleView('teams')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -239,30 +240,45 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
             }`}>
             Meine Teams
           </button>
-          <button
-            onClick={() => setModuleView('department')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              moduleView === 'department'
-                ? 'bg-violet-700 text-white'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}>
-            Abteilungskalender
-          </button>
+          {teams.some(t => t.departmentId) && (
+            <button
+              onClick={() => setModuleView('department')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                moduleView === 'department'
+                  ? 'bg-violet-700 text-white'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}>
+              Abteilung
+            </button>
+          )}
+          {teams.some(t => t.organizationId) && (
+            <button
+              onClick={() => setModuleView('facility')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                moduleView === 'facility'
+                  ? 'bg-teal-700 text-white'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}>
+              Hallenkalender
+            </button>
+          )}
         </div>
       )}
 
       {/* Department Calendar view */}
       {moduleView === 'department' && (() => {
-        // Use the selected team's departmentId, or fall back to the first team with one
         const deptId = selectedTeam?.departmentId
           ?? teams.find(t => t.departmentId)?.departmentId;
         if (!deptId) return null;
-        return (
-          <DepartmentCalendar
-            departmentId={deptId}
-            teams={teams}
-          />
-        );
+        return <DepartmentCalendar departmentId={deptId} teams={teams} />;
+      })()}
+
+      {/* Facility Calendar view */}
+      {moduleView === 'facility' && (() => {
+        const orgId = selectedTeam?.organizationId
+          ?? teams.find(t => t.organizationId)?.organizationId;
+        if (!orgId) return null;
+        return <FacilityCalendar organizationId={orgId} teams={teams} />;
       })()}
 
       {/* Teams view — hidden when Department view is active */}

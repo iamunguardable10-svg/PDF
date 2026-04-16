@@ -206,6 +206,110 @@ export async function loadFacilitiesWithUnits(orgId: string): Promise<FacilityWi
   }));
 }
 
+// ── Facility Calendar query ───────────────────────────────────────────────────
+
+/**
+ * One entry in the Facility Calendar — a booking with denormalised session data.
+ * Populated by loadBookingsByFacility().
+ */
+export interface FacilityBookingEntry {
+  sessionId:      string;
+  /** UTC ISO timestamp from event_facility_bookings.starts_at */
+  startsAt:       string;
+  /** UTC ISO timestamp from event_facility_bookings.ends_at */
+  endsAt:         string;
+  facilityUnitId: string;
+  // ── Session fields ────────────────────────────────────────────────────────
+  title:        string;
+  trainingType: string;
+  coachNote:    string;
+  /** att_sessions.trainer_id — display name requires a separate profiles lookup */
+  trainerId:    string | null;
+  teamId:       string | null;
+  /** Legacy location free-text — fallback when no facility booking label exists */
+  location:     string;
+  // ── Legacy time fallbacks (derived from starts_at/ends_at when absent) ────
+  datum:        string;   // YYYY-MM-DD local
+  startTime:    string;   // HH:MM local
+  endTime:      string;   // HH:MM local
+}
+
+/**
+ * Load all bookings for a specific facility unit in a date window.
+ *
+ * Query chain: event_facility_bookings → att_sessions (for session details).
+ * Team name must be resolved client-side via the teams prop.
+ * Coach name requires a profiles table lookup (not yet implemented — trainerId
+ * is returned so callers can resolve it independently).
+ *
+ * @param unitId  - facility_units.id
+ * @param from    - YYYY-MM-DD inclusive start
+ * @param to      - YYYY-MM-DD inclusive end
+ */
+export async function loadBookingsByFacility(
+  unitId: string,
+  from: string,
+  to: string,
+): Promise<FacilityBookingEntry[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('event_facility_bookings')
+    .select(`
+      session_id,
+      starts_at,
+      ends_at,
+      facility_unit_id,
+      att_sessions (
+        id, title, training_type, coach_note,
+        trainer_id, team_id, location,
+        datum, start_time, end_time
+      )
+    `)
+    .eq('facility_unit_id', unitId)
+    .gte('starts_at', `${from}T00:00:00`)
+    .lte('starts_at', `${to}T23:59:59`)
+    .order('starts_at', { ascending: true });
+
+  if (error) { console.warn('[loadBookingsByFacility]', error.message); return []; }
+
+  return ((data ?? []) as Record<string, unknown>[]).map(row => {
+    const s = (row.att_sessions as Record<string, unknown> | null) ?? {};
+    // Derive local date/time from starts_at/ends_at as fallback
+    const startsAt  = row.starts_at as string;
+    const endsAt    = row.ends_at   as string;
+    const datumFb   = isoToLocalDate(startsAt);
+    const startFb   = isoToLocalTime(startsAt);
+    const endFb     = isoToLocalTime(endsAt);
+    return {
+      sessionId:      row.session_id      as string,
+      startsAt,
+      endsAt,
+      facilityUnitId: row.facility_unit_id as string,
+      title:        (s.title         as string)  ?? '',
+      trainingType: (s.training_type as string)  ?? '',
+      coachNote:    (s.coach_note    as string)  ?? '',
+      trainerId:    (s.trainer_id    as string | null) ?? null,
+      teamId:       (s.team_id       as string | null) ?? null,
+      location:     (s.location      as string)  ?? '',
+      datum:        (s.datum         as string)  ?? datumFb,
+      startTime:    (s.start_time    as string)  ?? startFb,
+      endTime:      (s.end_time      as string)  ?? endFb,
+    };
+  });
+}
+
+/** ISO → "YYYY-MM-DD" in local timezone */
+function isoToLocalDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** ISO → "HH:MM" in local timezone */
+function isoToLocalTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 /**
  * Load the currently booked facility_unit_id for a session.
  * Returns null when no booking exists or when the session has no booking yet.
