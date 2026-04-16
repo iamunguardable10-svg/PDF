@@ -86,6 +86,8 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
   const [copiedToken, setCopiedToken] = useState(false);
   const [addingFromRoster, setAddingFromRoster] = useState(false);
   const [moduleView, setModuleView] = useState<ModuleView>('teams');
+  const [activeDeptId, setActiveDeptId] = useState<string | null>(null);
+  const [activeOrgId, setActiveOrgId]   = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (isMock) {
@@ -129,6 +131,16 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
     }
     return stats;
   }, [sessionRecords]);
+
+  // Unique department IDs and org IDs derived from the teams list
+  const availableDepts = useMemo(
+    () => [...new Set(teams.map(t => t.departmentId).filter((id): id is string => !!id))],
+    [teams],
+  );
+  const availableOrgs = useMemo(
+    () => [...new Set(teams.map(t => t.organizationId).filter((id): id is string => !!id))],
+    [teams],
+  );
 
   async function handleCreateTeam() {
     if (!newTeamName.trim()) return;
@@ -229,8 +241,8 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
       )}
 
       {/* Module-level view toggle — extra tabs appear when org data is present */}
-      {(teams.some(t => t.departmentId) || teams.some(t => t.organizationId)) && (
-        <div className="flex gap-1 bg-gray-800/60 rounded-xl p-1 self-start flex-wrap">
+      {(availableDepts.length > 0 || availableOrgs.length > 0) && (
+        <div className="flex gap-1 bg-gray-800/60 rounded-xl p-1 self-start flex-wrap items-center">
           <button
             onClick={() => setModuleView('teams')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -239,8 +251,10 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
                 : 'text-gray-500 hover:text-gray-300'
             }`}>
             Meine Teams
+            <span className="ml-1.5 text-[10px] opacity-50">{teams.length}</span>
           </button>
-          {teams.some(t => t.departmentId) && (
+
+          {availableDepts.length > 0 && (
             <button
               onClick={() => setModuleView('department')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -249,9 +263,13 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
                   : 'text-gray-500 hover:text-gray-300'
               }`}>
               Abteilung
+              {availableDepts.length > 1 && (
+                <span className="ml-1.5 text-[10px] opacity-50">{availableDepts.length}</span>
+              )}
             </button>
           )}
-          {teams.some(t => t.organizationId) && (
+
+          {availableOrgs.length > 0 && (
             <button
               onClick={() => setModuleView('facility')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -260,6 +278,9 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
                   : 'text-gray-500 hover:text-gray-300'
               }`}>
               Hallenkalender
+              {availableOrgs.length > 1 && (
+                <span className="ml-1.5 text-[10px] opacity-50">{availableOrgs.length}</span>
+              )}
             </button>
           )}
         </div>
@@ -267,18 +288,102 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
 
       {/* Department Calendar view */}
       {moduleView === 'department' && (() => {
-        const deptId = selectedTeam?.departmentId
-          ?? teams.find(t => t.departmentId)?.departmentId;
-        if (!deptId) return null;
-        return <DepartmentCalendar departmentId={deptId} teams={teams} />;
+        // Priority: picker selection → selected team's dept → first available
+        const resolvedDeptId = activeDeptId
+          ?? selectedTeam?.departmentId
+          ?? availableDepts[0]
+          ?? null;
+        if (!resolvedDeptId) return null;
+
+        const deptTeams = teams.filter(t => t.departmentId === resolvedDeptId);
+
+        return (
+          <div className="space-y-3">
+            {/* Context header */}
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <p className="text-xs font-medium text-violet-300">Abteilungskalender</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {deptTeams.length === 1
+                    ? `Team: ${deptTeams[0].name}`
+                    : `${deptTeams.length} Teams in dieser Abteilung`}
+                </p>
+              </div>
+              {/* Dept switcher — only when multiple departments exist */}
+              {availableDepts.length > 1 && (
+                <div className="flex gap-1 flex-wrap">
+                  {availableDepts.map((id, idx) => (
+                    <button
+                      key={id}
+                      onClick={() => setActiveDeptId(id)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
+                        id === resolvedDeptId
+                          ? 'bg-violet-700 text-white'
+                          : 'bg-gray-700 text-gray-400 hover:text-gray-200'
+                      }`}>
+                      Abteilung {idx + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <DepartmentCalendar departmentId={resolvedDeptId} teams={teams} />
+          </div>
+        );
       })()}
 
       {/* Facility Calendar view */}
       {moduleView === 'facility' && (() => {
-        const orgId = selectedTeam?.organizationId
-          ?? teams.find(t => t.organizationId)?.organizationId;
-        if (!orgId) return null;
-        return <FacilityCalendar organizationId={orgId} teams={teams} />;
+        // Priority: picker selection → selected team's org → first available
+        const resolvedOrgId = activeOrgId
+          ?? selectedTeam?.organizationId
+          ?? availableOrgs[0]
+          ?? null;
+        if (!resolvedOrgId) return null;
+
+        const orgTeams = teams.filter(t => t.organizationId === resolvedOrgId);
+
+        return (
+          <div className="space-y-3">
+            {/* Context header */}
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <p className="text-xs font-medium text-teal-300">Hallenkalender</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {orgTeams.length === 1
+                    ? `Team: ${orgTeams[0].name}`
+                    : `${orgTeams.length} Teams in dieser Organisation`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Quick "Neue Einheit" — reuses existing SessionPlanner modal */}
+                <button
+                  onClick={() => { setShowPlanner(true); setPlannerPrefill(undefined); setPlannerPrefillTime(undefined); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-700/60 hover:bg-teal-700 text-teal-200 text-xs font-medium rounded-lg transition-colors">
+                  + Neue Einheit
+                </button>
+                {/* Org switcher — only when multiple orgs exist */}
+                {availableOrgs.length > 1 && (
+                  <div className="flex gap-1 flex-wrap">
+                    {availableOrgs.map((id, idx) => (
+                      <button
+                        key={id}
+                        onClick={() => setActiveOrgId(id)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
+                          id === resolvedOrgId
+                            ? 'bg-teal-700 text-white'
+                            : 'bg-gray-700 text-gray-400 hover:text-gray-200'
+                        }`}>
+                        Halle {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <FacilityCalendar organizationId={resolvedOrgId} teams={teams} />
+          </div>
+        );
       })()}
 
       {/* Teams view — hidden when Department view is active */}
@@ -402,6 +507,26 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
                 className="w-full py-2.5 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-500 transition-colors">
                 + Neue Einheit
               </button>
+
+              {/* Cross-view chips — jump to dept/facility view for this team */}
+              {(selectedTeam?.departmentId || selectedTeam?.organizationId) && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {selectedTeam?.departmentId && (
+                    <button
+                      onClick={() => { setActiveDeptId(selectedTeam.departmentId!); setModuleView('department'); }}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-violet-900/40 hover:bg-violet-800/60 border border-violet-800/50 text-violet-300 text-[11px] font-medium rounded-lg transition-colors">
+                      <span className="opacity-70">↗</span> Abteilungskalender
+                    </button>
+                  )}
+                  {selectedTeam?.organizationId && (
+                    <button
+                      onClick={() => { setActiveOrgId(selectedTeam.organizationId!); setModuleView('facility'); }}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-teal-900/40 hover:bg-teal-800/60 border border-teal-800/50 text-teal-300 text-[11px] font-medium rounded-lg transition-colors">
+                      <span className="opacity-70">↗</span> Hallenkalender
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Week calendar — always visible, shows all teams */}
               <WeekCalendar
