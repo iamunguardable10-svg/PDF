@@ -209,6 +209,26 @@ export async function loadFacilitiesWithUnits(orgId: string): Promise<FacilityWi
 // ── Facility Calendar query ───────────────────────────────────────────────────
 
 /**
+ * A facility blackout / Sperrzeit entry.
+ * facility_unit_id = null means the blackout applies to the whole facility.
+ */
+export interface FacilityBlackout {
+  id:             string;
+  facilityId:     string;
+  /** null → facility-wide blackout; non-null → unit-specific */
+  facilityUnitId: string | null;
+  title:          string;
+  reason:         string | null;
+  startsAt:       string;   // UTC ISO
+  endsAt:         string;   // UTC ISO
+  createdAt:      string;
+  // ── Derived local time fields ────────────────────────────────────────────
+  datum:          string;   // YYYY-MM-DD
+  startTime:      string;   // HH:MM
+  endTime:        string;   // HH:MM
+}
+
+/**
  * One entry in the Facility Calendar — a booking with denormalised session data.
  * Populated by loadBookingsByFacility().
  */
@@ -308,6 +328,82 @@ function isoToLocalDate(iso: string): string {
 function isoToLocalTime(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// ── Facility Blackouts ────────────────────────────────────────────────────────
+
+/**
+ * Load blackouts for a facility in a date window.
+ * Returns both facility-wide blackouts (facility_unit_id = null) AND
+ * unit-specific blackouts for the given unitId.
+ *
+ * @param facilityId - the parent facility UUID
+ * @param unitId     - the selected unit UUID (to include unit-specific blackouts)
+ * @param from       - YYYY-MM-DD inclusive
+ * @param to         - YYYY-MM-DD inclusive
+ */
+export async function loadBlackoutsByFacility(
+  facilityId: string,
+  unitId: string,
+  from: string,
+  to: string,
+): Promise<FacilityBlackout[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('facility_blackouts')
+    .select('*')
+    .eq('facility_id', facilityId)
+    // facility-wide (null) OR unit-specific
+    .or(`facility_unit_id.is.null,facility_unit_id.eq.${unitId}`)
+    .gte('starts_at', `${from}T00:00:00`)
+    .lte('starts_at', `${to}T23:59:59`)
+    .order('starts_at', { ascending: true });
+
+  if (error) { console.warn('[loadBlackoutsByFacility]', error.message); return []; }
+
+  return ((data ?? []) as Record<string, unknown>[]).map(r => {
+    const startsAt = r.starts_at as string;
+    const endsAt   = r.ends_at   as string;
+    return {
+      id:             r.id              as string,
+      facilityId:     r.facility_id     as string,
+      facilityUnitId: (r.facility_unit_id as string | null) ?? null,
+      title:          (r.title          as string) ?? 'Sperrzeit',
+      reason:         (r.reason         as string | null) ?? null,
+      startsAt,
+      endsAt,
+      createdAt:      r.created_at      as string,
+      datum:          isoToLocalDate(startsAt),
+      startTime:      isoToLocalTime(startsAt),
+      endTime:        isoToLocalTime(endsAt),
+    };
+  });
+}
+
+// ── Coach name resolution ─────────────────────────────────────────────────────
+
+/**
+ * Resolve display names for a list of user IDs from the profiles table.
+ * Returns a partial map — userIds not in profiles are simply absent.
+ * Callers should fall back to a truncated UUID when a userId is missing.
+ */
+export async function loadCoachNamesBulk(
+  userIds: string[],
+): Promise<Record<string, string>> {
+  if (!CLOUD_ENABLED || userIds.length === 0) return {};
+  const unique = [...new Set(userIds)];
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name')
+    .in('id', unique);
+  if (error) { console.warn('[loadCoachNamesBulk]', error.message); return {}; }
+  const map: Record<string, string> = {};
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
+    const id   = row.id   as string;
+    const name = row.name as string | null;
+    if (id && name) map[id] = name;
+  }
+  return map;
 }
 
 /**
