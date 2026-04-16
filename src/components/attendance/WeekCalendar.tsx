@@ -77,12 +77,15 @@ function sessionHeightPx(session: AttendanceSession): number {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface SessionStat { confirmed: number; cancelled: number; maybe: number }
+
 interface Props {
   sessions: AttendanceSession[];
   teams: AttendanceTeam[];
   isMock?: boolean;
   readOnly?: boolean;
   cancelledSessionIds?: Set<string>;
+  sessionStats?: Record<string, SessionStat>;
   onSessionClick: (s: AttendanceSession) => void;
   onAddSession?: (datum: string, time?: string) => void;
   onSessionsChanged?: () => void;
@@ -106,7 +109,7 @@ function teamColor(team: AttendanceTeam | undefined, teams: AttendanceTeam[]): s
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function WeekCalendar({ sessions, teams, isMock, readOnly, cancelledSessionIds, onSessionClick, onAddSession, onSessionsChanged }: Props) {
+export function WeekCalendar({ sessions, teams, isMock, readOnly, cancelledSessionIds, sessionStats, onSessionClick, onAddSession, onSessionsChanged }: Props) {
   const [weekStart, setWeekStart] = useState(() => isoToMonday(new Date()));
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dragOffsets, setDragOffsets] = useState<Record<string, number>>({});
@@ -358,6 +361,16 @@ export function WeekCalendar({ sessions, teams, isMock, readOnly, cancelledSessi
                             {team.name}
                           </p>
                         )}
+                        {height >= 44 && sessionStats?.[s.id] && !isCancelled && (() => {
+                          const st = sessionStats[s.id];
+                          return (
+                            <div className="flex gap-1.5 mt-auto pt-0.5">
+                              <span className="text-[9px] text-emerald-400 font-medium leading-none">✓{st.confirmed}</span>
+                              {st.cancelled > 0 && <span className="text-[9px] text-red-400 font-medium leading-none">✕{st.cancelled}</span>}
+                              {st.maybe > 0 && <span className="text-[9px] text-yellow-400 font-medium leading-none">?{st.maybe}</span>}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

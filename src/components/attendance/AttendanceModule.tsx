@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { AttendanceTeam, AttendanceTeamMember, AttendanceSession } from '../../types/attendance';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { AttendanceTeam, AttendanceTeamMember, AttendanceSession, AttendanceRecord } from '../../types/attendance';
 import type { ManagedAthlete, AthleteGroup } from '../../types/trainerDashboard';
 import {
   loadTeams, createTeam, deleteTeam, regenerateTeamInvite,
   loadTeamMembers, addMemberFromRoster, removeMember,
-  loadTrainerSessions,
+  loadTrainerSessions, loadRecordsBySessionIds,
 } from '../../lib/attendanceStorage';
 import { SessionPlanner } from './SessionPlanner';
 import { SessionDetail } from './SessionDetail';
@@ -67,6 +67,7 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
   const [teams, setTeams] = useState<AttendanceTeam[]>([]);
   const [membersByTeam, setMembersByTeam] = useState<Record<string, AttendanceTeamMember[]>>({});
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
+  const [sessionRecords, setSessionRecords] = useState<AttendanceRecord[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamTab, setTeamTab] = useState<TeamTab>('sessions');
   const [showPlanner, setShowPlanner] = useState(false);
@@ -107,6 +108,23 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
       setMembersByTeam(prev => ({ ...prev, [selectedTeamId]: m }));
     });
   }, [selectedTeamId, isMock]);
+
+  // Load all records for session stats on calendar blocks
+  useEffect(() => {
+    if (isMock || sessions.length === 0) return;
+    loadRecordsBySessionIds(sessions.map(s => s.id)).then(setSessionRecords);
+  }, [sessions, isMock]);
+
+  const sessionStats = useMemo(() => {
+    const stats: Record<string, { confirmed: number; cancelled: number; maybe: number }> = {};
+    for (const r of sessionRecords) {
+      if (!stats[r.sessionId]) stats[r.sessionId] = { confirmed: 0, cancelled: 0, maybe: 0 };
+      if (r.overrideStatus === 'no') stats[r.sessionId].cancelled++;
+      else if (r.overrideStatus === 'maybe') stats[r.sessionId].maybe++;
+      else stats[r.sessionId].confirmed++;
+    }
+    return stats;
+  }, [sessionRecords]);
 
   async function handleCreateTeam() {
     if (!newTeamName.trim()) return;
@@ -330,6 +348,7 @@ export function AttendanceModule({ trainerId, trainerName, roster, groups, isMoc
                 sessions={sessions}
                 teams={teams}
                 isMock={isMock}
+                sessionStats={sessionStats}
                 onSessionClick={s => setOpenSession(s)}
                 onAddSession={(datum, time) => openPlannerForDay(datum, time)}
                 onSessionsChanged={reload}

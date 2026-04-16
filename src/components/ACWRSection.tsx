@@ -360,7 +360,7 @@ export function ACWRSection({
             onSessionConfirmed?.();
           }
         }}
-        onUpdatePlanned={id => id.startsWith('att_') ? undefined : onUpdatePlanned}
+        onUpdatePlanned={(id, updates) => { if (!id.startsWith('att_')) onUpdatePlanned(id, updates); }}
         onDismissPlanned={id => { if (!id.startsWith('att_')) handleDismiss(id); }}
         onAddPlanned={onAddPlanned}
         onAddSessionDirect={s => { onAddSession(s); onSessionConfirmed?.(); }}

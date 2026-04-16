@@ -393,6 +393,15 @@ export async function loadSessionRecords(sessionId: string): Promise<AttendanceR
   return (data ?? []).map(rowToRecord);
 }
 
+export async function loadRecordsBySessionIds(sessionIds: string[]): Promise<AttendanceRecord[]> {
+  if (!CLOUD_ENABLED || sessionIds.length === 0) return [];
+  const { data } = await supabase
+    .from('att_records')
+    .select('*')
+    .in('session_id', sessionIds);
+  return (data ?? []).map(rowToRecord);
+}
+
 export async function loadMyRecords(userId: string): Promise<AttendanceRecord[]> {
   if (!CLOUD_ENABLED) return [];
   const { data } = await supabase
