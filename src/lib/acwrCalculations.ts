@@ -230,6 +230,23 @@ export function projectFutureACWR(
     ? recent7.reduce((a, b) => a + b, 0) / recent7.length
     : 0;
 
+  // ── Fallback-Last für unstrukturierte Tage: Trainingsfrequenz × Ø-Tageslast ─
+  // Wird genutzt wenn Wochentagmuster zu spärlich ist (< 12 Wochen Daten)
+  const activeDays = historicalDays.filter(d => d.taeglLoad > 0);
+  const meanActiveLoad = activeDays.length > 0
+    ? activeDays.reduce((s, d) => s + d.taeglLoad, 0) / activeDays.length
+    : 0;
+  // Trainingsfrequenz über die Zeit MIT Daten (nicht inkl. Lücke am Ende)
+  const firstActiveDayISO = activeDays.length > 0 ? activeDays[0].datum : today;
+  const lastActiveDayISO  = activeDays.length > 0 ? activeDays[activeDays.length - 1].datum : today;
+  const activeSpanDays = Math.max(1,
+    (new Date(lastActiveDayISO + 'T00:00').getTime() - new Date(firstActiveDayISO + 'T00:00').getTime())
+    / 86400000 + 1,
+  );
+  const trainingFreq = activeDays.length / activeSpanDays; // fraction of days with training
+  // Expected daily load including rest days
+  const freqBasedDailyLoad = meanActiveLoad * trainingFreq;
+
   // ── Handle today: if planned sessions exist but no confirmed load ────────
   const todayProjected: ACWRDataPoint[] = [];
   const todayHistIdx = historicalDays.findIndex(d => d.datum === today);
@@ -241,8 +258,7 @@ export function projectFutureACWR(
     const dayPlanned = plannedMap.get(today)!;
     const wd = new Date(today + 'T00:00').getDay();
     const wdLoads = loadsByWeekday[wd];
-    const weekdayMedian = medianOf(wdLoads);
-    const recentSameWeekdayMedian = medianOf(wdLoads.slice(-4));
+    void medianOf(wdLoads); // weekday median not needed for today (using full planned load)
 
     let plannedLoad = 0;
     const plannedTeLoads: Partial<Record<string, number>> = {};
@@ -253,9 +269,8 @@ export function projectFutureACWR(
       plannedLoad += load;
       plannedTeLoads[ps.te] = (plannedTeLoads[ps.te] ?? 0) + load;
     }
-    const plannedEstimate = Math.round(
-      0.7 * plannedLoad + 0.2 * weekdayMedian + 0.1 * recentSameWeekdayMedian,
-    );
+    // Volle geplante Last verwenden — kein Abschlag
+    const plannedEstimate = plannedLoad;
 
     // Total = already-done load today + estimated planned load
     const predictedLoad = todayHistLoad + plannedEstimate;
@@ -311,7 +326,7 @@ export function projectFutureACWR(
     let plannedTeLoads: Partial<Record<string, number>> | undefined;
 
     if (dayPlanned && dayPlanned.length > 0) {
-      // A) Geplante Sessions — RPE aus History-Median falls nicht angegeben
+      // A) Geplante Sessions — volle Belastung, kein Abschlag (User hat aktiv geplant)
       let plannedLoad = 0;
       plannedTeLoads = {};
       for (const ps of dayPlanned) {
@@ -321,11 +336,8 @@ export function projectFutureACWR(
         plannedLoad += load;
         plannedTeLoads[ps.te] = (plannedTeLoads[ps.te] ?? 0) + load;
       }
-      predictedLoad = Math.round(
-        0.7 * plannedLoad +
-        0.2 * weekdayMedian +
-        0.1 * recentSameWeekdayMedian,
-      );
+      // Volle geplante Last — kein Abschlag, da User explizit geplant hat
+      predictedLoad = plannedLoad;
       forecastBasis = `Plan (${dayPlanned.map(p => p.te).join(', ')})`;
 
     } else if (offDayFraction >= 0.75) {
@@ -334,13 +346,21 @@ export function projectFutureACWR(
       forecastBasis = 'Ruhetag (historisch)';
 
     } else {
-      // C) Wochentagmuster
-      predictedLoad = Math.round(
+      // C) Kein Plan — Wochentagmuster oder Trainingsfrequenz-Fallback
+      const patternLoad = Math.round(
         0.5 * weekdayMedian +
         0.3 * recentSameWeekdayMedian +
         0.2 * recent7DayMean,
       );
-      forecastBasis = 'Wochentagmuster';
+      if (patternLoad > 0) {
+        // Wochentagmuster ist verlässlich (genug Daten)
+        predictedLoad = patternLoad;
+        forecastBasis = 'Wochentagmuster';
+      } else {
+        // Spärliche Daten (< 12 Wochen) — Trainingsfrequenz-basierte Schätzung
+        predictedLoad = Math.round(freqBasedDailyLoad * 0.6);
+        forecastBasis = predictedLoad > 0 ? 'Trainingsfrequenz' : 'Ruhetag';
+      }
     }
 
     extLoads.push(predictedLoad);
