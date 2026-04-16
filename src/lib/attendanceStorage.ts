@@ -23,6 +23,9 @@ function rowToTeam(r: Record<string, unknown>): AttendanceTeam {
     inviteToken: r.invite_token as string | null,
     inviteActive: r.invite_active as boolean,
     createdAt: r.created_at as string,
+    // New columns — read when present, undefined otherwise
+    organizationId: (r.organization_id as string | null) ?? undefined,
+    departmentId: (r.department_id as string | null) ?? undefined,
   };
 }
 
@@ -194,24 +197,96 @@ export async function removeMember(memberId: string): Promise<void> {
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
 
+/**
+ * Convert a Supabase att_sessions row to AttendanceSession.
+ * Supports both old schema (datum / start_time / end_time) and new schema
+ * (starts_at / ends_at).  Old fields take priority when both are present so
+ * existing writes are never silently overridden.
+ */
 function rowToSession(r: Record<string, unknown>): AttendanceSession {
+  // ── Legacy date/time fields (always written by current code) ──────────────
+  let datum    = (r.datum     as string | null | undefined) ?? undefined;
+  let startTime = (r.start_time as string | null | undefined) ?? undefined;
+  let endTime   = (r.end_time   as string | null | undefined) ?? undefined;
+
+  // ── New timestamp fields — used as fallback when legacy fields are absent ─
+  const startsAt = (r.starts_at as string | null | undefined) ?? undefined;
+  const endsAt   = (r.ends_at   as string | null | undefined) ?? undefined;
+
+  if (!datum && startsAt) {
+    // Derive local YYYY-MM-DD from ISO timestamp
+    datum = localDateFromISO(startsAt);
+  }
+  if (!startTime && startsAt) {
+    startTime = localTimeFromISO(startsAt);
+  }
+  if (!endTime && endsAt) {
+    endTime = localTimeFromISO(endsAt);
+  }
+
   return {
-    id: r.id as string,
-    trainerId: r.trainer_id as string,
-    title: r.title as string,
-    description: r.description as string,
-    datum: r.datum as string,
-    startTime: r.start_time as string | undefined,
-    endTime: r.end_time as string | undefined,
-    location: r.location as string,
-    lat: r.lat as number | undefined,
-    lng: r.lng as number | undefined,
-    radiusM: r.radius_m as number,
-    teamId: r.team_id as string | undefined,
-    trainingType: r.training_type as AttendanceSession['trainingType'],
-    coachNote: r.coach_note as string,
-    createdAt: r.created_at as string,
+    id:           r.id as string,
+    trainerId:    (r.trainer_id as string | null) ?? '',
+    title:        r.title as string,
+    description:  (r.description as string | null) ?? '',
+    datum:        datum ?? '',
+    startTime,
+    endTime,
+    location:     (r.location as string | null) ?? '',
+    lat:          r.lat as number | undefined,
+    lng:          r.lng as number | undefined,
+    radiusM:      (r.radius_m as number | null) ?? 100,
+    teamId:       (r.team_id  as string | null) ?? undefined,
+    trainingType: (r.training_type as AttendanceSession['trainingType']) ?? '',
+    coachNote:    (r.coach_note as string | null) ?? '',
+    createdAt:    r.created_at as string,
+    // New columns — populate when present
+    startsAt,
+    endsAt,
+    organizationId:   (r.organization_id    as string | null) ?? undefined,
+    departmentId:     (r.department_id      as string | null) ?? undefined,
+    recurrenceRuleId: (r.recurrence_rule_id as string | null) ?? undefined,
   };
+}
+
+/** "2026-04-16T17:00:00+00:00" → "2026-04-16" (local timezone) */
+function localDateFromISO(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** "2026-04-16T17:00:00+00:00" → "17:00" (local timezone) */
+function localTimeFromISO(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * Convert a Europe/Berlin local date+time to a UTC ISO 8601 string.
+ * Works correctly across CET (UTC+1) and CEST (UTC+2) without any
+ * third-party library — uses Intl.DateTimeFormat.formatToParts.
+ *
+ * Example: "2026-04-16", "17:00" → "2026-04-16T15:00:00.000Z" (CEST)
+ */
+function berlinToISO(datum: string, time: string): string {
+  // Treat the naive local string as UTC to get a rough Date
+  const rough = new Date(`${datum}T${time}:00Z`);
+  // Ask Intl what time Europe/Berlin shows for that UTC instant
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(rough);
+  const p: Record<string, string> = {};
+  for (const { type, value } of parts) p[type] = value;
+  const shownMin = parseInt(p.hour === '24' ? '0' : p.hour, 10) * 60 + parseInt(p.minute, 10);
+  const [wh, wm] = time.split(':').map(Number);
+  const wantMin  = wh * 60 + wm;
+  // offsetMin = how many minutes ahead Berlin is from UTC at this moment
+  let offsetMin = shownMin - wantMin;
+  if (offsetMin >  12 * 60) offsetMin -= 24 * 60;
+  if (offsetMin < -12 * 60) offsetMin += 24 * 60;
+  return new Date(rough.getTime() - offsetMin * 60_000).toISOString();
 }
 
 export async function loadTrainerSessions(trainerId: string): Promise<AttendanceSession[]> {
@@ -254,6 +329,11 @@ export interface CreateSessionInput {
   teamId?: string;
   trainingType?: string;
   coachNote?: string;
+  // New model fields — optional; written additively alongside old columns
+  organizationId?: string;
+  departmentId?: string;
+  /** If provided, also writes an event_facility_bookings row */
+  facilityUnitId?: string;
   // Who participates
   memberIds: Array<{ id: string; userId?: string; rosterId?: string; name: string }>;
 }
@@ -263,23 +343,33 @@ export async function createSession(input: CreateSessionInput): Promise<Attendan
   const sessionId = 'as_' + randomId();
   console.log('[createSession] inserting', { sessionId, trainerId: input.trainerId, datum: input.datum });
 
+  // ── Compute new-model timestamps (Europe/Berlin → UTC ISO) ──────────────────
+  const startsAt = input.startTime ? berlinToISO(input.datum, input.startTime) : null;
+  const endsAt   = input.endTime   ? berlinToISO(input.datum, input.endTime)   : null;
+
   const { data, error } = await supabase
     .from('att_sessions')
     .insert({
-      id: sessionId,
-      trainer_id: input.trainerId,
-      title: input.title,
-      description: input.description,
-      datum: input.datum,
-      start_time: input.startTime,
-      end_time: input.endTime,
-      location: input.location,
-      lat: input.lat,
-      lng: input.lng,
-      radius_m: input.radiusM ?? 100,
-      team_id: input.teamId,
+      // ── Legacy fields — kept for backward-compat ───────────────────────────
+      id:            sessionId,
+      trainer_id:    input.trainerId,
+      title:         input.title,
+      description:   input.description,
+      datum:         input.datum,
+      start_time:    input.startTime ?? null,
+      end_time:      input.endTime   ?? null,
+      location:      input.location,
+      lat:           input.lat   ?? null,
+      lng:           input.lng   ?? null,
+      radius_m:      input.radiusM ?? 100,
+      team_id:       input.teamId ?? null,
       training_type: input.trainingType ?? '',
-      coach_note: input.coachNote ?? '',
+      coach_note:    input.coachNote ?? '',
+      // ── New-model fields — written additively ──────────────────────────────
+      starts_at:       startsAt,
+      ends_at:         endsAt,
+      organization_id: input.organizationId ?? null,
+      department_id:   input.departmentId   ?? null,
     })
     .select()
     .single();
@@ -289,7 +379,44 @@ export async function createSession(input: CreateSessionInput): Promise<Attendan
     return null;
   }
 
-  // Create session_athletes + att_records for each participant
+  // ── Side-table writes (new model) — fire in parallel, non-blocking ──────────
+  const sideWrites: PromiseLike<unknown>[] = [];
+
+  // event_teams: one row per participating team
+  if (input.teamId) {
+    sideWrites.push(
+      supabase.from('event_teams').insert({
+        id:         'et_' + randomId(),
+        session_id: sessionId,
+        team_id:    input.teamId,
+      }),
+    );
+  }
+
+  // event_coaches: trainer as head_coach
+  sideWrites.push(
+    supabase.from('event_coaches').insert({
+      id:         'ec_' + randomId(),
+      session_id: sessionId,
+      user_id:    input.trainerId,
+      role:       'head_coach',
+    }),
+  );
+
+  // event_facility_bookings: only when a facility unit is selected
+  if (input.facilityUnitId && startsAt && endsAt) {
+    sideWrites.push(
+      supabase.from('event_facility_bookings').insert({
+        id:               'efb_' + randomId(),
+        session_id:       sessionId,
+        facility_unit_id: input.facilityUnitId,
+        starts_at:        startsAt,
+        ends_at:          endsAt,
+      }),
+    );
+  }
+
+  // ── Legacy participant rows ────────────────────────────────────────────────
   if (input.memberIds.length > 0) {
     const athleteRows = input.memberIds.map(m => ({
       id: 'sa_' + randomId(),
@@ -305,34 +432,142 @@ export async function createSession(input: CreateSessionInput): Promise<Attendan
       athlete_roster_id: m.rosterId ?? null,
       athlete_name: m.name,
     }));
-    await Promise.all([
+    sideWrites.push(
       supabase.from('att_session_athletes').insert(athleteRows),
       supabase.from('att_records').insert(recordRows),
-    ]);
+    );
   }
+
+  await Promise.all(sideWrites);
 
   return rowToSession(data);
 }
 
 export async function updateSession(
   sessionId: string,
-  patch: Partial<Omit<CreateSessionInput, 'trainerId' | 'memberIds'>>,
+  // trainerId is now includable so event_coaches can be resynced on trainer change
+  patch: Partial<Omit<CreateSessionInput, 'memberIds'>>,
 ): Promise<void> {
   if (!CLOUD_ENABLED) return;
+
+  // ── Read-first ────────────────────────────────────────────────────────────
+  // We always fetch the current row when any field that drives a side-table
+  // write is touched.  This lets us (a) fill in missing date/time components
+  // when computing starts_at/ends_at, and (b) detect actual changes for
+  // event_teams / event_coaches so we don't do unnecessary deletes.
+  const needsReadFirst =
+    patch.datum          !== undefined ||
+    patch.startTime      !== undefined ||
+    patch.endTime        !== undefined ||
+    patch.teamId         !== undefined ||
+    patch.trainerId      !== undefined ||
+    patch.facilityUnitId !== undefined;
+
+  let cur: Record<string, unknown> = {};
+  if (needsReadFirst) {
+    const { data } = await supabase
+      .from('att_sessions')
+      .select('datum, start_time, end_time, team_id, trainer_id')
+      .eq('id', sessionId)
+      .single();
+    cur = (data as Record<string, unknown> | null) ?? {};
+  }
+
+  // ── Effective merged values (patch wins over current DB) ──────────────────
+  const effectiveDatum     = patch.datum     ?? (cur.datum      as string | undefined);
+  const effectiveStartTime = patch.startTime ?? (cur.start_time as string | undefined);
+  const effectiveEndTime   = patch.endTime   ?? (cur.end_time   as string | undefined);
+  const prevTrainerId      = (cur.trainer_id as string | null)  ?? null;
+
+  // ── Build att_sessions patch (legacy + new fields) ────────────────────────
   const dbPatch: Record<string, unknown> = {};
-  if (patch.title !== undefined) dbPatch.title = patch.title;
-  if (patch.description !== undefined) dbPatch.description = patch.description;
-  if (patch.datum !== undefined) dbPatch.datum = patch.datum;
-  if (patch.startTime !== undefined) dbPatch.start_time = patch.startTime;
-  if (patch.endTime !== undefined) dbPatch.end_time = patch.endTime;
-  if (patch.location !== undefined) dbPatch.location = patch.location;
-  if (patch.lat !== undefined) dbPatch.lat = patch.lat;
-  if (patch.lng !== undefined) dbPatch.lng = patch.lng;
-  if (patch.radiusM !== undefined) dbPatch.radius_m = patch.radiusM;
-  if (patch.teamId !== undefined) dbPatch.team_id = patch.teamId;
-  if (patch.trainingType !== undefined) dbPatch.training_type = patch.trainingType;
-  if (patch.coachNote !== undefined) dbPatch.coach_note = patch.coachNote;
+
+  // Legacy fields — all unchanged, still always written
+  if (patch.title         !== undefined) dbPatch.title         = patch.title;
+  if (patch.description   !== undefined) dbPatch.description   = patch.description;
+  if (patch.datum         !== undefined) dbPatch.datum         = patch.datum;
+  if (patch.startTime     !== undefined) dbPatch.start_time    = patch.startTime;
+  if (patch.endTime       !== undefined) dbPatch.end_time      = patch.endTime;
+  if (patch.location      !== undefined) dbPatch.location      = patch.location;
+  if (patch.lat           !== undefined) dbPatch.lat           = patch.lat;
+  if (patch.lng           !== undefined) dbPatch.lng           = patch.lng;
+  if (patch.radiusM       !== undefined) dbPatch.radius_m      = patch.radiusM;
+  if (patch.teamId        !== undefined) dbPatch.team_id       = patch.teamId ?? null;
+  if (patch.trainerId     !== undefined) dbPatch.trainer_id    = patch.trainerId;
+  if (patch.trainingType  !== undefined) dbPatch.training_type = patch.trainingType;
+  if (patch.coachNote     !== undefined) dbPatch.coach_note    = patch.coachNote;
+
+  // New-model timestamps — recomputed from effective (merged) date + times
+  // Both components must be known; otherwise we leave the column untouched.
+  if (effectiveDatum && effectiveStartTime) {
+    dbPatch.starts_at = berlinToISO(effectiveDatum, effectiveStartTime);
+  }
+  if (effectiveDatum && effectiveEndTime) {
+    dbPatch.ends_at = berlinToISO(effectiveDatum, effectiveEndTime);
+  }
+
+  // New-model org / dept
+  if (patch.organizationId !== undefined) dbPatch.organization_id = patch.organizationId ?? null;
+  if (patch.departmentId   !== undefined) dbPatch.department_id   = patch.departmentId   ?? null;
+
+  // ── Main UPDATE ───────────────────────────────────────────────────────────
   await supabase.from('att_sessions').update(dbPatch).eq('id', sessionId);
+
+  // ── Side-table sync (new model) ───────────────────────────────────────────
+  // Each group is delete-then-insert so we avoid unique-constraint races.
+  // Independent groups run in parallel via Promise.all.
+  const sideGroups: Promise<void>[] = [];
+
+  // event_teams — replace when teamId changes
+  if (patch.teamId !== undefined) {
+    sideGroups.push((async () => {
+      await supabase.from('event_teams').delete().eq('session_id', sessionId);
+      if (patch.teamId) {
+        await supabase.from('event_teams').insert({
+          id:         'et_' + randomId(),
+          session_id: sessionId,
+          team_id:    patch.teamId,
+        });
+      }
+    })());
+  }
+
+  // event_coaches — replace head_coach when trainerId changes
+  if (patch.trainerId !== undefined && patch.trainerId !== prevTrainerId) {
+    sideGroups.push((async () => {
+      await supabase
+        .from('event_coaches')
+        .delete()
+        .eq('session_id', sessionId)
+        .eq('role', 'head_coach');
+      if (patch.trainerId) {
+        await supabase.from('event_coaches').insert({
+          id:         'ec_' + randomId(),
+          session_id: sessionId,
+          user_id:    patch.trainerId,
+          role:       'head_coach',
+        });
+      }
+    })());
+  }
+
+  // event_facility_bookings — replace when facilityUnitId is explicitly patched
+  if (patch.facilityUnitId !== undefined) {
+    sideGroups.push((async () => {
+      await supabase.from('event_facility_bookings').delete().eq('session_id', sessionId);
+      if (patch.facilityUnitId && effectiveDatum && effectiveStartTime && effectiveEndTime) {
+        await supabase.from('event_facility_bookings').insert({
+          id:               'efb_' + randomId(),
+          session_id:       sessionId,
+          facility_unit_id: patch.facilityUnitId,
+          starts_at:        berlinToISO(effectiveDatum, effectiveStartTime),
+          ends_at:          berlinToISO(effectiveDatum, effectiveEndTime),
+        });
+      }
+    })());
+  }
+
+  if (sideGroups.length > 0) await Promise.all(sideGroups);
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -619,4 +854,236 @@ export function generateAttendanceAlerts(
     const o: Record<AttendanceAlertLevel, number> = { critical: 0, warning: 1, info: 2 };
     return o[a.level] - o[b.level];
   });
+}
+
+// ── New Read Layer — additive, no writes changed ───────────────────────────────
+// These functions read from the new schema tables / new columns.
+// Old functions above remain unchanged as fallback.
+
+import type { TeamMembership, DepartmentCalendarSession } from '../types/organization';
+
+// ── Team reads via new schema ─────────────────────────────────────────────────
+
+/**
+ * Load all teams belonging to an organization.
+ * Uses the new att_teams.organization_id column (must be set after migration).
+ * Falls back gracefully to empty when CLOUD_ENABLED = false.
+ */
+export async function loadTeamsByOrganization(orgId: string): Promise<AttendanceTeam[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('att_teams')
+    .select('*')
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: true });
+  if (error) { console.warn('[loadTeamsByOrganization]', error.message); return []; }
+  return (data ?? []).map(rowToTeam);
+}
+
+/**
+ * Load all teams belonging to a department.
+ * Uses the new att_teams.department_id column.
+ */
+export async function loadTeamsByDepartment(deptId: string): Promise<AttendanceTeam[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('att_teams')
+    .select('*')
+    .eq('department_id', deptId)
+    .order('created_at', { ascending: true });
+  if (error) { console.warn('[loadTeamsByDepartment]', error.message); return []; }
+  return (data ?? []).map(rowToTeam);
+}
+
+// ── Team membership reads via new table ───────────────────────────────────────
+
+function rowToTeamMembership(r: Record<string, unknown>): TeamMembership {
+  return {
+    id:          r.id as string,
+    teamId:      r.team_id as string,
+    userId:      r.user_id as string,
+    role:        (r.role as TeamMembership['role']) ?? 'athlete',
+    displayName: (r.display_name as string | null) ?? null,
+    joinedAt:    r.joined_at as string,
+  };
+}
+
+/**
+ * Load team members from the NEW team_memberships table.
+ * Returns TeamMembership[] — richer than old AttendanceTeamMember (has role, userId).
+ * Use loadTeamMembers() (old) for name/sport from att_team_members.
+ */
+export async function loadTeamMembershipsNew(teamId: string): Promise<TeamMembership[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('team_memberships')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('joined_at', { ascending: true });
+  if (error) { console.warn('[loadTeamMembershipsNew]', error.message); return []; }
+  return (data ?? []).map(rowToTeamMembership);
+}
+
+/**
+ * Load all team memberships for a user (athlete or coach) from the new table.
+ * Use loadMyTeamMemberships() (old) to get the full legacy member record.
+ */
+export async function loadMyTeamMembershipsNew(userId: string): Promise<TeamMembership[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('team_memberships')
+    .select('*')
+    .eq('user_id', userId)
+    .order('joined_at', { ascending: true });
+  if (error) { console.warn('[loadMyTeamMembershipsNew]', error.message); return []; }
+  return (data ?? []).map(rowToTeamMembership);
+}
+
+/**
+ * Load team memberships for a specific role in a team.
+ * e.g. loadTeamMembersByRole(teamId, 'head_coach') to find coaches.
+ */
+export async function loadTeamMembersByRole(
+  teamId: string,
+  role: TeamMembership['role'],
+): Promise<TeamMembership[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('team_memberships')
+    .select('*')
+    .eq('team_id', teamId)
+    .eq('role', role)
+    .order('joined_at', { ascending: true });
+  if (error) { console.warn('[loadTeamMembersByRole]', error.message); return []; }
+  return (data ?? []).map(rowToTeamMembership);
+}
+
+// ── Department calendar reads ─────────────────────────────────────────────────
+
+/**
+ * Convert an att_sessions row to DepartmentCalendarSession.
+ * Requires starts_at / ends_at to be present (new schema).
+ */
+function rowToDeptSession(r: Record<string, unknown>): DepartmentCalendarSession {
+  const startsAt = r.starts_at as string;
+  const endsAt   = r.ends_at   as string;
+  // Derive legacy fields for backward compat with existing calendar components
+  const datum     = (r.datum      as string | null) ?? localDateFromISO(startsAt);
+  const startTime = (r.start_time as string | null) ?? localTimeFromISO(startsAt);
+  const endTime   = (r.end_time   as string | null) ?? localTimeFromISO(endsAt);
+  return {
+    id:               r.id as string,
+    startsAt,
+    endsAt,
+    datum,
+    startTime,
+    endTime,
+    title:            (r.title         as string | null) ?? '',
+    location:         (r.location      as string | null) ?? '',
+    trainingType:     (r.training_type as string | null) ?? '',
+    coachNote:        (r.coach_note    as string | null) ?? '',
+    teamId:           (r.team_id       as string | null) ?? null,
+    organizationId:   (r.organization_id    as string | null) ?? null,
+    departmentId:     (r.department_id      as string | null) ?? null,
+    recurrenceRuleId: (r.recurrence_rule_id as string | null) ?? null,
+    trainerId:        (r.trainer_id    as string | null) ?? null,
+    createdAt:        r.created_at as string,
+  };
+}
+
+/**
+ * Load sessions for a department using the new att_sessions.department_id column
+ * and the new starts_at / ends_at timestamps.
+ *
+ * @param deptId  - department UUID
+ * @param from    - ISO date string "YYYY-MM-DD" (inclusive start of window)
+ * @param to      - ISO date string "YYYY-MM-DD" (inclusive end of window)
+ *
+ * Returns DepartmentCalendarSession[] with both new (startsAt/endsAt) and
+ * legacy (datum/startTime/endTime) fields populated so existing components work.
+ */
+export async function loadSessionsByDepartment(
+  deptId: string,
+  from?: string,
+  to?: string,
+): Promise<DepartmentCalendarSession[]> {
+  if (!CLOUD_ENABLED) return [];
+
+  let query = supabase
+    .from('att_sessions')
+    .select('*')
+    .eq('department_id', deptId);
+
+  if (from) query = query.gte('starts_at', `${from}T00:00:00`);
+  if (to)   query = query.lte('starts_at', `${to}T23:59:59`);
+
+  query = query.order('starts_at', { ascending: true });
+
+  const { data, error } = await query;
+  if (error) { console.warn('[loadSessionsByDepartment]', error.message); return []; }
+  // Filter out rows missing starts_at (legacy rows not yet migrated)
+  return (data ?? [])
+    .filter((r: Record<string, unknown>) => !!r.starts_at)
+    .map(rowToDeptSession);
+}
+
+/**
+ * Load sessions for an organization using att_sessions.organization_id.
+ * Uses starts_at / ends_at for ordering and filtering.
+ */
+export async function loadSessionsByOrganization(
+  orgId: string,
+  from?: string,
+  to?: string,
+): Promise<DepartmentCalendarSession[]> {
+  if (!CLOUD_ENABLED) return [];
+
+  let query = supabase
+    .from('att_sessions')
+    .select('*')
+    .eq('organization_id', orgId);
+
+  if (from) query = query.gte('starts_at', `${from}T00:00:00`);
+  if (to)   query = query.lte('starts_at', `${to}T23:59:59`);
+
+  query = query.order('starts_at', { ascending: true });
+
+  const { data, error } = await query;
+  if (error) { console.warn('[loadSessionsByOrganization]', error.message); return []; }
+  return (data ?? [])
+    .filter((r: Record<string, unknown>) => !!r.starts_at)
+    .map(rowToDeptSession);
+}
+
+/**
+ * Load the event_teams rows for a session — which teams are attached.
+ * Useful when a session has multiple teams (new many-to-many model).
+ */
+export async function loadEventTeams(sessionId: string): Promise<{ teamId: string; teamName?: string }[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('event_teams')
+    .select('team_id, att_teams(name)')
+    .eq('session_id', sessionId);
+  if (error) { console.warn('[loadEventTeams]', error.message); return []; }
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    teamId:   r.team_id as string,
+    teamName: ((r.att_teams as Record<string, unknown> | null)?.name as string | undefined),
+  }));
+}
+
+/**
+ * Load the event_coaches rows for a session — which coaches are attached.
+ */
+export async function loadEventCoaches(sessionId: string): Promise<{ userId: string; role: string }[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('event_coaches')
+    .select('user_id, role')
+    .eq('session_id', sessionId);
+  if (error) { console.warn('[loadEventCoaches]', error.message); return []; }
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    userId: r.user_id as string,
+    role:   (r.role as string) ?? '',
+  }));
 }

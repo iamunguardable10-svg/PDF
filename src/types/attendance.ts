@@ -19,6 +19,11 @@ export interface AttendanceTeam {
   inviteToken: string | null;
   inviteActive: boolean;
   createdAt: string;
+  // ── New columns (additive, nullable) ──────────────────────────────────────
+  /** FK → organizations.id  (set after migration) */
+  organizationId?: string;
+  /** FK → departments.id    (set after migration) */
+  departmentId?: string;
 }
 
 export interface AttendanceTeamMember {
@@ -38,9 +43,9 @@ export interface AttendanceSession {
   trainerId: string;
   title: string;
   description: string;
-  datum: string;        // YYYY-MM-DD
-  startTime?: string;   // "17:00"
-  endTime?: string;     // "19:00"
+  datum: string;        // YYYY-MM-DD  (legacy; derived from startsAt when missing)
+  startTime?: string;   // "HH:MM"    (legacy; derived from startsAt when missing)
+  endTime?: string;     // "HH:MM"    (legacy; derived from endsAt when missing)
   location: string;
   lat?: number;
   lng?: number;
@@ -49,6 +54,17 @@ export interface AttendanceSession {
   trainingType: AttendanceTrainingType | '';
   coachNote: string;
   createdAt: string;
+  // ── New columns (additive, nullable) ──────────────────────────────────────
+  /** ISO 8601 timestamp — new canonical start time (replaces datum+start_time) */
+  startsAt?: string;
+  /** ISO 8601 timestamp — new canonical end time   (replaces datum+end_time)   */
+  endsAt?: string;
+  /** FK → organizations.id */
+  organizationId?: string;
+  /** FK → departments.id */
+  departmentId?: string;
+  /** FK → recurrence_rules.id */
+  recurrenceRuleId?: string;
 }
 
 export interface SessionAthlete {

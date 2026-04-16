@@ -93,6 +93,7 @@ interface Props {
 
 interface DragState {
   sessionId: string;
+  sessionDatum: string;   // needed to recompute starts_at/ends_at on drop
   startY: number;
   origStartMin: number;
   origEndMin: number;
@@ -161,7 +162,7 @@ export function WeekCalendar({ sessions, teams, isMock, readOnly, cancelledSessi
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     const startMin = session.startTime ? timeToMinutes(session.startTime) : START_H * 60 + 60;
     const endMin   = session.endTime   ? timeToMinutes(session.endTime)   : startMin + 90;
-    setDragging({ sessionId: session.id, startY: e.clientY, origStartMin: startMin, origEndMin: endMin, currentOffsetPx: 0 });
+    setDragging({ sessionId: session.id, sessionDatum: session.datum, startY: e.clientY, origStartMin: startMin, origEndMin: endMin, currentOffsetPx: 0 });
     setDragOffsets({ [session.id]: 0 });
   }, [isMock]);
 
@@ -183,6 +184,7 @@ export function WeekCalendar({ sessions, teams, isMock, readOnly, cancelledSessi
     setDragOffsets({});
     if (deltaMin !== 0 && !isMock) {
       await updateSession(dragging.sessionId, {
+        datum:     dragging.sessionDatum,
         startTime: minutesToTime(newStartMin),
         endTime:   minutesToTime(newEndMin),
       });

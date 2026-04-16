@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { AttendanceSession, AttendanceRecord, FinalAttendanceStatus, EffectiveAttendanceStatus } from '../../types/attendance';
 import { getEffectiveStatus } from '../../types/attendance';
-import { loadSessionRecords, setFinalStatus, clearFinalStatus, deleteSession } from '../../lib/attendanceStorage';
+import { loadSessionRecords, setFinalStatus, clearFinalStatus, deleteSession, updateSession } from '../../lib/attendanceStorage';
+import { loadFacilitiesWithUnits, loadSessionFacilityUnitId } from '../../lib/organizationStorage';
+import type { FacilityWithUnits } from '../../lib/organizationStorage';
 import { TeamChat } from './TeamChat';
 
 const FINAL_STATUSES: { value: FinalAttendanceStatus; label: string; color: string }[] = [
@@ -44,6 +46,11 @@ export function SessionDetail({ session, trainerId, onClose, onDeleted }: Props)
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [subTab, setSubTab] = useState<SubTab>('attendance');
 
+  // Facility state
+  const [facilities, setFacilities] = useState<FacilityWithUnits[]>([]);
+  const [facilityUnitId, setFacilityUnitId] = useState<string>('');
+  const [savingFacility, setSavingFacility] = useState(false);
+
   const reload = useCallback(async () => {
     const recs = await loadSessionRecords(session.id);
     setRecords(recs);
@@ -51,6 +58,26 @@ export function SessionDetail({ session, trainerId, onClose, onDeleted }: Props)
   }, [session.id]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Load facilities + current booking when session has an organizationId
+  useEffect(() => {
+    if (!session.organizationId) return;
+    Promise.all([
+      loadFacilitiesWithUnits(session.organizationId),
+      loadSessionFacilityUnitId(session.id),
+    ]).then(([facs, unitId]) => {
+      setFacilities(facs);
+      setFacilityUnitId(unitId ?? '');
+    });
+  }, [session.id, session.organizationId]);
+
+  async function handleFacilitySave(newUnitId: string) {
+    setSavingFacility(true);
+    // Pass empty string as null (clears booking), non-empty triggers upsert
+    await updateSession(session.id, { facilityUnitId: newUnitId || undefined });
+    setFacilityUnitId(newUnitId);
+    setSavingFacility(false);
+  }
 
   async function handleSetFinal(recordId: string, status: FinalAttendanceStatus | null) {
     setSettingFinal(recordId);
@@ -189,6 +216,34 @@ export function SessionDetail({ session, trainerId, onClose, onDeleted }: Props)
               userId={trainerId}
               userName="Trainer"
             />
+          </div>
+        )}
+
+        {/* Facility section — shown only when org facilities are available */}
+        {facilities.length > 0 && (
+          <div className="px-4 py-3 border-t border-gray-800 flex-shrink-0">
+            <label className="text-xs text-gray-400 mb-1.5 block">Halle / Platz</label>
+            <div className="flex gap-2">
+              <select
+                value={facilityUnitId}
+                disabled={savingFacility}
+                onChange={e => handleFacilitySave(e.target.value)}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-500 disabled:opacity-50">
+                <option value="">Keine Facility</option>
+                {facilities.map(f => (
+                  <optgroup key={f.id} label={f.name + (f.address ? ` · ${f.address}` : '')}>
+                    {f.units.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}{u.capacity != null ? ` (max. ${u.capacity})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              {savingFacility && (
+                <span className="text-xs text-gray-500 self-center">Speichern...</span>
+              )}
+            </div>
           </div>
         )}
 

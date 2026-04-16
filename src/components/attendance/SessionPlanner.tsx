@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { AttendanceTeam, AttendanceTeamMember, AttendanceTrainingType } from '../../types/attendance';
 import type { ManagedAthlete, AthleteGroup } from '../../types/trainerDashboard';
 import { createSession } from '../../lib/attendanceStorage';
+import { loadFacilitiesWithUnits } from '../../lib/organizationStorage';
+import type { FacilityWithUnits } from '../../lib/organizationStorage';
 
 const TRAINING_TYPES: AttendanceTrainingType[] = [
   'Training', 'Spiel', 'Wettkampf', 'S&C', 'Taktik', 'Videoanalyse', 'Regeneration', 'Sonstiges',
@@ -50,6 +52,8 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
   const [selectedGroupId, setSelectedGroupId] = useState<string>(groups[0]?.id ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [facilities, setFacilities] = useState<FacilityWithUnits[]>([]);
+  const [facilityUnitId, setFacilityUnitId] = useState<string>('');
 
   function pickType(t: AttendanceTrainingType) {
     setTrainingType(t);
@@ -71,6 +75,13 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
 
   function selectAll() { setSelectedMemberIds(new Set(teamMembers.map(m => m.id))); }
   function clearAll() { setSelectedMemberIds(new Set()); }
+
+  // Load facilities whenever the selected team's org changes
+  useEffect(() => {
+    const orgId = teams.find(t => t.id === selectedTeamId)?.organizationId;
+    if (!orgId) { setFacilities([]); setFacilityUnitId(''); return; }
+    loadFacilitiesWithUnits(orgId).then(setFacilities);
+  }, [selectedTeamId, teams]);
 
   function buildParticipants() {
     if (participantMode === 'team') {
@@ -96,6 +107,8 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
     setSaving(true);
     setError('');
     const participants = buildParticipants();
+    // Pick up org/dept from the selected team so they're dual-written to att_sessions
+    const selectedTeam = teams.find(t => t.id === selectedTeamId);
     const result = await createSession({
       trainerId,
       title: title.trim(),
@@ -107,6 +120,9 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
       teamId: selectedTeamId || undefined,
       trainingType: trainingType || undefined,
       coachNote: coachNote.trim(),
+      organizationId: selectedTeam?.organizationId,
+      departmentId:   selectedTeam?.departmentId,
+      facilityUnitId: facilityUnitId || undefined,
       memberIds: participants,
     });
     setSaving(false);
@@ -176,6 +192,28 @@ export function SessionPlanner({ trainerId, teams, membersByTeam, roster, groups
               placeholder="z.B. Sporthalle Nord"
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
           </div>
+
+          {/* Facility Unit — only shown when the selected team belongs to an org */}
+          {facilities.length > 0 && (
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Halle / Platz</label>
+              <select
+                value={facilityUnitId}
+                onChange={e => setFacilityUnitId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-500">
+                <option value="">Keine Facility</option>
+                {facilities.map(f => (
+                  <optgroup key={f.id} label={f.name + (f.address ? ` · ${f.address}` : '')}>
+                    {f.units.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}{u.capacity != null ? ` (max. ${u.capacity})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Team */}
           {teams.length > 0 && (
