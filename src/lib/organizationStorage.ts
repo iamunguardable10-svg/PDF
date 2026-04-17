@@ -78,7 +78,7 @@ export async function createOrganization(
   creatorId: string,
   name: string,
   sport?: string,
-): Promise<Organization | null> {
+): Promise<{ org: Organization } | { error: string } | null> {
   if (!CLOUD_ENABLED) return null;
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
     + '-' + Math.random().toString(36).slice(2, 7);
@@ -88,12 +88,16 @@ export async function createOrganization(
     .insert({ id, name, slug, sport: sport || null })
     .select()
     .single();
-  if (error || !data) { console.error('[createOrganization]', error?.message); return null; }
+  if (error || !data) {
+    console.error('[createOrganization]', error?.message, error?.code, error?.details);
+    return { error: error?.message ?? 'Unbekannter Fehler' };
+  }
   // Add creator as owner
-  await supabase.from('organization_memberships').insert({
+  const { error: memErr } = await supabase.from('organization_memberships').insert({
     id: randomId('om'), organization_id: id, user_id: creatorId, role: 'owner',
   });
-  return rowToOrg(data as Record<string, unknown>);
+  if (memErr) console.warn('[createOrganization] membership insert:', memErr.message);
+  return { org: rowToOrg(data as Record<string, unknown>) };
 }
 
 /** Create a new department inside an organization. */

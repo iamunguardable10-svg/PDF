@@ -38,10 +38,11 @@ export function CoachSetupWizard({ userId, onDone, onSkip }: Props) {
   async function handleCreateOrg() {
     if (!orgName.trim()) return;
     setSaving(true); setError(null);
-    const org = await createOrganization(userId, orgName.trim(), orgSport || undefined);
+    const result = await createOrganization(userId, orgName.trim(), orgSport || undefined);
     setSaving(false);
-    if (!org) { setError('Verein konnte nicht erstellt werden.'); return; }
-    setOrgId(org.id);
+    if (!result) { setError('Keine Verbindung zur Datenbank.'); return; }
+    if ('error' in result) { setError(`Fehler: ${result.error}`); return; }
+    setOrgId(result.org.id);
     setStep('dept');
   }
 
