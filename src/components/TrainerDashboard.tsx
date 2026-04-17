@@ -1257,9 +1257,14 @@ function buildMockRoster(): {
 interface TrainerDashboardProps {
   user: User;
   trainerName: string;
+  /**
+   * When true: renders content only (no min-h-screen, no "← App" header,
+   * no fixed AlertPanel). Used when embedded in CoachShell's Performance tab.
+   */
+  embedded?: boolean;
 }
 
-export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
+export function TrainerDashboard({ user, trainerName, embedded }: TrainerDashboardProps) {
   const [roster, setRoster] = useState(() => loadRoster());
   const [statuses, setStatuses] = useState<Map<string, AthleteStatus>>(new Map());
   const [histories, setHistories] = useState<Map<string, { d: string; v: number | null }[]>>(new Map());
@@ -1492,18 +1497,21 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
     );
   }
 
+  // When embedded in CoachShell, hide the "Planung" tab — that's handled by
+  // the Teams / Abteilung / Hallen tabs in the parent shell.
   const tabs: { key: Tab; label: string }[] = [
     { key: 'kader',      label: 'Kader' },
     { key: 'gruppen',    label: 'Gruppen' },
     { key: 'uebersicht', label: 'Übersicht' },
-    { key: 'planung',    label: 'Planung' },
+    ...(!embedded ? [{ key: 'planung' as Tab, label: 'Planung' }] : []),
   ];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className={embedded ? 'text-white' : 'min-h-screen bg-gray-950 text-white'}>
       <div className="max-w-4xl mx-auto px-4 py-6 pb-24 space-y-5">
 
-        {/* Header */}
+        {/* Header — hidden when embedded; CoachShell provides its own header */}
+        {!embedded && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <button
@@ -1542,6 +1550,7 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
             </button>
           </div>
         </div>
+        )} {/* end !embedded header */}
 
         {/* Pending invites (polls every 15s, auto-imports accepted) */}
         {CLOUD_ENABLED && !isMockLoaded && (
@@ -1632,8 +1641,8 @@ export function TrainerDashboard({ user, trainerName }: TrainerDashboardProps) {
         )}
       </div>
 
-      {/* Fixed alert panel (bottom) */}
-      <AlertPanel alerts={alerts} />
+      {/* Fixed alert panel (bottom) — hidden when embedded; CoachShell has its own layout */}
+      {!embedded && <AlertPanel alerts={alerts} />}
 
       {showAddAthletePopup && (
         <AddAthletePopup

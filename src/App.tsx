@@ -16,6 +16,7 @@ import { initialSessions, initialPlannedSessions } from './lib/acwrMockData';
 import { decodeShareData } from './lib/trainerShare';
 import { TrainerView } from './components/TrainerView';
 import { TrainerDashboard } from './components/TrainerDashboard';
+import { CoachShell } from './components/coach/CoachShell';
 import { InviteAccept } from './components/InviteAccept';
 import { TeamTab } from './components/attendance/TeamTab';
 import { TeamJoinScreen } from './components/attendance/TeamJoinScreen';
@@ -372,8 +373,23 @@ function App() {
     );
   }
 
-  /* ── Coach Dashboard gate ── */
+  /* ── Coach Shell gate ── */
   if (currentHash === '#coach') {
+    if (loggedInUser && !isGuest) {
+      return (
+        <CoachShell
+          user={loggedInUser}
+          trainerName={profile.name || loggedInUser.email || 'Trainer'}
+          onBack={() => { window.location.hash = ''; setCurrentHash(''); }}
+        />
+      );
+    }
+    setCurrentHash('');
+    window.location.hash = '';
+  }
+
+  /* ── Legacy Trainer-Dashboard (direct deep-link, kept for back-compat) ── */
+  if (currentHash === '#coach-legacy') {
     if (loggedInUser && !isGuest) return <TrainerDashboard user={loggedInUser} trainerName={profile.name || loggedInUser.email || 'Trainer'} />;
     setCurrentHash('');
     window.location.hash = '';
