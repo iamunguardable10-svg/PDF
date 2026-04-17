@@ -112,6 +112,19 @@ export async function createDepartment(
   return rowToDept(data as Record<string, unknown>);
 }
 
+/** Search organizations by name (case-insensitive prefix/contains match). */
+export async function searchOrganizations(query: string): Promise<Organization[]> {
+  if (!CLOUD_ENABLED || !query.trim()) return [];
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('*')
+    .ilike('name', `%${query.trim()}%`)
+    .order('name')
+    .limit(20);
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map(rowToOrg);
+}
+
 /** Load all organizations the current user can see. */
 export async function loadOrganizations(): Promise<Organization[]> {
   if (!CLOUD_ENABLED) return [];

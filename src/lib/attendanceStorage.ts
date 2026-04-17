@@ -214,6 +214,22 @@ export async function joinTeamViaLink(
   return !error;
 }
 
+/**
+ * Look up a team by invite token, then join it.
+ * Accepts a raw token (ti_xxx) or a full URL containing the token.
+ */
+export async function joinTeamByToken(
+  token: string,
+  userId: string,
+  name: string,
+  sport: string,
+): Promise<boolean> {
+  if (!CLOUD_ENABLED) return false;
+  const team = await fetchTeamByInviteToken(token);
+  if (!team || !team.inviteActive) return false;
+  return joinTeamViaLink(team.id, userId, name, sport);
+}
+
 export async function removeMember(memberId: string): Promise<void> {
   if (!CLOUD_ENABLED) return;
   await supabase.from('att_team_members').delete().eq('id', memberId);

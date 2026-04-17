@@ -178,7 +178,15 @@ function App() {
 
   // ── 3. Role select — BEFORE login, always shown if no mode is saved ────────
   if (!appMode) {
-    return <RoleSelectScreen onSelect={handleSelectMode} />;
+    return (
+      <RoleSelectScreen
+        userId={loggedInUser?.id}
+        userName={profile.name || loggedInUser?.email || ''}
+        userSport={profile.sport || ''}
+        onSelect={handleSelectMode}
+        onJoined={() => navigate('/athlete')}
+      />
+    );
   }
 
   // ── 4. Auth gate — fires after role select, only for coach / athlete ───────
@@ -237,7 +245,13 @@ function App() {
 
         {/* ── Role selection ── */}
         <Route path="/select-role" element={
-          <RoleSelectScreen onSelect={handleSelectMode} />
+          <RoleSelectScreen
+            userId={loggedInUser?.id}
+            userName={profile.name || loggedInUser?.email || ''}
+            userSport={profile.sport || ''}
+            onSelect={handleSelectMode}
+            onJoined={() => navigate('/athlete')}
+          />
         } />
 
         {/* ── Coach shell ── */}

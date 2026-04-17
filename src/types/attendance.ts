@@ -1,6 +1,6 @@
 // ── Attendance & Session Planning Types ──────────────────────────────────────
 
-export type AttendanceOverrideStatus = 'maybe' | 'no';
+export type AttendanceOverrideStatus = 'maybe' | 'no' | 'late';
 export type AbsenceReason = 'verletzt' | 'krank' | 'schule' | 'arbeit' | 'privat' | 'sonstiges';
 export type LocationSuggestion = 'present' | 'late' | 'absent';
 export type FinalAttendanceStatus = 'present' | 'late' | 'partial' | 'excused_absent' | 'unexcused_absent';

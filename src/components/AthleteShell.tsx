@@ -273,7 +273,7 @@ export function AthleteShell({
           {/* ── KALENDER (Athlet only) ── */}
           {activeTab === 'kalender' && !isSolo && (
             user ? (
-              <AthleteCalendar userId={user.id} userName={profile.name || user.email || 'Athlet'} />
+              <AthleteCalendar userId={user.id} />
             ) : (
               <div className="text-center py-12 space-y-3">
                 <CalendarDays className="w-10 h-10 text-gray-700 mx-auto" />
