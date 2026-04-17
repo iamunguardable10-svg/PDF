@@ -11,6 +11,7 @@ import type {
   FacilityBookingEntry,
   FacilityBlackout,
 } from '../../lib/organizationStorage';
+import { BlackoutManager } from './BlackoutManager';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -95,6 +96,7 @@ export function FacilityCalendar({ organizationId, teams }: Props) {
   const [coachNames,      setCoachNames]       = useState<Record<string, string>>({});
   const [loadingFacs,     setLoadingFacs]      = useState(true);
   const [loadingData,     setLoadingData]      = useState(false);
+  const [showBlackoutMgr, setShowBlackoutMgr]  = useState(false);
 
   // ── Load facilities once ───────────────────────────────────────────────────
   useEffect(() => {
@@ -212,7 +214,7 @@ export function FacilityCalendar({ organizationId, teams }: Props) {
         </>
       )}
 
-      {/* Unit info + conflict summary badge */}
+      {/* Unit info + conflict summary badge + blackout manager button */}
       {selectedUnitId && selUnitName && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-teal-400 flex items-center gap-1.5">
@@ -230,6 +232,12 @@ export function FacilityCalendar({ organizationId, teams }: Props) {
               ⚠ {conflictCount} Konflikt{conflictCount > 1 ? 'e' : ''}
             </span>
           )}
+          {/* Blackout manager trigger */}
+          <button
+            onClick={() => setShowBlackoutMgr(true)}
+            className="ml-auto text-[11px] px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-400 hover:text-red-300 transition-colors">
+            Sperrzeiten verwalten
+          </button>
         </div>
       )}
 
@@ -404,6 +412,17 @@ export function FacilityCalendar({ organizationId, teams }: Props) {
         <p className="text-center text-gray-600 text-sm py-6">
           Wähle eine Halle oder einen Platz aus
         </p>
+      )}
+
+      {/* Blackout manager modal */}
+      {showBlackoutMgr && (
+        <BlackoutManager
+          facilities={facilities}
+          initialFacilityId={selectedFacilityId ?? undefined}
+          initialUnitId={selectedUnitId || undefined}
+          onClose={() => setShowBlackoutMgr(false)}
+          onChanged={() => { loadData(); }}
+        />
       )}
     </div>
   );

@@ -219,6 +219,8 @@ export interface FacilityBlackout {
   facilityUnitId: string | null;
   title:          string;
   reason:         string | null;
+  /** Optional category: Wartung / Turnier / Vermietung / Feiertag / Sonstiges */
+  blackoutType:   string | null;
   startsAt:       string;   // UTC ISO
   endsAt:         string;   // UTC ISO
   createdAt:      string;
@@ -332,6 +334,96 @@ function isoToLocalTime(iso: string): string {
 
 // ── Facility Blackouts ────────────────────────────────────────────────────────
 
+function randomBlackoutId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  return 'fb_' + Array.from({ length: 20 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+function rowToBlackout(r: Record<string, unknown>): FacilityBlackout {
+  const startsAt = r.starts_at as string;
+  const endsAt   = r.ends_at   as string;
+  return {
+    id:             r.id               as string,
+    facilityId:     r.facility_id      as string,
+    facilityUnitId: (r.facility_unit_id as string | null) ?? null,
+    title:          (r.title           as string) ?? 'Sperrzeit',
+    reason:         (r.reason          as string | null) ?? null,
+    blackoutType:   (r.blackout_type   as string | null) ?? null,
+    startsAt,
+    endsAt,
+    createdAt:      r.created_at       as string,
+    datum:          isoToLocalDate(startsAt),
+    startTime:      isoToLocalTime(startsAt),
+    endTime:        isoToLocalTime(endsAt),
+  };
+}
+
+/**
+ * Load ALL blackouts for a facility (no date window).
+ * Used by the BlackoutManager admin UI.
+ */
+export async function loadAllBlackoutsByFacility(
+  facilityId: string,
+): Promise<FacilityBlackout[]> {
+  if (!CLOUD_ENABLED) return [];
+  const { data, error } = await supabase
+    .from('facility_blackouts')
+    .select('*')
+    .eq('facility_id', facilityId)
+    .order('starts_at', { ascending: true });
+  if (error) { console.warn('[loadAllBlackoutsByFacility]', error.message); return []; }
+  return ((data ?? []) as Record<string, unknown>[]).map(rowToBlackout);
+}
+
+export interface BlackoutCreateInput {
+  facilityId:      string;
+  /** undefined or empty string → facility-wide (NULL in DB) */
+  facilityUnitId?: string;
+  title:           string;
+  /** UTC ISO 8601 */
+  startsAt:        string;
+  /** UTC ISO 8601 */
+  endsAt:          string;
+  reason?:         string;
+  blackoutType?:   string;
+}
+
+/**
+ * Insert a new facility_blackouts row.
+ * Returns the created row on success, null on failure.
+ */
+export async function createBlackout(
+  input: BlackoutCreateInput,
+): Promise<FacilityBlackout | null> {
+  if (!CLOUD_ENABLED) return null;
+  const { data, error } = await supabase
+    .from('facility_blackouts')
+    .insert({
+      id:               randomBlackoutId(),
+      facility_id:      input.facilityId,
+      facility_unit_id: input.facilityUnitId || null,
+      title:            input.title,
+      starts_at:        input.startsAt,
+      ends_at:          input.endsAt,
+      reason:           input.reason || null,
+      blackout_type:    input.blackoutType || null,
+    })
+    .select()
+    .single();
+  if (error || !data) { console.error('[createBlackout]', error?.message); return null; }
+  return rowToBlackout(data as Record<string, unknown>);
+}
+
+/** Delete a facility_blackouts row by id. */
+export async function deleteBlackout(blackoutId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  const { error } = await supabase
+    .from('facility_blackouts')
+    .delete()
+    .eq('id', blackoutId);
+  if (error) console.error('[deleteBlackout]', error.message);
+}
+
 /**
  * Load blackouts for a facility in a date window.
  * Returns both facility-wide blackouts (facility_unit_id = null) AND
@@ -361,23 +453,7 @@ export async function loadBlackoutsByFacility(
 
   if (error) { console.warn('[loadBlackoutsByFacility]', error.message); return []; }
 
-  return ((data ?? []) as Record<string, unknown>[]).map(r => {
-    const startsAt = r.starts_at as string;
-    const endsAt   = r.ends_at   as string;
-    return {
-      id:             r.id              as string,
-      facilityId:     r.facility_id     as string,
-      facilityUnitId: (r.facility_unit_id as string | null) ?? null,
-      title:          (r.title          as string) ?? 'Sperrzeit',
-      reason:         (r.reason         as string | null) ?? null,
-      startsAt,
-      endsAt,
-      createdAt:      r.created_at      as string,
-      datum:          isoToLocalDate(startsAt),
-      startTime:      isoToLocalTime(startsAt),
-      endTime:        isoToLocalTime(endsAt),
-    };
-  });
+  return ((data ?? []) as Record<string, unknown>[]).map(rowToBlackout);
 }
 
 // ── Coach name resolution ─────────────────────────────────────────────────────
