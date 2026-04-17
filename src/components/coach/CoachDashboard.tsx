@@ -79,25 +79,25 @@ export function CoachDashboard({
 
       {/* Quick-links to other sections */}
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => onGoToTab('teams')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-900/30 border border-violet-800/50 hover:bg-violet-800/40 text-violet-300 text-xs font-medium rounded-lg transition-colors">
-          <span className="text-sm">◈</span> Teams & Sessions
-        </button>
         {hasAbteilung && (
           <button onClick={() => onGoToTab('abteilung')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-900/30 border border-violet-800/50 hover:bg-violet-800/40 text-violet-300 text-xs font-medium rounded-lg transition-colors">
-            <span className="text-sm">◫</span> Abteilungskalender
+            <span className="text-sm">◫</span> Abteilung
           </button>
         )}
+        <button onClick={() => onGoToTab('teams')}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-900/30 border border-violet-800/50 hover:bg-violet-800/40 text-violet-300 text-xs font-medium rounded-lg transition-colors">
+          <span className="text-sm">◈</span> Teams
+        </button>
         {hasHallen && (
           <button onClick={() => onGoToTab('hallen')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-900/30 border border-teal-800/50 hover:bg-teal-800/40 text-teal-300 text-xs font-medium rounded-lg transition-colors">
-            <span className="text-sm">⬡</span> Hallenkalender
+            <span className="text-sm">⬡</span> Hallen
           </button>
         )}
         <button onClick={() => onGoToTab('performance')}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-900/30 border border-emerald-800/50 hover:bg-emerald-800/40 text-emerald-300 text-xs font-medium rounded-lg transition-colors">
-          <span className="text-sm">◎</span> Kader & Performance
+          <span className="text-sm">◎</span> Performance
         </button>
       </div>
 

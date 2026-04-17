@@ -43,14 +43,14 @@ const NAV_ITEMS: NavItem[] = [
     accent: 'bg-gray-800', accentText: 'text-white', accentBorder: 'border-gray-400',
   },
   {
-    id: 'teams', label: 'Teams',
-    Icon: Users,
-    accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500',
-  },
-  {
     id: 'abteilung', label: 'Abteilung',
     Icon: Building2,
     accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-400',
+  },
+  {
+    id: 'teams', label: 'Teams',
+    Icon: Users,
+    accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500',
   },
   {
     id: 'hallen', label: 'Hallen',
