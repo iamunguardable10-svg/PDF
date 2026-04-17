@@ -20,6 +20,7 @@ import { CLOUD_ENABLED } from '../../lib/supabase';
 import { AttendanceModule } from '../attendance/AttendanceModule';
 import { DepartmentCalendar } from '../attendance/DepartmentCalendar';
 import { FacilityCalendar } from '../attendance/FacilityCalendar';
+import { HallenManager } from '../attendance/HallenManager';
 import { TrainerDashboard } from '../TrainerDashboard';
 import { CoachDashboard } from './CoachDashboard';
 
@@ -144,6 +145,9 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
 
   const effectiveDeptId = activeDeptId ?? availableDepts[0] ?? null;
   const effectiveOrgId  = activeOrgId  ?? availableOrgs[0]  ?? null;
+
+  // ── Hallen Manager modal ──────────────────────────────────────────────────
+  const [showHallenMgr, setShowHallenMgr] = useState(false);
 
   // ── Dept switcher helper ───────────────────────────────────────────────────
 
@@ -313,7 +317,15 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
                       Buchungen, Konflikte und Sperrzeiten je Bereich
                     </p>
                   </div>
-                  <OrgPicker />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <OrgPicker />
+                    <button
+                      onClick={() => setShowHallenMgr(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-900/30 border border-teal-800/50 hover:bg-teal-800/40 text-teal-300 text-xs font-medium transition-colors"
+                    >
+                      <Warehouse size={12} /> Hallen verwalten
+                    </button>
+                  </div>
                 </div>
 
                 {effectiveOrgId ? (
@@ -325,8 +337,16 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
                   <EmptyState
                     icon="⬡"
                     title="Keine Hallendaten"
-                    body="Verknüpfe ein Team mit einer Organisation (organization_id) und lege Facilities an, damit hier Buchungen und Sperrzeiten erscheinen."
-                    action={{ label: 'Teams verwalten →', onClick: () => setTab('teams') }}
+                    body="Lege zuerst eine Halle an — klicke auf «Hallen verwalten» oben rechts."
+                    action={{ label: 'Hallen verwalten →', onClick: () => setShowHallenMgr(true) }}
+                  />
+                )}
+
+                {showHallenMgr && effectiveOrgId && (
+                  <HallenManager
+                    organizationId={effectiveOrgId}
+                    onClose={() => setShowHallenMgr(false)}
+                    onChanged={reloadTeamsAndSessions}
                   />
                 )}
               </div>

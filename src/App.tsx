@@ -97,13 +97,20 @@ function App() {
     localStorage.removeItem('fitfuel_guest');
     setIsGuest(false);
     setCloudReady(false);
+    // Navigate to the right shell based on saved mode
+    const mode = loadAppMode();
+    if (mode === 'coach') navigate('/coach');
+    else navigate('/athlete');
   };
 
   const handleSelectMode = (mode: AppMode) => {
     saveAppMode(mode);
     setAppMode(mode);
-    if (mode === 'coach') navigate('/coach');
-    else navigate('/athlete');
+    // Auth gate (step 4) will fire immediately for coach/athlete if not logged in.
+    // Once logged in, ModeRouter sends them to the right shell.
+    if (mode === 'coach' && loggedInUser) navigate('/coach');
+    else if ((mode === 'athlete' || mode === 'solo') && profile.onboardingCompleted) navigate('/athlete');
+    // Otherwise fall through to auth gate / onboarding
   };
 
   const handleSwitchRole = () => {
@@ -125,7 +132,7 @@ function App() {
   const loggedInUser = user && user !== 'loading' ? user as User : null;
   const userId = loggedInUser && !isGuest ? loggedInUser.id : null;
 
-  // ── Deep-link: trainer share URL (/trainer/:token) → kept as hash for back-compat
+  // ── Deep-link: trainer share URL (hash back-compat) ──────────────────────
   const trainerHash = location.hash.match(/^#trainer\/(.+)$/)?.[1];
   if (trainerHash) {
     if (isLiveToken(trainerHash)) return <TrainerView token={trainerHash} />;
@@ -133,48 +140,64 @@ function App() {
     if (trainerData) return <TrainerView data={trainerData} />;
   }
 
-  // ── Auth loading ───────────────────────────────────────────────────────────
-  if (CLOUD_ENABLED && !isGuest && !showAuthModal && user === 'loading') {
+  // ── 1. Auth loading — brief spinner while Supabase resolves session ────────
+  if (CLOUD_ENABLED && user === 'loading') {
     return <LoadingSpinner />;
   }
 
-  // ── Landing page ───────────────────────────────────────────────────────────
-  if (showLanding && !user) {
-    const dismiss = () => {
-      localStorage.setItem('fitfuel_seen_landing', '1');
-      setShowLanding(false);
-    };
+  const dismissLanding = () => {
+    localStorage.setItem('fitfuel_seen_landing', '1');
+    setShowLanding(false);
+  };
+
+  // ── 2. Landing page — shown once to brand-new visitors ────────────────────
+  //    "Loslegen" → go to role select (no auth yet)
+  //    "Anmelden" → open auth modal, then role select after login
+  if (showLanding && !loggedInUser) {
     return (
       <>
         <LandingPage
-          onStart={() => setShowAuthModal(true)}
-          onGuest={() => { dismiss(); handleGuestMode(); }}
+          onStart={dismissLanding}
+          onGuest={() => { dismissLanding(); handleGuestMode(); }}
         />
         {showAuthModal && CLOUD_ENABLED && (
           <AuthScreen
             onClose={() => setShowAuthModal(false)}
-            onGuest={() => { dismiss(); handleGuestMode(); setShowAuthModal(false); }}
-            onLoggedIn={() => { handleLoggedIn(); setShowAuthModal(false); }}
+            onGuest={() => { dismissLanding(); handleGuestMode(); setShowAuthModal(false); }}
+            onLoggedIn={() => { handleLoggedIn(); dismissLanding(); setShowAuthModal(false); }}
           />
         )}
       </>
     );
   }
 
-  // ── Auth gate ──────────────────────────────────────────────────────────────
-  if (CLOUD_ENABLED && !isGuest && !showAuthModal && user === null) {
-    return <AuthScreen onGuest={handleGuestMode} onLoggedIn={handleLoggedIn} />;
+  // ── 3. Role select — BEFORE login, always shown if no mode is saved ────────
+  if (!appMode) {
+    return <RoleSelectScreen onSelect={handleSelectMode} />;
   }
 
-  // ── Onboarding gate ────────────────────────────────────────────────────────
+  // ── 4. Auth gate — fires after role select, only for coach / athlete ───────
+  //    Solo mode can proceed without an account.
+  if (CLOUD_ENABLED && !isGuest && appMode !== 'solo' && !loggedInUser) {
+    return (
+      <>
+        <AuthScreen
+          onGuest={appMode === 'solo' ? handleGuestMode : undefined}
+          onLoggedIn={handleLoggedIn}
+        />
+      </>
+    );
+  }
+
+  // ── 5. Onboarding — profile setup for first-time users ────────────────────
   if (!profile.onboardingCompleted) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 
-  // ── Tour ───────────────────────────────────────────────────────────────────
+  // ── Tour overlay ───────────────────────────────────────────────────────────
   const tourOverlay = showTour && !userId ? <AppTour onDone={handleTourDone} /> : null;
 
-  // ── Auth modal overlay helper ──────────────────────────────────────────────
+  // ── Auth modal overlay (triggered from shells) ─────────────────────────────
   const authModalOverlay = showAuthModal && CLOUD_ENABLED ? (
     <AuthScreen
       onGuest={() => { handleGuestMode(); setShowAuthModal(false); }}

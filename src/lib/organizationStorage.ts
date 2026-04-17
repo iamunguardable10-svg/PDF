@@ -206,6 +206,73 @@ export async function loadFacilitiesWithUnits(orgId: string): Promise<FacilityWi
   }));
 }
 
+// ── Facility CRUD ─────────────────────────────────────────────────────────────
+
+function randomId(prefix: string): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  return prefix + '_' + Array.from({ length: 20 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+/** Create a new facility for an organization. Returns the new FacilityWithUnits (units=[]) or null. */
+export async function createFacility(
+  orgId: string,
+  name: string,
+  address?: string,
+): Promise<FacilityWithUnits | null> {
+  if (!CLOUD_ENABLED) return null;
+  const { data, error } = await supabase
+    .from('facilities')
+    .insert({ id: randomId('fac'), organization_id: orgId, name, address: address || null })
+    .select()
+    .single();
+  if (error || !data) { console.error('[createFacility]', error?.message); return null; }
+  const r = data as Record<string, unknown>;
+  return {
+    id:             r.id             as string,
+    organizationId: r.organization_id as string,
+    name:           r.name           as string,
+    address:        (r.address       as string | null) ?? null,
+    units: [],
+  };
+}
+
+/** Delete a facility and all its units (cascade expected in DB). */
+export async function deleteFacility(facilityId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  const { error } = await supabase.from('facilities').delete().eq('id', facilityId);
+  if (error) console.error('[deleteFacility]', error.message);
+}
+
+/** Create a new unit inside a facility. */
+export async function createFacilityUnit(
+  facilityId: string,
+  name: string,
+  capacity?: number,
+): Promise<FacilityUnit | null> {
+  if (!CLOUD_ENABLED) return null;
+  const { data, error } = await supabase
+    .from('facility_units')
+    .insert({ id: randomId('funit'), facility_id: facilityId, name, capacity: capacity ?? null })
+    .select()
+    .single();
+  if (error || !data) { console.error('[createFacilityUnit]', error?.message); return null; }
+  const r = data as Record<string, unknown>;
+  return {
+    id:         r.id          as string,
+    facilityId: r.facility_id as string,
+    name:       r.name        as string,
+    capacity:   (r.capacity   as number | null) ?? null,
+    createdAt:  r.created_at  as string,
+  };
+}
+
+/** Delete a facility unit. */
+export async function deleteFacilityUnit(unitId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  const { error } = await supabase.from('facility_units').delete().eq('id', unitId);
+  if (error) console.error('[deleteFacilityUnit]', error.message);
+}
+
 // ── Facility Calendar query ───────────────────────────────────────────────────
 
 /**
@@ -334,11 +401,6 @@ function isoToLocalTime(iso: string): string {
 
 // ── Facility Blackouts ────────────────────────────────────────────────────────
 
-function randomBlackoutId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  return 'fb_' + Array.from({ length: 20 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
 function rowToBlackout(r: Record<string, unknown>): FacilityBlackout {
   const startsAt = r.starts_at as string;
   const endsAt   = r.ends_at   as string;
@@ -399,7 +461,7 @@ export async function createBlackout(
   const { data, error } = await supabase
     .from('facility_blackouts')
     .insert({
-      id:               randomBlackoutId(),
+      id:               randomId('fb'),
       facility_id:      input.facilityId,
       facility_unit_id: input.facilityUnitId || null,
       title:            input.title,
