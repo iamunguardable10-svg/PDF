@@ -30,7 +30,11 @@ export interface SessionUpdateResult {
   facilityError?: string;
 }
 
-function randomId(len = 20): string {
+function randomId(_len?: number): string {
+  return crypto.randomUUID();
+}
+
+function randomToken(len = 24): string {
   const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
   return Array.from({ length: len }, () => c[Math.floor(Math.random() * c.length)]).join('');
 }
@@ -70,8 +74,8 @@ export async function createTeam(
   color: string,
 ): Promise<AttendanceTeam | null> {
   if (!CLOUD_ENABLED) return null;
-  const id = 'team_' + randomId();
-  const inviteToken = 'ti_' + randomId(24);
+  const id = randomId();
+  const inviteToken = randomToken(24);
   const { data, error } = await supabase
     .from('att_teams')
     .insert({ id, trainer_id: trainerId, name, sport, color, invite_token: inviteToken })
@@ -96,7 +100,7 @@ export async function deleteTeam(teamId: string): Promise<void> {
 
 export async function regenerateTeamInvite(teamId: string): Promise<string | null> {
   if (!CLOUD_ENABLED) return null;
-  const token = 'ti_' + randomId(24);
+  const token = randomToken(24);
   const { error } = await supabase
     .from('att_teams')
     .update({ invite_token: token, invite_active: true })
@@ -187,7 +191,7 @@ export async function addMemberFromRoster(
 ): Promise<AttendanceTeamMember | null> {
   if (!CLOUD_ENABLED) return null;
   const athleteUserId = athleteToken ? await resolveUserIdFromToken(athleteToken) : null;
-  const id = 'tm_' + randomId();
+  const id = randomId();
   const { data, error } = await supabase
     .from('att_team_members')
     .insert({
@@ -207,7 +211,7 @@ export async function joinTeamViaLink(
   sport: string,
 ): Promise<boolean> {
   if (!CLOUD_ENABLED) return false;
-  const id = 'tm_' + randomId();
+  const id = randomId();
   const { error } = await supabase
     .from('att_team_members')
     .insert({ id, team_id: teamId, athlete_user_id: userId, name, sport });
@@ -278,7 +282,7 @@ export async function requestToJoinTeam(
   const { error } = await supabase
     .from('att_join_requests')
     .insert({
-      id: 'jr_' + randomId(),
+      id: randomId(),
       team_id: teamId,
       user_id: userId,
       user_name: userName,
@@ -488,7 +492,7 @@ export interface CreateSessionInput {
 
 export async function createSession(input: CreateSessionInput): Promise<SessionCreateResult | null> {
   if (!CLOUD_ENABLED) { console.warn('[createSession] CLOUD_ENABLED=false'); return null; }
-  const sessionId = 'as_' + randomId();
+  const sessionId = randomId();
   console.log('[createSession] inserting', { sessionId, trainerId: input.trainerId, datum: input.datum });
 
   // ── Compute new-model timestamps (Europe/Berlin → UTC ISO) ──────────────────
@@ -546,7 +550,7 @@ export async function createSession(input: CreateSessionInput): Promise<SessionC
   if (input.teamId) {
     sideWrites.push(
       supabase.from('event_teams').insert({
-        id:         'et_' + randomId(),
+        id:         randomId(),
         session_id: sessionId,
         team_id:    input.teamId,
       }),
@@ -556,7 +560,7 @@ export async function createSession(input: CreateSessionInput): Promise<SessionC
   // event_coaches: trainer as head_coach
   sideWrites.push(
     supabase.from('event_coaches').insert({
-      id:         'ec_' + randomId(),
+      id:         randomId(),
       session_id: sessionId,
       user_id:    input.trainerId,
       role:       'head_coach',
@@ -567,7 +571,7 @@ export async function createSession(input: CreateSessionInput): Promise<SessionC
   if (input.facilityUnitId && startsAt && endsAt && !facilityError) {
     sideWrites.push(
       supabase.from('event_facility_bookings').insert({
-        id:               'efb_' + randomId(),
+        id:               randomId(),
         session_id:       sessionId,
         facility_unit_id: input.facilityUnitId,
         starts_at:        startsAt,
@@ -579,14 +583,14 @@ export async function createSession(input: CreateSessionInput): Promise<SessionC
   // ── Legacy participant rows ────────────────────────────────────────────────
   if (input.memberIds.length > 0) {
     const athleteRows = input.memberIds.map(m => ({
-      id: 'sa_' + randomId(),
+      id: randomId(),
       session_id: sessionId,
       athlete_user_id: m.userId ?? null,
       athlete_roster_id: m.rosterId ?? null,
       name: m.name,
     }));
     const recordRows = input.memberIds.map(m => ({
-      id: 'ar_' + randomId(),
+      id: randomId(),
       session_id: sessionId,
       athlete_user_id: m.userId ?? null,
       athlete_roster_id: m.rosterId ?? null,
@@ -695,7 +699,7 @@ export async function updateSession(
       await supabase.from('event_teams').delete().eq('session_id', sessionId);
       if (patch.teamId) {
         await supabase.from('event_teams').insert({
-          id:         'et_' + randomId(),
+          id:         randomId(),
           session_id: sessionId,
           team_id:    patch.teamId,
         });
@@ -713,7 +717,7 @@ export async function updateSession(
         .eq('role', 'head_coach');
       if (patch.trainerId) {
         await supabase.from('event_coaches').insert({
-          id:         'ec_' + randomId(),
+          id:         randomId(),
           session_id: sessionId,
           user_id:    patch.trainerId,
           role:       'head_coach',
@@ -754,7 +758,7 @@ export async function updateSession(
       await supabase.from('event_facility_bookings').delete().eq('session_id', sessionId);
       if (patch.facilityUnitId && effectiveDatum && effectiveStartTime && effectiveEndTime) {
         await supabase.from('event_facility_bookings').insert({
-          id:               'efb_' + randomId(),
+          id:               randomId(),
           session_id:       sessionId,
           facility_unit_id: patch.facilityUnitId,
           starts_at:        berlinToISO(effectiveDatum, effectiveStartTime),

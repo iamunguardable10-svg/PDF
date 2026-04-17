@@ -195,8 +195,8 @@ function App() {
     return <AuthScreen onLoggedIn={handleLoggedIn} />;
   }
 
-  // ── 5. Onboarding — profile setup for first-time users ────────────────────
-  if (!profile.onboardingCompleted) {
+  // ── 5. Onboarding — profile setup for athletes/solo only (not coaches) ───────
+  if (appMode !== 'coach' && !profile.onboardingCompleted) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 

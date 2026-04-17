@@ -264,9 +264,8 @@ export async function loadFacilitiesWithUnits(orgId: string): Promise<FacilityWi
 
 // ── Facility CRUD ─────────────────────────────────────────────────────────────
 
-function randomId(prefix: string): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  return prefix + '_' + Array.from({ length: 20 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+function randomId(_prefix?: string): string {
+  return crypto.randomUUID();
 }
 
 /** Create a new facility for an organization. Returns the new FacilityWithUnits (units=[]) or null. */
