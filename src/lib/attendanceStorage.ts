@@ -230,6 +230,114 @@ export async function joinTeamByToken(
   return joinTeamViaLink(team.id, userId, name, sport);
 }
 
+// ── Join Requests ─────────────────────────────────────────────────────────────
+// Requires att_join_requests table — see migration in src/db/migrations/join_requests.sql
+
+export interface JoinRequest {
+  id: string;
+  teamId: string;
+  teamName?: string;
+  userId: string;
+  userName: string;
+  userSport: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
+function rowToJoinRequest(r: Record<string, unknown>): JoinRequest {
+  return {
+    id:        r.id         as string,
+    teamId:    r.team_id    as string,
+    teamName:  r.team_name  as string | undefined,
+    userId:    r.user_id    as string,
+    userName:  r.user_name  as string,
+    userSport: (r.user_sport as string) ?? '',
+    status:    r.status     as JoinRequest['status'],
+    createdAt: r.created_at as string,
+  };
+}
+
+/** Athlete sends a join request for a team found via search. */
+export async function requestToJoinTeam(
+  teamId: string,
+  userId: string,
+  userName: string,
+  userSport: string,
+): Promise<boolean> {
+  if (!CLOUD_ENABLED) return false;
+  // Prevent duplicate pending requests
+  const { data: existing } = await supabase
+    .from('att_join_requests')
+    .select('id')
+    .eq('team_id', teamId)
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .maybeSingle();
+  if (existing) return true; // already pending
+
+  const { error } = await supabase
+    .from('att_join_requests')
+    .insert({
+      id: 'jr_' + randomId(),
+      team_id: teamId,
+      user_id: userId,
+      user_name: userName,
+      user_sport: userSport,
+      status: 'pending',
+    });
+  return !error;
+}
+
+/** Load all pending join requests for teams the trainer manages. */
+export async function loadPendingJoinRequests(trainerId: string): Promise<JoinRequest[]> {
+  if (!CLOUD_ENABLED) return [];
+  // Get trainer's team IDs first
+  const { data: teams } = await supabase
+    .from('att_teams')
+    .select('id, name')
+    .eq('trainer_id', trainerId);
+  if (!teams || teams.length === 0) return [];
+
+  const teamIds = (teams as Record<string, unknown>[]).map(t => t.id as string);
+  const nameMap: Record<string, string> = Object.fromEntries(
+    (teams as Record<string, unknown>[]).map(t => [t.id as string, t.name as string])
+  );
+
+  const { data, error } = await supabase
+    .from('att_join_requests')
+    .select('*')
+    .in('team_id', teamIds)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  if (error) { console.warn('[loadPendingJoinRequests]', error.message); return []; }
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    ...rowToJoinRequest(r),
+    teamName: nameMap[r.team_id as string],
+  }));
+}
+
+/** Coach approves a join request → member is added to the team. */
+export async function approveJoinRequest(request: JoinRequest): Promise<boolean> {
+  if (!CLOUD_ENABLED) return false;
+  const joined = await joinTeamViaLink(request.teamId, request.userId, request.userName, request.userSport);
+  if (!joined) return false;
+  await supabase
+    .from('att_join_requests')
+    .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+    .eq('id', request.id);
+  return true;
+}
+
+/** Coach rejects a join request. */
+export async function rejectJoinRequest(requestId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  await supabase
+    .from('att_join_requests')
+    .update({ status: 'rejected', reviewed_at: new Date().toISOString() })
+    .eq('id', requestId);
+}
+
 export async function removeMember(memberId: string): Promise<void> {
   if (!CLOUD_ENABLED) return;
   await supabase.from('att_team_members').delete().eq('id', memberId);

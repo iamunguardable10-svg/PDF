@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { JoinRequestsPanel } from './JoinRequestsPanel';
 import type { AttendanceTeam, AttendanceSession } from '../../types/attendance';
 import type { AttendanceTeamMember } from '../../types/attendance';
 import type { ManagedAthlete, AthleteGroup } from '../../types/trainerDashboard';
@@ -69,6 +70,9 @@ export function CoachDashboard({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
+
+      {/* Join requests — shown above everything if pending */}
+      <JoinRequestsPanel trainerId={trainerId} onChanged={onReload} />
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
