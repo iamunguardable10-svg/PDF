@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface Props {
-  onGuest: () => void;
+  onGuest?: () => void;
   onLoggedIn: () => void;
   onClose?: () => void;  // wenn gesetzt → Modal-Modus
 }
@@ -132,10 +132,14 @@ export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
             </button>
           ) : (
             <>
-              <button onClick={onGuest} className="text-sm text-gray-600 hover:text-gray-400 transition-colors">
-                Als Gast fortfahren →
-              </button>
-              <p className="text-xs text-gray-700 mt-1">Daten werden nur lokal gespeichert</p>
+              {onGuest && (
+                <>
+                  <button onClick={onGuest} className="text-sm text-gray-600 hover:text-gray-400 transition-colors">
+                    Als Gast fortfahren →
+                  </button>
+                  <p className="text-xs text-gray-700 mt-1">Daten werden nur lokal gespeichert</p>
+                </>
+              )}
             </>
           )}
         </div>

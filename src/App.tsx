@@ -8,6 +8,7 @@ import { TrainerView } from './components/TrainerView';
 import { CoachShell } from './components/coach/CoachShell';
 import { AthleteShell } from './components/AthleteShell';
 import { RoleSelectScreen } from './components/onboarding/RoleSelectScreen';
+import { CoachSetupWizard } from './components/onboarding/CoachSetupWizard';
 import { InviteAccept } from './components/InviteAccept';
 import { TrainerDashboard } from './components/TrainerDashboard';
 import { decodeShareData, isLiveToken } from './lib/trainerShare';
@@ -49,6 +50,10 @@ function App() {
 
   // Role / mode
   const [appMode, setAppMode]   = useState<AppMode | null>(() => loadAppMode());
+  // Show coach setup wizard once (first login as coach)
+  const [showCoachSetup, setShowCoachSetup] = useState(
+    () => !localStorage.getItem('club_os_coach_setup_done')
+  );
 
   // ── Auth setup ─────────────────────────────────────────────────────────────
 
@@ -179,14 +184,7 @@ function App() {
   // ── 4. Auth gate — fires after role select, only for coach / athlete ───────
   //    Solo mode can proceed without an account.
   if (CLOUD_ENABLED && !isGuest && appMode !== 'solo' && !loggedInUser) {
-    return (
-      <>
-        <AuthScreen
-          onGuest={appMode === 'solo' ? handleGuestMode : undefined}
-          onLoggedIn={handleLoggedIn}
-        />
-      </>
-    );
+    return <AuthScreen onLoggedIn={handleLoggedIn} />;
   }
 
   // ── 5. Onboarding — profile setup for first-time users ────────────────────
@@ -245,11 +243,25 @@ function App() {
         {/* ── Coach shell ── */}
         <Route path="/coach/*" element={
           loggedInUser && !isGuest ? (
-            <CoachShell
-              user={loggedInUser}
-              trainerName={profile.name || loggedInUser.email || 'Trainer'}
-              onBack={() => navigate('/select-role')}
-            />
+            showCoachSetup ? (
+              <CoachSetupWizard
+                userId={loggedInUser.id}
+                onDone={() => {
+                  localStorage.setItem('club_os_coach_setup_done', '1');
+                  setShowCoachSetup(false);
+                }}
+                onSkip={() => {
+                  localStorage.setItem('club_os_coach_setup_done', '1');
+                  setShowCoachSetup(false);
+                }}
+              />
+            ) : (
+              <CoachShell
+                user={loggedInUser}
+                trainerName={profile.name || loggedInUser.email || 'Trainer'}
+                onBack={() => navigate('/select-role')}
+              />
+            )
           ) : (
             <Navigate to="/select-role" replace />
           )
@@ -260,11 +272,12 @@ function App() {
           <Route path="*" element={<Navigate to="/coach" replace />} />
         )}
 
-        {/* ── Athlete shell ── */}
+        {/* ── Athlete / Solo shell ── */}
         <Route path="/athlete" element={
           <AthleteShell
             user={loggedInUser}
             isGuest={isGuest}
+            mode={appMode ?? 'athlete'}
             profile={profile}
             onProfileChange={p => { setProfile(p); saveProfile(p); }}
             onShowAuth={() => setShowAuthModal(true)}
