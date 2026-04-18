@@ -4,8 +4,8 @@ import { FacilityCalendar } from '../../attendance/FacilityCalendar';
 import type { CoachOutletContext } from '../CoachShell';
 
 export function FacilityScreen() {
-  const { facilityId } = useParams<{ facilityId: string }>();
-  const navigate       = useNavigate();
+  const navigate = useNavigate();
+  useParams<{ facilityId: string }>();
   const { org, teams } = useOutletContext<CoachOutletContext>();
 
   if (!org) {
