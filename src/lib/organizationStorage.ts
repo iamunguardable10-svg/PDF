@@ -104,6 +104,8 @@ export async function createOrganization(
   sport?: string,
 ): Promise<{ org: Organization } | { error: string } | null> {
   if (!CLOUD_ENABLED) return null;
+  const already = await hasOrganization(creatorId);
+  if (already) return { error: 'Du hast bereits einen Verein. Tritt ihm über den Einladungslink bei.' };
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
     + '-' + Math.random().toString(36).slice(2, 7);
   const id = randomId('org');
