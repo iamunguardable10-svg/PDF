@@ -11,7 +11,7 @@ import { NutritionForecast } from './NutritionForecast';
 import { TeamTab } from './attendance/TeamTab';
 import { TeamJoinScreen } from './attendance/TeamJoinScreen';
 import { ClubJoinFlow } from './onboarding/ClubJoinFlow';
-import { AthleteCalendar } from './attendance/AthleteCalendar';
+import { UnifiedAthleteCalendar } from './attendance/UnifiedAthleteCalendar';
 import { wearableData as mockWearable, trainingGoals } from '../lib/mockData';
 import { initialSessions, initialPlannedSessions } from '../lib/acwrMockData';
 import { loadFoodLog, saveFoodLog } from '../lib/foodStorage';
@@ -275,7 +275,11 @@ export function AthleteShell({
           {/* ── KALENDER (Athlet only) ── */}
           {activeTab === 'kalender' && !isSolo && (
             user ? (
-              <AthleteCalendar userId={user.id} />
+              <UnifiedAthleteCalendar
+                userId={user.id}
+                personalSessions={sessions}
+                plannedSessions={plannedSessions}
+              />
             ) : (
               <div className="text-center py-12 space-y-3">
                 <CalendarDays className="w-10 h-10 text-gray-700 mx-auto" />

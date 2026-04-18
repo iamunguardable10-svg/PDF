@@ -1312,6 +1312,99 @@ export async function loadEventCoaches(sessionId: string): Promise<{ userId: str
   }));
 }
 
+// ── Athlete RPE in team sessions ─────────────────────────────────────────────
+
+/**
+ * Athlete submits their RPE + actual duration for a completed team session.
+ * Updates the att_records row for this athlete/session.
+ */
+export async function submitAthleteRPE(
+  sessionId: string,
+  userId: string,
+  rpe: number,
+  actualDurationMin: number,
+): Promise<boolean> {
+  if (!CLOUD_ENABLED) return false;
+  const { error } = await supabase
+    .from('att_records')
+    .update({
+      rpe,
+      actual_duration: actualDurationMin,
+      rpe_submitted_at: new Date().toISOString(),
+    })
+    .eq('session_id', sessionId)
+    .eq('athlete_user_id', userId);
+  if (error) {
+    // Record may not exist yet (athlete not yet added to session records) — insert
+    const { error: insertErr } = await supabase.from('att_records').insert({
+      id:               crypto.randomUUID(),
+      session_id:       sessionId,
+      athlete_user_id:  userId,
+      athlete_name:     '',
+      rpe,
+      actual_duration:  actualDurationMin,
+      rpe_submitted_at: new Date().toISOString(),
+    });
+    if (insertErr) { console.error('[submitAthleteRPE]', insertErr.message); return false; }
+  }
+  return true;
+}
+
+/** Load the athlete's own att_record for a session (for RPE display). */
+export async function loadMyRecord(
+  sessionId: string,
+  userId: string,
+): Promise<{ rpe: number | null; actualDuration: number | null } | null> {
+  if (!CLOUD_ENABLED) return null;
+  const { data } = await supabase
+    .from('att_records')
+    .select('rpe, actual_duration')
+    .eq('session_id', sessionId)
+    .eq('athlete_user_id', userId)
+    .maybeSingle();
+  if (!data) return null;
+  const r = data as Record<string, unknown>;
+  return {
+    rpe:            (r.rpe as number | null) ?? null,
+    actualDuration: (r.actual_duration as number | null) ?? null,
+  };
+}
+
+// ── Coach team loading (own + assigned) ───────────────────────────────────────
+
+/**
+ * Load all teams a coach can access: teams they created (trainer_id)
+ * plus teams they were assigned to via att_team_coaches.
+ */
+export async function loadTeamsForCoach(userId: string): Promise<AttendanceTeam[]> {
+  if (!CLOUD_ENABLED) return [];
+  const [ownRows, assignedRows] = await Promise.all([
+    supabase.from('att_teams').select('*').eq('trainer_id', userId),
+    supabase
+      .from('att_team_coaches')
+      .select('team_id')
+      .eq('user_id', userId),
+  ]);
+
+  const ownTeams = ((ownRows.data ?? []) as Record<string, unknown>[]).map(rowToTeam);
+
+  const assignedIds = ((assignedRows.data ?? []) as { team_id: string }[]).map(r => r.team_id);
+  // Filter out teams already in ownTeams to avoid duplicates
+  const ownIds = new Set(ownTeams.map(t => t.id));
+  const extraIds = assignedIds.filter(id => !ownIds.has(id));
+
+  let extraTeams: AttendanceTeam[] = [];
+  if (extraIds.length > 0) {
+    const { data } = await supabase
+      .from('att_teams')
+      .select('*')
+      .in('id', extraIds);
+    extraTeams = ((data ?? []) as Record<string, unknown>[]).map(rowToTeam);
+  }
+
+  return [...ownTeams, ...extraTeams];
+}
+
 /**
  * Bulk-load facility info for a list of sessions.
  * Returns a map of sessionId → { facilityName, unitName } using the

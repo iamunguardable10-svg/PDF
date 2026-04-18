@@ -10,6 +10,7 @@ import type { Organization, Department } from '../../types/organization';
 import {
   loadTeams,
   loadTrainerSessions,
+  loadTeamsForCoach,
   updateTeamDepartment,
 } from '../../lib/attendanceStorage';
 import {
@@ -23,6 +24,8 @@ import {
   createDepartment,
   loadDepartments,
 } from '../../lib/organizationStorage';
+import { loadMyCoachContext } from '../../lib/coachRole';
+import type { CoachContext } from '../../lib/coachRole';
 import { supabase, CLOUD_ENABLED } from '../../lib/supabase';
 import { TrainerDashboard } from '../TrainerDashboard';
 import { KalenderTab } from './KalenderTab';
@@ -71,9 +74,10 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
 
   const [tab, setTab] = useState<CoachTab>('kalender');
 
-  const [org,         setOrg]         = useState<Organization | null>(null);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [coachName,   setCoachName]   = useState(trainerName);
+  const [org,           setOrg]           = useState<Organization | null>(null);
+  const [departments,   setDepartments]   = useState<Department[]>([]);
+  const [coachName,     setCoachName]     = useState(trainerName);
+  const [coachContext,  setCoachContext]  = useState<CoachContext | null>(null);
 
   const [teams,    setTeams]    = useState<AttendanceTeam[]>([]);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
@@ -86,21 +90,28 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
 
   const reloadAll = useCallback(async () => {
     setLoading(true);
-    const [orgData, ts, ss, profileRow] = await Promise.all([
+    const [ctx, orgData, ss, profileRow] = await Promise.all([
+      loadMyCoachContext(user.id),
       loadMyOrganization(user.id),
-      loadTeams(user.id),
       loadTrainerSessions(user.id),
       supabase.from('profiles').select('name').eq('id', user.id).maybeSingle(),
     ]);
+    setCoachContext(ctx);
     setOrg(orgData);
     const profileName = (profileRow.data as { name?: string } | null)?.name;
     if (profileName) setCoachName(profileName);
-    setTeams(ts);
     setSessions(ss);
 
-    if (orgData) {
-      const depts = await loadDepartments(orgData.id);
+    // Load teams: org admins / head coaches see own teams; use loadTeamsForCoach
+    // to include both trainer_id and att_team_coaches assignments
+    const ts = await loadTeamsForCoach(user.id);
+    setTeams(ts);
+
+    const resolvedOrg = orgData ?? ctx?.org ?? null;
+    if (resolvedOrg) {
+      const depts = await loadDepartments(resolvedOrg.id);
       setDepartments(depts);
+      if (!orgData && ctx?.org) setOrg(ctx.org);
     }
 
     setLoading(false);
@@ -228,6 +239,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
                 roster={roster}
                 groups={groups}
                 loading={loading}
+                coachContext={coachContext}
                 onReload={reloadAll}
               />
             )}
@@ -240,6 +252,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
                 teams={teams}
                 sessions={sessions}
                 loading={loading}
+                coachContext={coachContext}
                 onReload={reloadAll}
                 onCreateDepartment={handleCreateDepartment}
                 onAssignTeam={handleAssignTeam}

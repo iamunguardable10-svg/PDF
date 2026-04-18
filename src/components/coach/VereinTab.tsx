@@ -3,6 +3,7 @@ import { Plus, ChevronRight, ChevronLeft, Warehouse, Check, X, Loader2 } from 'l
 import { JoinRequestsPanel } from './JoinRequestsPanel';
 import type { AttendanceTeam, AttendanceSession } from '../../types/attendance';
 import type { Organization, Department } from '../../types/organization';
+import type { CoachContext } from '../../lib/coachRole';
 import { HallenManager } from '../attendance/HallenManager';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -14,6 +15,7 @@ interface Props {
   teams: AttendanceTeam[];
   sessions: AttendanceSession[];
   loading: boolean;
+  coachContext: CoachContext | null;
   onReload: () => void;
   onCreateDepartment: (name: string, sport?: string) => Promise<void>;
   onAssignTeam: (teamId: string, deptId: string | null) => Promise<void>;
@@ -22,9 +24,10 @@ interface Props {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function VereinTab({
-  trainerId, org, departments, teams, sessions, loading,
+  trainerId, org, departments, teams, sessions, loading, coachContext,
   onReload, onCreateDepartment, onAssignTeam,
 }: Props) {
+  const isAdmin = !coachContext || coachContext.role === 'org_admin';
 
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [showNewDept,    setShowNewDept]    = useState(false);
@@ -85,21 +88,23 @@ export function VereinTab({
                 <p className="text-sm text-white font-medium truncate">{t.name}</p>
                 <p className="text-[11px] text-gray-500">{t.sport}</p>
               </div>
-              <button
-                onClick={() => handleAssignTeam(t.id, null)}
-                disabled={assigningTeam === t.id}
-                title="Aus Abteilung entfernen"
-                className="text-[11px] text-gray-600 hover:text-rose-400 transition-colors px-2 py-1 rounded-lg hover:bg-rose-900/20"
-              >
-                {assigningTeam === t.id ? <Loader2 size={12} className="animate-spin" /> : <X size={13} />}
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleAssignTeam(t.id, null)}
+                  disabled={assigningTeam === t.id}
+                  title="Aus Abteilung entfernen"
+                  className="text-[11px] text-gray-600 hover:text-rose-400 transition-colors px-2 py-1 rounded-lg hover:bg-rose-900/20"
+                >
+                  {assigningTeam === t.id ? <Loader2 size={12} className="animate-spin" /> : <X size={13} />}
+                </button>
+              )}
             </div>
           ))}
           {dt.length === 0 && (
             <p className="text-xs text-gray-600 py-3 text-center">Noch keine Teams in dieser Abteilung</p>
           )}
 
-          {availableToAdd.length > 0 && (
+          {isAdmin && availableToAdd.length > 0 && (
             <div className="mt-3">
               <p className="text-[11px] text-gray-600 mb-1.5">Team zuordnen:</p>
               <div className="flex flex-wrap gap-1.5">
@@ -191,12 +196,14 @@ export function VereinTab({
             <p className="text-sm font-semibold text-white">{org.name}</p>
             {org.sport && <p className="text-xs text-gray-500">{org.sport}</p>}
           </div>
-          <button
-            onClick={() => setShowHallenMgr(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-900/30 border border-teal-800/50 hover:bg-teal-800/40 text-teal-300 text-xs font-medium transition-colors"
-          >
-            <Warehouse size={12} /> Hallen verwalten
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowHallenMgr(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-900/30 border border-teal-800/50 hover:bg-teal-800/40 text-teal-300 text-xs font-medium transition-colors"
+            >
+              <Warehouse size={12} /> Hallen verwalten
+            </button>
+          )}
         </div>
       )}
 
@@ -205,12 +212,14 @@ export function VereinTab({
         <section>
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Abteilungen</p>
-            <button
-              onClick={() => setShowNewDept(true)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-900/30 hover:bg-violet-800/40 border border-violet-800/50 text-violet-300 text-xs font-medium transition-colors"
-            >
-              <Plus size={12} /> Neue Abteilung
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setShowNewDept(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-900/30 hover:bg-violet-800/40 border border-violet-800/50 text-violet-300 text-xs font-medium transition-colors"
+              >
+                <Plus size={12} /> Neue Abteilung
+              </button>
+            )}
           </div>
 
           {showNewDept && (

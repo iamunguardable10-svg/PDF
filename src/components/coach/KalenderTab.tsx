@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import type { AttendanceSession, AttendanceTeam, AttendanceTeamMember } from '../../types/attendance';
 import type { ManagedAthlete, AthleteGroup } from '../../types/trainerDashboard';
 import type { Organization, Department } from '../../types/organization';
+import type { CoachContext } from '../../lib/coachRole';
 import { WeekCalendar } from '../attendance/WeekCalendar';
 import { DepartmentCalendar } from '../attendance/DepartmentCalendar';
 import { FacilityCalendar } from '../attendance/FacilityCalendar';
@@ -22,13 +23,14 @@ interface Props {
   roster: ManagedAthlete[];
   groups: AthleteGroup[];
   loading: boolean;
+  coachContext: CoachContext | null;
   onReload: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function KalenderTab({
-  trainerId, org, departments, sessions, teams, roster, groups, loading, onReload,
+  trainerId, org, departments, sessions, teams, roster, groups, loading, coachContext, onReload,
 }: Props) {
 
   const [view,            setView]            = useState<CalView>('alle');
@@ -41,9 +43,19 @@ export function KalenderTab({
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const filteredByTeam = selectedTeamId
-    ? sessions.filter(s => s.teamId === selectedTeamId)
+  // Non-admin coaches only see sessions for teams they own or were assigned to
+  const visibleTeamIds: Set<string> | null = (() => {
+    if (!coachContext || coachContext.role === 'org_admin') return null;
+    return new Set([...coachContext.ownTeamIds, ...coachContext.assignedTeamIds]);
+  })();
+
+  const visibleSessions = visibleTeamIds
+    ? sessions.filter(s => s.teamId && visibleTeamIds.has(s.teamId))
     : sessions;
+
+  const filteredByTeam = selectedTeamId
+    ? visibleSessions.filter(s => s.teamId === selectedTeamId)
+    : visibleSessions;
 
   const selectedDept = departments.find(d => d.id === selectedDeptId);
   const selectedTeam = teams.find(t => t.id === selectedTeamId);
@@ -111,7 +123,7 @@ export function KalenderTab({
             <Spinner />
           ) : (
             <WeekCalendar
-              sessions={sessions}
+              sessions={visibleSessions}
               teams={teams}
               sessionStats={{}}
               onSessionClick={setOpenSession}
