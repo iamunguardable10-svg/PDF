@@ -1252,6 +1252,34 @@ export async function loadSessionsByDepartment(
 }
 
 /**
+ * Load sessions for a single team using att_sessions.team_id.
+ * Uses starts_at / ends_at for ordering and filtering.
+ */
+export async function loadSessionsByTeam(
+  teamId: string,
+  from?: string,
+  to?: string,
+): Promise<DepartmentCalendarSession[]> {
+  if (!CLOUD_ENABLED) return [];
+
+  let query = supabase
+    .from('att_sessions')
+    .select('*')
+    .eq('team_id', teamId);
+
+  if (from) query = query.gte('starts_at', `${from}T00:00:00`);
+  if (to)   query = query.lte('starts_at', `${to}T23:59:59`);
+
+  query = query.order('starts_at', { ascending: true });
+
+  const { data, error } = await query;
+  if (error) { console.warn('[loadSessionsByTeam]', error.message); return []; }
+  return (data ?? [])
+    .filter((r: Record<string, unknown>) => !!r.starts_at)
+    .map(rowToDeptSession);
+}
+
+/**
  * Load sessions for an organization using att_sessions.organization_id.
  * Uses starts_at / ends_at for ordering and filtering.
  */

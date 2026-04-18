@@ -1,65 +1,87 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  CalendarDays, Building2, Users2,
+  LayoutDashboard, Users2, Building2, Warehouse, Activity,
   ChevronLeft, RefreshCw,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import type { AttendanceTeam, AttendanceSession } from '../../types/attendance';
 import type { ManagedAthlete, AthleteGroup } from '../../types/trainerDashboard';
 import type { Organization, Department } from '../../types/organization';
+import type { CoachContext } from '../../lib/coachRole';
 import {
   loadTrainerSessions,
   loadTeamsForCoach,
   updateTeamDepartment,
 } from '../../lib/attendanceStorage';
-import {
-  loadRoster, saveRoster,
-} from '../../lib/trainerRoster';
-import {
-  loadRosterFromSupabase,
-} from '../../lib/trainerShare';
+import { loadRoster, saveRoster } from '../../lib/trainerRoster';
+import { loadRosterFromSupabase } from '../../lib/trainerShare';
 import {
   loadMyOrganization,
   createDepartment,
   loadDepartments,
 } from '../../lib/organizationStorage';
 import { loadMyCoachContext } from '../../lib/coachRole';
-import type { CoachContext } from '../../lib/coachRole';
 import { supabase, CLOUD_ENABLED } from '../../lib/supabase';
-import { TrainerDashboard } from '../TrainerDashboard';
-import { KalenderTab } from './KalenderTab';
-import { VereinTab } from './VereinTab';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Outlet context type (exported for screens) ────────────────────────────────
 
-export type CoachTab = 'kalender' | 'verein' | 'kader';
+export interface CoachOutletContext {
+  user: User;
+  org: Organization | null;
+  departments: Department[];
+  teams: AttendanceTeam[];
+  sessions: AttendanceSession[];
+  coachContext: CoachContext | null;
+  coachName: string;
+  loading: boolean;
+  roster: ManagedAthlete[];
+  groups: AthleteGroup[];
+  reload: () => void;
+  onCreateDepartment: (name: string, sport?: string) => Promise<void>;
+  onAssignTeam: (teamId: string, deptId: string | null) => Promise<void>;
+}
+
+// ── Nav items ─────────────────────────────────────────────────────────────────
 
 interface NavItem {
-  id:    CoachTab;
-  label: string;
-  Icon:  React.ElementType;
-  accent: string;
-  accentText: string;
-  accentBorder: string;
+  path:        string;
+  label:       string;
+  Icon:        React.ElementType;
+  accent:      string;
+  accentText:  string;
+  accentBorder:string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   {
-    id: 'kalender', label: 'Kalender',
-    Icon: CalendarDays,
+    path: 'dashboard', label: 'Dashboard',
+    Icon: LayoutDashboard,
     accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500',
   },
   {
-    id: 'verein', label: 'Verein',
-    Icon: Building2,
+    path: 'teams', label: 'Teams',
+    Icon: Users2,
     accent: 'bg-sky-900/40', accentText: 'text-sky-300', accentBorder: 'border-sky-500',
   },
   {
-    id: 'kader', label: 'Kader',
-    Icon: Users2,
+    path: 'department', label: 'Abteilung',
+    Icon: Building2,
     accent: 'bg-emerald-900/40', accentText: 'text-emerald-300', accentBorder: 'border-emerald-500',
   },
+  {
+    path: 'facilities', label: 'Hallen',
+    Icon: Warehouse,
+    accent: 'bg-teal-900/40', accentText: 'text-teal-300', accentBorder: 'border-teal-500',
+  },
+  {
+    path: 'performance', label: 'Kader',
+    Icon: Activity,
+    accent: 'bg-amber-900/40', accentText: 'text-amber-300', accentBorder: 'border-amber-500',
+  },
 ];
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   user: User;
@@ -70,13 +92,13 @@ interface Props {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CoachShell({ user, trainerName, onBack }: Props) {
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [tab, setTab] = useState<CoachTab>('kalender');
-
-  const [org,           setOrg]           = useState<Organization | null>(null);
-  const [departments,   setDepartments]   = useState<Department[]>([]);
-  const [coachName,     setCoachName]     = useState(trainerName);
-  const [coachContext,  setCoachContext]  = useState<CoachContext | null>(null);
+  const [org,          setOrg]          = useState<Organization | null>(null);
+  const [departments,  setDepartments]  = useState<Department[]>([]);
+  const [coachName,    setCoachName]    = useState(trainerName);
+  const [coachContext, setCoachContext] = useState<CoachContext | null>(null);
 
   const [teams,    setTeams]    = useState<AttendanceTeam[]>([]);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
@@ -85,9 +107,9 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
   const [roster, setRoster] = useState<ManagedAthlete[]>([]);
   const [groups, setGroups] = useState<AthleteGroup[]>([]);
 
-  // ── Load all data ─────────────────────────────────────────────────────────
+  // ── Data loading ──────────────────────────────────────────────────────────
 
-  const reloadAll = useCallback(async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     const [ctx, orgData, ss, profileRow] = await Promise.all([
       loadMyCoachContext(user.id),
@@ -95,14 +117,14 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
       loadTrainerSessions(user.id),
       supabase.from('profiles').select('name').eq('id', user.id).maybeSingle(),
     ]);
+
     setCoachContext(ctx);
-    setOrg(orgData);
-    const profileName = (profileRow.data as { name?: string } | null)?.name;
-    if (profileName) setCoachName(profileName);
+    setOrg(orgData ?? ctx?.org ?? null);
     setSessions(ss);
 
-    // Load teams: org admins / head coaches see own teams; use loadTeamsForCoach
-    // to include both trainer_id and att_team_coaches assignments
+    const profileName = (profileRow.data as { name?: string } | null)?.name;
+    if (profileName) setCoachName(profileName);
+
     const ts = await loadTeamsForCoach(user.id);
     setTeams(ts);
 
@@ -116,14 +138,13 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
     setLoading(false);
   }, [user.id]);
 
-  useEffect(() => { reloadAll(); }, [reloadAll]);
+  useEffect(() => { reload(); }, [reload]);
 
   // Roster
   useEffect(() => {
     const saved = loadRoster();
     setRoster(saved.athletes);
     setGroups(saved.groups);
-
     if (!CLOUD_ENABLED) return;
     loadRosterFromSupabase(user.id).then(({ athletes, groups: grps }) => {
       if (athletes.length > 0 || grps.length > 0) {
@@ -145,13 +166,13 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
 
   // ── Dept actions ──────────────────────────────────────────────────────────
 
-  async function handleCreateDepartment(name: string, sport?: string) {
+  async function onCreateDepartment(name: string, sport?: string) {
     if (!org) return;
     const dept = await createDepartment(org.id, name, sport);
     if (dept) setDepartments(prev => [...prev, dept]);
   }
 
-  async function handleAssignTeam(teamId: string, deptId: string | null) {
+  async function onAssignTeam(teamId: string, deptId: string | null) {
     const ok = await updateTeamDepartment(teamId, deptId, org?.id ?? null);
     if (ok) {
       setTeams(prev => prev.map(t =>
@@ -162,9 +183,21 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Active nav ────────────────────────────────────────────────────────────
 
-  const activeNav = NAV_ITEMS.find(n => n.id === tab)!;
+  const activeNav = NAV_ITEMS.find(n => location.pathname.includes(`/coach/${n.path}`))
+    ?? NAV_ITEMS[0];
+
+  // ── Outlet context ────────────────────────────────────────────────────────
+
+  const outletCtx: CoachOutletContext = {
+    user, org, departments, teams, sessions,
+    coachContext, coachName, loading,
+    roster, groups, reload,
+    onCreateDepartment, onAssignTeam,
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
@@ -172,10 +205,11 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
       {/* Top bar */}
       <header className="flex-shrink-0 border-b border-gray-800 bg-gray-950/90 backdrop-blur-xl sticky top-0 z-20">
         <div className="flex items-center gap-3 px-4 h-13 py-2.5">
-          <button onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0">
-            <ChevronLeft size={14} />
-            App
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0"
+          >
+            <ChevronLeft size={14} /> App
           </button>
 
           <div className="flex items-center gap-2 flex-1">
@@ -194,9 +228,11 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
             <span className={`hidden sm:block text-xs font-medium px-2.5 py-1 rounded-lg ${activeNav.accent} ${activeNav.accentText}`}>
               {activeNav.label}
             </span>
-            <button onClick={reloadAll}
+            <button
+              onClick={reload}
               title="Daten neu laden"
-              className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-gray-800 transition-colors">
+              className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-gray-800 transition-colors"
+            >
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
@@ -209,14 +245,17 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
         {/* Sidebar — desktop */}
         <nav className="hidden sm:flex flex-col w-44 border-r border-gray-800 bg-gray-950 flex-shrink-0 py-3 gap-0.5">
           {NAV_ITEMS.map(item => {
-            const isActive = tab === item.id;
+            const isActive = location.pathname.includes(`/coach/${item.path}`);
             return (
-              <button key={item.id} onClick={() => setTab(item.id)}
+              <button
+                key={item.path}
+                onClick={() => navigate(`/coach/${item.path}`)}
                 className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors border-l-2 ${
                   isActive
                     ? `${item.accent} ${item.accentText} ${item.accentBorder}`
                     : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'
-                }`}>
+                }`}
+              >
                 <item.Icon size={15} className="flex-shrink-0" />
                 {item.label}
               </button>
@@ -224,63 +263,28 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
           })}
         </nav>
 
-        {/* Main content */}
+        {/* Main content — Outlet renders the matched screen */}
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-4 py-4 pb-28 sm:pb-6 space-y-4">
-
-            {tab === 'kalender' && (
-              <KalenderTab
-                trainerId={user.id}
-                org={org}
-                departments={departments}
-                sessions={sessions}
-                teams={teams}
-                roster={roster}
-                groups={groups}
-                loading={loading}
-                coachContext={coachContext}
-                onReload={reloadAll}
-              />
-            )}
-
-            {tab === 'verein' && (
-              <VereinTab
-                trainerId={user.id}
-                org={org}
-                departments={departments}
-                teams={teams}
-                sessions={sessions}
-                loading={loading}
-                coachContext={coachContext}
-                onReload={reloadAll}
-                onCreateDepartment={handleCreateDepartment}
-                onAssignTeam={handleAssignTeam}
-              />
-            )}
-
-            {tab === 'kader' && (
-              <div className="space-y-3">
-                <div>
-                  <h2 className="text-base font-semibold text-white">Kader & Performance</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">ACWR, Belastungssteuerung und Athletenmonitoring</p>
-                </div>
-                <TrainerDashboard user={user} trainerName={trainerName} embedded />
-              </div>
-            )}
-
+            <Outlet context={outletCtx} />
           </div>
         </main>
       </div>
 
       {/* Bottom nav — mobile */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-gray-950/95 backdrop-blur-2xl border-t border-gray-800"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav
+        className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-gray-950/95 backdrop-blur-2xl border-t border-gray-800"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         <div className="flex items-stretch h-[60px] px-1">
           {NAV_ITEMS.map(item => {
-            const isActive = tab === item.id;
+            const isActive = location.pathname.includes(`/coach/${item.path}`);
             return (
-              <button key={item.id} onClick={() => setTab(item.id)}
-                className="relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors">
+              <button
+                key={item.path}
+                onClick={() => navigate(`/coach/${item.path}`)}
+                className="relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors"
+              >
                 {isActive && (
                   <span className="absolute inset-x-1 top-1.5 bottom-1.5 rounded-xl bg-gray-800/80" />
                 )}

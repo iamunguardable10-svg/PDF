@@ -11,6 +11,13 @@ import { RoleSelectScreen } from './components/onboarding/RoleSelectScreen';
 import { CoachSetupWizard } from './components/onboarding/CoachSetupWizard';
 import { InviteAccept } from './components/InviteAccept';
 import { TrainerDashboard } from './components/TrainerDashboard';
+import { DashboardScreen }   from './components/coach/screens/DashboardScreen';
+import { TeamsScreen }        from './components/coach/screens/TeamsScreen';
+import { TeamScreen }         from './components/coach/screens/TeamScreen';
+import { DepartmentScreen }   from './components/coach/screens/DepartmentScreen';
+import { FacilitiesScreen }   from './components/coach/screens/FacilitiesScreen';
+import { FacilityScreen }     from './components/coach/screens/FacilityScreen';
+import { PerformanceScreen }  from './components/coach/screens/PerformanceScreen';
 import { decodeShareData, isLiveToken } from './lib/trainerShare';
 import { loadProfile, saveProfile } from './lib/profileStorage';
 import { pullProfile } from './lib/cloudSync';
@@ -113,7 +120,7 @@ function App() {
     setCloudReady(false);
     // Navigate to the right shell based on saved mode
     const mode = loadAppMode();
-    if (mode === 'coach') navigate('/coach');
+    if (mode === 'coach') navigate('/coach/dashboard');
     else navigate('/athlete');
   };
 
@@ -122,7 +129,7 @@ function App() {
     setAppMode(mode);
     // Auth gate (step 4) will fire immediately for coach/athlete if not logged in.
     // Once logged in, ModeRouter sends them to the right shell.
-    if (mode === 'coach' && loggedInUser) navigate('/coach');
+    if (mode === 'coach' && loggedInUser) navigate('/coach/dashboard');
     else if ((mode === 'athlete' || mode === 'solo') && profile.onboardingCompleted) navigate('/athlete');
     // Otherwise fall through to auth gate / onboarding
   };
@@ -264,32 +271,47 @@ function App() {
           />
         } />
 
-        {/* ── Coach shell ── */}
-        <Route path="/coach/*" element={
-          loggedInUser && !isGuest ? (
-            showCoachSetup ? (
-              <CoachSetupWizard
-                userId={loggedInUser.id}
-                onDone={() => {
-                  localStorage.setItem('club_os_coach_setup_done', '1');
-                  setShowCoachSetup(false);
-                }}
-                onSkip={() => {
-                  localStorage.setItem('club_os_coach_setup_done', '1');
-                  setShowCoachSetup(false);
-                }}
-              />
+        {/* ── Coach shell (nested routes) ── */}
+        <Route
+          path="/coach"
+          element={
+            loggedInUser && !isGuest ? (
+              showCoachSetup ? (
+                <CoachSetupWizard
+                  userId={loggedInUser.id}
+                  onDone={() => {
+                    localStorage.setItem('club_os_coach_setup_done', '1');
+                    setShowCoachSetup(false);
+                  }}
+                  onSkip={() => {
+                    localStorage.setItem('club_os_coach_setup_done', '1');
+                    setShowCoachSetup(false);
+                  }}
+                />
+              ) : (
+                <CoachShell
+                  user={loggedInUser}
+                  trainerName={profile.name || loggedInUser.email || 'Trainer'}
+                  onBack={() => navigate('/select-role')}
+                />
+              )
             ) : (
-              <CoachShell
-                user={loggedInUser}
-                trainerName={profile.name || loggedInUser.email || 'Trainer'}
-                onBack={() => navigate('/select-role')}
-              />
+              <Navigate to="/select-role" replace />
             )
-          ) : (
-            <Navigate to="/select-role" replace />
-          )
-        } />
+          }
+        >
+          {/* Default: redirect to dashboard */}
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard"              element={<DashboardScreen />} />
+          <Route path="teams"                  element={<TeamsScreen />} />
+          <Route path="teams/:teamId"          element={<TeamScreen />} />
+          <Route path="department"             element={<DepartmentScreen />} />
+          <Route path="facilities"             element={<FacilitiesScreen />} />
+          <Route path="facilities/:facilityId" element={<FacilityScreen />} />
+          <Route path="performance"            element={<PerformanceScreen />} />
+          {/* Catch-all within /coach → dashboard */}
+          <Route path="*" element={<Navigate to="dashboard" replace />} />
+        </Route>
 
         {/* ── Legacy coach hash → redirect ── */}
         {(location.hash === '#coach' || location.hash === '#coach-legacy') && (
@@ -345,7 +367,7 @@ function ModeRouter({
   isGuest: boolean;
 }) {
   if (appMode === 'coach' && loggedInUser && !isGuest) {
-    return <Navigate to="/coach" replace />;
+    return <Navigate to="/coach/dashboard" replace />;
   }
   if (appMode === 'athlete' || appMode === 'solo') {
     return <Navigate to="/athlete" replace />;
