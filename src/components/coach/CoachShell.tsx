@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Users2, Building2, Warehouse, Activity,
+  LayoutDashboard, Users2, Building2, Warehouse,
   ChevronLeft, RefreshCw,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
@@ -12,6 +12,8 @@ import type { CoachContext } from '../../lib/coachRole';
 import {
   loadTrainerSessions,
   loadTeamsForCoach,
+  createTeam,
+  deleteTeam,
   updateTeamDepartment,
 } from '../../lib/attendanceStorage';
 import { loadRoster, saveRoster } from '../../lib/trainerRoster';
@@ -19,6 +21,7 @@ import { loadRosterFromSupabase } from '../../lib/trainerShare';
 import {
   loadMyOrganization,
   createDepartment,
+  deleteDepartment,
   loadDepartments,
 } from '../../lib/organizationStorage';
 import { loadMyCoachContext } from '../../lib/coachRole';
@@ -39,7 +42,10 @@ export interface CoachOutletContext {
   groups: AthleteGroup[];
   reload: () => void;
   onCreateDepartment: (name: string, sport?: string) => Promise<void>;
-  onAssignTeam: (teamId: string, deptId: string | null) => Promise<void>;
+  onDeleteDepartment: (deptId: string) => Promise<void>;
+  onCreateTeam:       (name: string, sport: string, color: string) => Promise<void>;
+  onDeleteTeam:       (teamId: string) => Promise<void>;
+  onAssignTeam:       (teamId: string, deptId: string | null) => Promise<void>;
 }
 
 // ── Nav items ─────────────────────────────────────────────────────────────────
@@ -73,11 +79,6 @@ const NAV_ITEMS: NavItem[] = [
     path: 'facilities', label: 'Hallen',
     Icon: Warehouse,
     accent: 'bg-teal-900/40', accentText: 'text-teal-300', accentBorder: 'border-teal-500',
-  },
-  {
-    path: 'performance', label: 'Kader',
-    Icon: Activity,
-    accent: 'bg-amber-900/40', accentText: 'text-amber-300', accentBorder: 'border-amber-500',
   },
 ];
 
@@ -172,6 +173,21 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
     if (dept) setDepartments(prev => [...prev, dept]);
   }
 
+  async function onDeleteDepartment(deptId: string) {
+    await deleteDepartment(deptId);
+    setDepartments(prev => prev.filter(d => d.id !== deptId));
+  }
+
+  async function onCreateTeam(name: string, sport: string, color: string) {
+    const team = await createTeam(user.id, name, sport, color);
+    if (team) setTeams(prev => [...prev, team]);
+  }
+
+  async function onDeleteTeam(teamId: string) {
+    await deleteTeam(teamId);
+    setTeams(prev => prev.filter(t => t.id !== teamId));
+  }
+
   async function onAssignTeam(teamId: string, deptId: string | null) {
     const ok = await updateTeamDepartment(teamId, deptId, org?.id ?? null);
     if (ok) {
@@ -194,7 +210,9 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
     user, org, departments, teams, sessions,
     coachContext, coachName, loading,
     roster, groups, reload,
-    onCreateDepartment, onAssignTeam,
+    onCreateDepartment, onDeleteDepartment,
+    onCreateTeam, onDeleteTeam,
+    onAssignTeam,
   };
 
   // ── Render ────────────────────────────────────────────────────────────────

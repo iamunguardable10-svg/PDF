@@ -140,6 +140,11 @@ export async function createDepartment(
   return rowToDept(data as Record<string, unknown>);
 }
 
+export async function deleteDepartment(deptId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+  await supabase.from('departments').delete().eq('id', deptId);
+}
+
 /** Search organizations by name (case-insensitive prefix/contains match). */
 export async function searchOrganizations(query: string): Promise<Organization[]> {
   if (!CLOUD_ENABLED || !query.trim()) return [];

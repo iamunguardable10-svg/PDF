@@ -4,12 +4,15 @@ import { ChevronLeft, Plus } from 'lucide-react';
 import { CalendarView } from '../../calendar/CalendarView';
 import { SessionDetail } from '../../attendance/SessionDetail';
 import { SessionPlanner } from '../../attendance/SessionPlanner';
+import { TrainerDashboard } from '../../TrainerDashboard';
 import { loadTeamSessionsAsEvents } from '../../../lib/calendarLoaders';
 import { loadSessionsByTeam } from '../../../lib/attendanceStorage';
 import type { CalEvent } from '../../../types/calEvent';
 import type { AttendanceSession } from '../../../types/attendance';
 import type { DepartmentCalendarSession } from '../../../types/organization';
 import type { CoachOutletContext } from '../CoachShell';
+
+type SubTab = 'kalender' | 'kader';
 
 function weekWindow() {
   const d = new Date();
@@ -23,10 +26,11 @@ function weekWindow() {
 export function TeamScreen() {
   const { teamId }   = useParams<{ teamId: string }>();
   const navigate     = useNavigate();
-  const { user, teams, roster, groups, reload } = useOutletContext<CoachOutletContext>();
+  const { user, teams, roster, groups, coachName, reload } = useOutletContext<CoachOutletContext>();
 
   const team = teams.find(t => t.id === teamId) ?? null;
 
+  const [subTab,      setSubTab]      = useState<SubTab>('kalender');
   const [events,      setEvents]      = useState<CalEvent[]>([]);
   const [rawSessions, setRawSessions] = useState<DepartmentCalendarSession[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -51,9 +55,7 @@ export function TeamScreen() {
   useEffect(() => { load(); }, [load]);
 
   function handleAddEvent(datum: string, time: string) {
-    setPlanDatum(datum);
-    setPlanTime(time);
-    setShowPlanner(true);
+    setPlanDatum(datum); setPlanTime(time); setShowPlanner(true);
   }
 
   if (!team) {
@@ -83,48 +85,74 @@ export function TeamScreen() {
           <h2 className="text-base font-semibold text-white truncate">{team.name}</h2>
           {team.sport && <span className="text-xs text-gray-500">{team.sport}</span>}
         </div>
-        <button
-          onClick={() => handleAddEvent(new Date().toISOString().split('T')[0], '10:00')}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-violet-900/40 border border-violet-700/50 hover:bg-violet-800/50 text-violet-300 text-xs font-semibold transition-colors"
-        >
-          <Plus size={12} /> Einheit
-        </button>
+        {subTab === 'kalender' && (
+          <button
+            onClick={() => handleAddEvent(new Date().toISOString().split('T')[0], '10:00')}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-violet-900/40 border border-violet-700/50 hover:bg-violet-800/50 text-violet-300 text-xs font-semibold transition-colors"
+          >
+            <Plus size={12} /> Einheit
+          </button>
+        )}
       </div>
 
-      {/* Calendar */}
-      <CalendarView
-        events={events}
-        loading={loading}
-        onEventClick={ev => {
-          const raw = rawSessions.find(s => s.id === ev.sourceId);
-          if (raw) setOpenSession(raw);
-        }}
-        onAddEvent={handleAddEvent}
-      />
+      {/* Sub-tabs */}
+      <div className="flex gap-1 bg-gray-900/60 rounded-xl p-1 w-fit">
+        {(['kalender', 'kader'] as SubTab[]).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setSubTab(tab)}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize ${
+              subTab === tab
+                ? 'bg-violet-600 text-white shadow-sm'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+            }`}
+          >
+            {tab === 'kalender' ? 'Kalender' : 'Kader'}
+          </button>
+        ))}
+      </div>
 
-      {/* Session detail modal */}
-      {openSession && (
-        <SessionDetail
-          session={openSession as unknown as AttendanceSession}
-          trainerId={user.id}
-          onClose={() => setOpenSession(null)}
-          onDeleted={() => { setOpenSession(null); load(); reload(); }}
-        />
+      {/* Kalender view */}
+      {subTab === 'kalender' && (
+        <>
+          <CalendarView
+            events={events}
+            loading={loading}
+            onEventClick={ev => {
+              const raw = rawSessions.find(s => s.id === ev.sourceId);
+              if (raw) setOpenSession(raw);
+            }}
+            onAddEvent={handleAddEvent}
+          />
+
+          {openSession && (
+            <SessionDetail
+              session={openSession as unknown as AttendanceSession}
+              trainerId={user.id}
+              onClose={() => setOpenSession(null)}
+              onDeleted={() => { setOpenSession(null); load(); reload(); }}
+            />
+          )}
+
+          {showPlanner && (
+            <SessionPlanner
+              trainerId={user.id}
+              teams={[team]}
+              membersByTeam={{}}
+              roster={roster}
+              groups={groups}
+              prefillDatum={planDatum}
+              prefillTime={planTime}
+              onCreated={() => { setShowPlanner(false); load(); reload(); }}
+              onClose={() => setShowPlanner(false)}
+            />
+          )}
+        </>
       )}
 
-      {/* Session planner modal */}
-      {showPlanner && (
-        <SessionPlanner
-          trainerId={user.id}
-          teams={[team]}
-          membersByTeam={{}}
-          roster={roster}
-          groups={groups}
-          prefillDatum={planDatum}
-          prefillTime={planTime}
-          onCreated={() => { setShowPlanner(false); load(); reload(); }}
-          onClose={() => setShowPlanner(false)}
-        />
+      {/* Kader view — team-specific performance */}
+      {subTab === 'kader' && (
+        <TrainerDashboard user={user} trainerName={coachName} embedded />
       )}
     </div>
   );
