@@ -10,6 +10,7 @@ import { FoodLog } from './FoodLog';
 import { NutritionForecast } from './NutritionForecast';
 import { TeamTab } from './attendance/TeamTab';
 import { TeamJoinScreen } from './attendance/TeamJoinScreen';
+import { ClubJoinFlow } from './onboarding/ClubJoinFlow';
 import { AthleteCalendar } from './attendance/AthleteCalendar';
 import { wearableData as mockWearable, trainingGoals } from '../lib/mockData';
 import { initialSessions, initialPlannedSessions } from '../lib/acwrMockData';
@@ -74,6 +75,7 @@ export function AthleteShell({
   const isSolo = mode === 'solo';
   const [activeTab, setActiveTab] = useState<AnyTab>(isSolo ? 'ernaehrung' : 'kalender');
   const [showSettings, setShowSettings] = useState(false);
+  const [showJoinFlow, setShowJoinFlow] = useState(false);
 
   const [wearable, setWearable] = useState<WearableData>(mockWearable);
 
@@ -289,17 +291,21 @@ export function AthleteShell({
           {/* ── TEAM (Athlet only) ── */}
           {activeTab === 'team' && !isSolo && (
             user ? (
+              showJoinFlow ? (
+                <ClubJoinFlow
+                  userId={user.id}
+                  userName={profile.name || user.email || 'Athlet'}
+                  userSport={profile.sport || ''}
+                  onJoined={() => setShowJoinFlow(false)}
+                  onBack={() => setShowJoinFlow(false)}
+                />
+              ) : (
               <TeamTab
                 userId={user.id}
                 userName={profile.name || user.email || 'Athlet'}
-                onGoToJoin={() => {
-                  const token = prompt('Team-Beitrittslink einfügen:');
-                  if (!token) return;
-                  const match = token.match(/#team-join\/([A-Za-z0-9_-]+)/);
-                  const code = match ? match[1] : token.trim();
-                  if (code) window.location.hash = `#team-join/${code}`;
-                }}
+                onGoToJoin={() => setShowJoinFlow(true)}
               />
+              )
             ) : (
               <div className="text-center py-12 space-y-3">
                 <Users className="w-10 h-10 text-gray-700 mx-auto" />

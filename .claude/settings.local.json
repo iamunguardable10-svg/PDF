@@ -11,7 +11,12 @@
       "Bash(python src/ui-ux-pro-max/scripts/search.py \"fitness athlete health tracking sports performance dark mode mobile\" --design-system -p \"FitFuel\" -f markdown)",
       "Bash(python src/ui-ux-pro-max/scripts/search.py \"mobile navigation dashboard data visualization\" --domain ux -n 5)",
       "Bash(python src/ui-ux-pro-max/scripts/search.py \"fitness sports dark\" --domain color -n 3)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__ruflo__system_info",
+      "mcp__ruflo__guidance_capabilities",
+      "mcp__ruflo__browser_open",
+      "mcp__ruflo__analyze_diff",
+      "mcp__ruflo__analyze_diff-risk"
     ]
   }
 }

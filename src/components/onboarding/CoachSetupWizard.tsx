@@ -8,7 +8,7 @@ const TEAM_COLORS = ['#7c3aed', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec
 
 interface Props {
   userId: string;
-  onDone: (orgId: string) => void;
+  onDone: () => void;
   onSkip: () => void;
 }
 
@@ -77,7 +77,7 @@ export function CoachSetupWizard({ userId, onDone, onSkip }: Props) {
     setSaving(false);
     if (!team) { setError('Team konnte nicht erstellt werden.'); return; }
     setStep('done');
-    onDone(orgId!);
+    onDone();
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────

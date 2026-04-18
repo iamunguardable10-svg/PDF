@@ -23,7 +23,7 @@ import {
   createDepartment,
   loadDepartments,
 } from '../../lib/organizationStorage';
-import { CLOUD_ENABLED } from '../../lib/supabase';
+import { supabase, CLOUD_ENABLED } from '../../lib/supabase';
 import { AttendanceModule } from '../attendance/AttendanceModule';
 import { FacilityCalendar } from '../attendance/FacilityCalendar';
 import { HallenManager } from '../attendance/HallenManager';
@@ -76,6 +76,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
   // Org + departments
   const [org,         setOrg]         = useState<Organization | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [coachName,   setCoachName]   = useState(trainerName);
 
   // Teams & sessions
   const [teams,    setTeams]    = useState<AttendanceTeam[]>([]);
@@ -93,12 +94,15 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
 
   const reloadAll = useCallback(async () => {
     setLoading(true);
-    const [orgData, ts, ss] = await Promise.all([
+    const [orgData, ts, ss, profileRow] = await Promise.all([
       loadMyOrganization(user.id),
       loadTeams(user.id),
       loadTrainerSessions(user.id),
+      supabase.from('profiles').select('name').eq('id', user.id).maybeSingle(),
     ]);
     setOrg(orgData);
+    const profileName = (profileRow.data as { name?: string } | null)?.name;
+    if (profileName) setCoachName(profileName);
     setTeams(ts);
     setSessions(ss);
 
@@ -178,7 +182,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
               <span className="text-sm font-semibold text-white leading-none">
                 {org?.name ?? 'Club OS'}
               </span>
-              <span className="text-[11px] text-gray-500 ml-2 hidden sm:inline">{trainerName}</span>
+              <span className="text-[11px] text-gray-500 ml-2 hidden sm:inline">{coachName}</span>
             </div>
           </div>
 
