@@ -153,7 +153,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
     const ok = await updateTeamDepartment(teamId, deptId, org?.id ?? null);
     if (ok) {
       setTeams(prev => prev.map(t =>
-        t.id === teamId ? { ...t, departmentId: deptId, organizationId: org?.id ?? t.organizationId } : t
+        t.id === teamId ? { ...t, departmentId: deptId ?? undefined, organizationId: org?.id ?? t.organizationId } : t
       ));
     }
   }
