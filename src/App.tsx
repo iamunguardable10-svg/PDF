@@ -13,6 +13,7 @@ import { InviteAccept } from './components/InviteAccept';
 import { TrainerDashboard } from './components/TrainerDashboard';
 import { decodeShareData, isLiveToken } from './lib/trainerShare';
 import { loadProfile, saveProfile } from './lib/profileStorage';
+import { pullProfile } from './lib/cloudSync';
 import { supabase, CLOUD_ENABLED } from './lib/supabase';
 import { loadAppMode, saveAppMode, clearAppMode } from './types/appMode';
 import type { AppMode } from './types/appMode';
@@ -68,6 +69,14 @@ function App() {
         setShowLanding(false);
         setShowTour(false);
         setIsGuest(false);
+        // Restore profile from Supabase so onboardingCompleted survives localStorage clears
+        pullProfile(session.user.id).then(cloudProfile => {
+          if (cloudProfile) {
+            const merged = { ...loadProfile(), ...cloudProfile };
+            setProfile(merged);
+            saveProfile(merged);
+          }
+        });
       }
     });
 
@@ -195,8 +204,9 @@ function App() {
     return <AuthScreen onLoggedIn={handleLoggedIn} />;
   }
 
-  // ── 5. Onboarding — profile setup for athletes/solo only (not coaches) ───────
-  if (appMode !== 'coach' && !profile.onboardingCompleted) {
+  // ── 5. Onboarding — profile setup for solo mode only ─────────────────────
+  //    Coaches have their own wizard; team athletes don't need solo profile setup.
+  if (appMode === 'solo' && !profile.onboardingCompleted) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 
