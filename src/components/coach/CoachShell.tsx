@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  LayoutDashboard, Warehouse, Activity,
+  CalendarDays, Building2, Users2,
   ChevronLeft, RefreshCw,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
@@ -24,15 +24,13 @@ import {
   loadDepartments,
 } from '../../lib/organizationStorage';
 import { supabase, CLOUD_ENABLED } from '../../lib/supabase';
-import { AttendanceModule } from '../attendance/AttendanceModule';
-import { FacilityCalendar } from '../attendance/FacilityCalendar';
-import { HallenManager } from '../attendance/HallenManager';
 import { TrainerDashboard } from '../TrainerDashboard';
-import { CoachDashboard } from './CoachDashboard';
+import { KalenderTab } from './KalenderTab';
+import { VereinTab } from './VereinTab';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type CoachTab = 'dashboard' | 'teams' | 'hallen' | 'performance';
+export type CoachTab = 'kalender' | 'verein' | 'kader';
 
 interface NavItem {
   id:    CoachTab;
@@ -45,18 +43,18 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   {
-    id: 'dashboard', label: 'Dashboard',
-    Icon: LayoutDashboard,
-    accent: 'bg-gray-800', accentText: 'text-white', accentBorder: 'border-gray-400',
+    id: 'kalender', label: 'Kalender',
+    Icon: CalendarDays,
+    accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500',
   },
   {
-    id: 'hallen', label: 'Hallen',
-    Icon: Warehouse,
-    accent: 'bg-teal-900/40', accentText: 'text-teal-300', accentBorder: 'border-teal-500',
+    id: 'verein', label: 'Verein',
+    Icon: Building2,
+    accent: 'bg-sky-900/40', accentText: 'text-sky-300', accentBorder: 'border-sky-500',
   },
   {
-    id: 'performance', label: 'Performance',
-    Icon: Activity,
+    id: 'kader', label: 'Kader',
+    Icon: Users2,
     accent: 'bg-emerald-900/40', accentText: 'text-emerald-300', accentBorder: 'border-emerald-500',
   },
 ];
@@ -71,24 +69,18 @@ interface Props {
 
 export function CoachShell({ user, trainerName, onBack }: Props) {
 
-  const [tab, setTab] = useState<CoachTab>('dashboard');
+  const [tab, setTab] = useState<CoachTab>('kalender');
 
-  // Org + departments
   const [org,         setOrg]         = useState<Organization | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [coachName,   setCoachName]   = useState(trainerName);
 
-  // Teams & sessions
   const [teams,    setTeams]    = useState<AttendanceTeam[]>([]);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [loading,  setLoading]  = useState(true);
 
-  // Roster
   const [roster, setRoster] = useState<ManagedAthlete[]>([]);
   const [groups, setGroups] = useState<AthleteGroup[]>([]);
-
-  // Hallen Manager modal
-  const [showHallenMgr, setShowHallenMgr] = useState(false);
 
   // ── Load all data ─────────────────────────────────────────────────────────
 
@@ -153,7 +145,9 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
     const ok = await updateTeamDepartment(teamId, deptId, org?.id ?? null);
     if (ok) {
       setTeams(prev => prev.map(t =>
-        t.id === teamId ? { ...t, departmentId: deptId ?? undefined, organizationId: org?.id ?? t.organizationId } : t
+        t.id === teamId
+          ? { ...t, departmentId: deptId ?? undefined, organizationId: org?.id ?? t.organizationId }
+          : t
       ));
     }
   }
@@ -224,9 +218,8 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-4 py-4 pb-28 sm:pb-6 space-y-4">
 
-            {/* Dashboard */}
-            {tab === 'dashboard' && (
-              <CoachDashboard
+            {tab === 'kalender' && (
+              <KalenderTab
                 trainerId={user.id}
                 org={org}
                 departments={departments}
@@ -235,64 +228,25 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
                 roster={roster}
                 groups={groups}
                 loading={loading}
-                onGoToTeams={() => setTab('teams')}
-                onGoToHallen={() => setTab('hallen')}
+                onReload={reloadAll}
+              />
+            )}
+
+            {tab === 'verein' && (
+              <VereinTab
+                trainerId={user.id}
+                org={org}
+                departments={departments}
+                teams={teams}
+                sessions={sessions}
+                loading={loading}
                 onReload={reloadAll}
                 onCreateDepartment={handleCreateDepartment}
                 onAssignTeam={handleAssignTeam}
               />
             )}
 
-            {/* Teams */}
-            {tab === 'teams' && (
-              <AttendanceModule
-                trainerId={user.id}
-                trainerName={trainerName}
-                roster={roster}
-                groups={groups}
-              />
-            )}
-
-            {/* Hallen */}
-            {tab === 'hallen' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <h2 className="text-base font-semibold text-white">Hallenkalender</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Buchungen, Konflikte und Sperrzeiten</p>
-                  </div>
-                  {org && (
-                    <button
-                      onClick={() => setShowHallenMgr(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-900/30 border border-teal-800/50 hover:bg-teal-800/40 text-teal-300 text-xs font-medium transition-colors"
-                    >
-                      <Warehouse size={12} /> Hallen verwalten
-                    </button>
-                  )}
-                </div>
-
-                {org ? (
-                  <FacilityCalendar organizationId={org.id} teams={teams} />
-                ) : (
-                  <EmptyState
-                    icon="⬡"
-                    title="Kein Verein"
-                    body="Lege zuerst einen Verein an, um Hallen zu verwalten."
-                  />
-                )}
-
-                {showHallenMgr && org && (
-                  <HallenManager
-                    organizationId={org.id}
-                    onClose={() => setShowHallenMgr(false)}
-                    onChanged={reloadAll}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Performance */}
-            {tab === 'performance' && (
+            {tab === 'kader' && (
               <div className="space-y-3">
                 <div>
                   <h2 className="text-base font-semibold text-white">Kader & Performance</h2>
@@ -332,29 +286,6 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
           })}
         </div>
       </nav>
-    </div>
-  );
-}
-
-// ── EmptyState ────────────────────────────────────────────────────────────────
-
-function EmptyState({ icon, title, body, action }: {
-  icon: string; title: string; body: string;
-  action?: { label: string; onClick: () => void };
-}) {
-  return (
-    <div className="text-center py-12 space-y-3">
-      <div className="text-4xl text-gray-700">{icon}</div>
-      <div>
-        <p className="text-gray-400 text-sm font-medium">{title}</p>
-        <p className="text-gray-600 text-xs mt-1 max-w-sm mx-auto">{body}</p>
-      </div>
-      {action && (
-        <button onClick={action.onClick}
-          className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-xl transition-colors">
-          {action.label}
-        </button>
-      )}
     </div>
   );
 }
