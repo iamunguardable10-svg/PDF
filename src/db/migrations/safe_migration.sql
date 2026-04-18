@@ -159,9 +159,9 @@ create table if not exists att_teams (
   created_at      timestamptz default now()
 );
 
--- Add new columns if they don't exist yet
-alter table att_teams add column if not exists organization_id text references organizations(id) on delete set null;
-alter table att_teams add column if not exists department_id   text references departments(id)   on delete set null;
+-- Add new columns if they don't exist yet (no FK ref to avoid text/uuid mismatch)
+alter table att_teams add column if not exists organization_id text;
+alter table att_teams add column if not exists department_id   text;
 
 alter table att_teams enable row level security;
 
@@ -243,8 +243,8 @@ create table if not exists att_sessions (
 
 alter table att_sessions add column if not exists starts_at          timestamptz;
 alter table att_sessions add column if not exists ends_at            timestamptz;
-alter table att_sessions add column if not exists organization_id    text references organizations(id) on delete set null;
-alter table att_sessions add column if not exists department_id      text references departments(id)   on delete set null;
+alter table att_sessions add column if not exists organization_id    text;
+alter table att_sessions add column if not exists department_id      text;
 alter table att_sessions add column if not exists recurrence_rule_id text;
 
 alter table att_sessions enable row level security;
@@ -361,31 +361,6 @@ drop policy if exists "Trainers can manage org facilities"  on facilities;
 create policy "Anyone can read facilities"
   on facilities for select using (true);
 
-create policy "Trainers can manage org facilities"
-  on facilities for all to authenticated
-  using (
-    trainer_id_owns_org(auth.uid()::text, organization_id)
-    or exists (
-      select 1 from organization_memberships
-      where organization_id = facilities.organization_id
-        and user_id = auth.uid()::text
-    )
-  )
-  with check (
-    exists (
-      select 1 from organization_memberships
-      where organization_id = facilities.organization_id
-        and user_id = auth.uid()::text
-    )
-    or exists (
-      select 1 from att_teams
-      where organization_id = facilities.organization_id
-        and trainer_id = auth.uid()::text
-    )
-  );
-
--- Simpler fallback — authenticated trainers with a team in this org
-drop policy if exists "Trainers can manage org facilities"  on facilities;
 create policy "Trainers can manage org facilities"
   on facilities for all to authenticated
   using (

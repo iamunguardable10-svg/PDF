@@ -85,6 +85,19 @@ export async function createTeam(
   return rowToTeam(data);
 }
 
+export async function updateTeamDepartment(
+  teamId: string,
+  departmentId: string | null,
+  organizationId?: string | null,
+): Promise<boolean> {
+  if (!CLOUD_ENABLED) return false;
+  const patch: Record<string, unknown> = { department_id: departmentId };
+  if (organizationId !== undefined) patch.organization_id = organizationId;
+  const { error } = await supabase.from('att_teams').update(patch).eq('id', teamId);
+  if (error) { console.error('[updateTeamDepartment]', error.message); return false; }
+  return true;
+}
+
 export async function updateTeam(
   teamId: string,
   patch: Partial<{ name: string; sport: string; color: string }>,

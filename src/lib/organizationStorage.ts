@@ -73,6 +73,30 @@ export async function loadOrganization(orgId: string): Promise<Organization | nu
   return rowToOrg(data as Record<string, unknown>);
 }
 
+/** Load the single organization the user owns (first one found). Returns null if none. */
+export async function loadMyOrganization(userId: string): Promise<Organization | null> {
+  if (!CLOUD_ENABLED) return null;
+  const { data: memberships, error: mErr } = await supabase
+    .from('organization_memberships')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .in('role', ['owner', 'admin'])
+    .limit(1);
+  if (mErr || !memberships?.length) return null;
+  return loadOrganization(memberships[0].organization_id as string);
+}
+
+/** Check whether a user already owns an organization. */
+export async function hasOrganization(userId: string): Promise<boolean> {
+  if (!CLOUD_ENABLED) return false;
+  const { count } = await supabase
+    .from('organization_memberships')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .in('role', ['owner', 'admin']);
+  return (count ?? 0) > 0;
+}
+
 /** Create a new organization and add the creator as owner. */
 export async function createOrganization(
   creatorId: string,

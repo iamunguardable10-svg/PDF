@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Building2, Users, ArrowRight, Check, Loader2 } from 'lucide-react';
-import { createOrganization, createDepartment } from '../../lib/organizationStorage';
+import { createOrganization, createDepartment, hasOrganization } from '../../lib/organizationStorage';
 import { createTeam } from '../../lib/attendanceStorage';
 
 const SPORTS = ['Fußball', 'Basketball', 'Volleyball', 'Handball', 'Tennis', 'Leichtathletik', 'Schwimmen', 'Turnen', 'Sonstiges'];
@@ -18,6 +18,11 @@ export function CoachSetupWizard({ userId, onDone, onSkip }: Props) {
   const [step,    setStep]    = useState<Step>('org');
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+
+  // Skip wizard if user already owns an org
+  useEffect(() => {
+    hasOrganization(userId).then(exists => { if (exists) onSkip(); });
+  }, [userId, onSkip]);
 
   // Step 1 — Org
   const [orgName,   setOrgName]   = useState('');
