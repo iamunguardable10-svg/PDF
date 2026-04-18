@@ -10,7 +10,6 @@ import {
   submitAthleteOverride,
   clearAthleteOverride,
   submitAthleteRPE,
-  loadMyRecord,
 } from '../../lib/attendanceStorage';
 import type { AttendanceSession } from '../../types/attendance';
 import type { Session as PersonalSession, PlannedSession } from '../../types/acwr';
@@ -387,7 +386,6 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
         <SessionOverlay
           block={openBlock}
           today={today}
-          userId={userId}
           saving={saving}
           onRSVP={handleRSVP}
           onRPE={handleRPE}
@@ -401,11 +399,10 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
 // ── Session Detail Overlay ────────────────────────────────────────────────────
 
 function SessionOverlay({
-  block, today, userId, saving, onRSVP, onRPE, onClose,
+  block, today, saving, onRSVP, onRPE, onClose,
 }: {
   block: CalBlock;
   today: string;
-  userId: string;
   saving: string | null;
   onRSVP: (s: TeamSessionRow, r: RSVP) => void;
   onRPE: (s: TeamSessionRow, rpe: number, duration: number) => void;

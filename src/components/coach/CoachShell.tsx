@@ -8,7 +8,6 @@ import type { AttendanceTeam, AttendanceSession } from '../../types/attendance';
 import type { ManagedAthlete, AthleteGroup } from '../../types/trainerDashboard';
 import type { Organization, Department } from '../../types/organization';
 import {
-  loadTeams,
   loadTrainerSessions,
   loadTeamsForCoach,
   updateTeamDepartment,
