@@ -52,7 +52,7 @@ function pxToMinutes(px: number): number {
 
 function minutesToTime(m: number): string {
   const clamped = Math.max(START_H * 60, Math.min((END_H - 1) * 60, m));
-  return `${String(Math.floor(clamped / 60)).padStart(2, '0')}:${String(clamped % 60).padStart(2, '0')}`;
+  return `${String(Math.floor(clamped / 60)).padStart(2, '00')}:${String(clamped % 60).padStart(2, '00')}`;
 }
 
 function eventTopPx(ev: CalEvent): number {
@@ -64,20 +64,34 @@ function eventHeightPx(ev: CalEvent): number {
   return (dur / 60) * HOUR_PX;
 }
 
+// ── Drag state ────────────────────────────────────────────────────────────────
+
+interface DragState {
+  ev:            CalEvent;
+  offsetMinutes: number;
+  duration:      number;
+  ghost:         HTMLDivElement;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Props {
-  events: CalEvent[];
-  loading?: boolean;
-  onEventClick?: (ev: CalEvent) => void;
-  onAddEvent?:   (datum: string, time: string) => void;
+  events:         CalEvent[];
+  loading?:       boolean;
+  onEventClick?:  (ev: CalEvent) => void;
+  onAddEvent?:    (datum: string, time: string) => void;
+  onMoveEvent?:   (ev: CalEvent, newDatum: string, newStartTime: string, newEndTime: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function CalendarView({ events, loading, onEventClick, onAddEvent }: Props) {
+export function CalendarView({ events, loading, onEventClick, onAddEvent, onMoveEvent }: Props) {
   const [weekStart, setWeekStart] = useState(() => isoToMonday(new Date()));
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dragRef   = useRef<DragState | null>(null);
+
+  // drop indicator: datum + top-px position
+  const [dropIndicator, setDropIndicator] = useState<{ datum: string; topPx: number; heightPx: number } | null>(null);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const todayISO = toISO(new Date());
@@ -112,10 +126,100 @@ export function CalendarView({ events, loading, onEventClick, onAddEvent }: Prop
   }
 
   function handleColumnClick(e: React.MouseEvent, iso: string) {
-    if (!onAddEvent) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const mins = pxToMinutes(e.clientY - rect.top);
-    onAddEvent(iso, minutesToTime(mins));
+    if (!onAddEvent || dragRef.current) return;
+    const rect     = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const scrollEl = scrollRef.current!;
+    const relY     = e.clientY - rect.top + scrollEl.scrollTop;
+    onAddEvent(iso, minutesToTime(pxToMinutes(relY)));
+  }
+
+  // ── Drag handlers ────────────────────────────────────────────────────────────
+
+  function startDrag(e: React.MouseEvent, ev: CalEvent) {
+    if (!onMoveEvent) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect          = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const clickOffsetPx = e.clientY - rect.top;
+    const offsetMinutes = Math.round((clickOffsetPx / HOUR_PX) * 60 / 15) * 15;
+    const duration      = Math.max(15, timeToMinutes(ev.endTime) - timeToMinutes(ev.startTime));
+
+    // Ghost element
+    const ghost = document.createElement('div');
+    ghost.style.cssText = [
+      'position:fixed',
+      `width:${rect.width}px`,
+      `height:${rect.height}px`,
+      `left:${rect.left}px`,
+      `top:${rect.top}px`,
+      `background:${ev.bgColor ?? ev.color + '33'}`,
+      `border-left:3px solid ${ev.color}`,
+      'border-radius:8px',
+      'opacity:0.85',
+      'pointer-events:none',
+      'z-index:9999',
+      'padding:2px 4px',
+      'overflow:hidden',
+      'font-size:11px',
+      'font-weight:600',
+      `color:${ev.color}`,
+    ].join(';');
+    ghost.textContent = ev.title;
+    document.body.appendChild(ghost);
+
+    dragRef.current = { ev, offsetMinutes, duration, ghost };
+
+    function getDropInfo(clientX: number, clientY: number): { datum: string; startMins: number } | null {
+      ghost.style.display = 'none';
+      const el = document.elementFromPoint(clientX, clientY);
+      ghost.style.display = '';
+      const col = el?.closest('[data-cal-col]') as HTMLElement | null;
+      if (!col) return null;
+      const iso     = col.getAttribute('data-cal-col')!;
+      const colRect = col.getBoundingClientRect();
+      const scrollEl = scrollRef.current!;
+      const relY     = clientY - colRect.top + scrollEl.scrollTop;
+      const rawMins  = pxToMinutes(relY) - offsetMinutes;
+      const snapped  = Math.round(rawMins / 15) * 15;
+      return { datum: iso, startMins: snapped };
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      if (!dragRef.current) return;
+      const { ghost, offsetMinutes, duration } = dragRef.current;
+      const ghostOffsetPx = (offsetMinutes / 60) * HOUR_PX;
+      ghost.style.left = `${e.clientX - rect.width / 2}px`;
+      ghost.style.top  = `${e.clientY - ghostOffsetPx}px`;
+
+      const info = getDropInfo(e.clientX, e.clientY);
+      if (info) {
+        const topPx    = minutesToPx(info.startMins);
+        const heightPx = (duration / 60) * HOUR_PX;
+        setDropIndicator({ datum: info.datum, topPx, heightPx });
+      } else {
+        setDropIndicator(null);
+      }
+    }
+
+    function onMouseUp(e: MouseEvent) {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      const state = dragRef.current;
+      if (!state) return;
+      state.ghost.remove();
+      dragRef.current = null;
+      setDropIndicator(null);
+
+      const info = getDropInfo(e.clientX, e.clientY);
+      if (info) {
+        const endMins = info.startMins + state.duration;
+        onMoveEvent?.(state.ev, info.datum, minutesToTime(info.startMins), minutesToTime(endMins));
+      }
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
   }
 
   const hourLabels = Array.from({ length: TOTAL_H }, (_, i) => START_H + i);
@@ -130,6 +234,8 @@ export function CalendarView({ events, loading, onEventClick, onAddEvent }: Prop
     }
     return [...seen.entries()];
   })();
+
+  const isDragging = !!dragRef.current;
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col">
@@ -214,11 +320,13 @@ export function CalendarView({ events, loading, onEventClick, onAddEvent }: Prop
             const iso      = toISO(d);
             const isToday  = iso === todayISO;
             const dayEvs   = byDay.get(iso) ?? [];
+            const isDropTarget = dropIndicator?.datum === iso;
 
             return (
               <div
                 key={iso}
-                className={`relative border-l border-gray-800 ${onAddEvent ? 'cursor-crosshair' : ''} ${isToday ? 'bg-violet-950/10' : ''}`}
+                data-cal-col={iso}
+                className={`relative border-l border-gray-800 ${onAddEvent && !isDragging ? 'cursor-crosshair' : ''} ${isToday ? 'bg-violet-950/10' : ''}`}
                 style={{ gridColumn: colIdx + 2, gridRow: '1', height: `${TOTAL_H * HOUR_PX}px` }}
                 onClick={e => handleColumnClick(e, iso)}
               >
@@ -237,21 +345,33 @@ export function CalendarView({ events, loading, onEventClick, onAddEvent }: Prop
                   );
                 })()}
 
+                {/* Drop indicator */}
+                {isDropTarget && dropIndicator && (
+                  <div
+                    className="absolute left-1 right-1 rounded-lg border-2 border-dashed border-white/30 bg-white/5 pointer-events-none z-30"
+                    style={{ top: `${dropIndicator.topPx}px`, height: `${Math.max(20, dropIndicator.heightPx)}px` }}
+                  />
+                )}
+
                 {/* Event blocks */}
                 {dayEvs.map(ev => {
                   const top    = eventTopPx(ev);
                   const height = eventHeightPx(ev);
+                  const isBeingDragged = dragRef.current?.ev.id === ev.id;
                   return (
                     <div
                       key={ev.id}
-                      className="absolute left-1 right-1 rounded-lg overflow-hidden z-20 cursor-pointer hover:brightness-110 transition-all"
+                      className={`absolute left-1 right-1 rounded-lg overflow-hidden z-20 transition-opacity ${
+                        onMoveEvent ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+                      } hover:brightness-110 transition-all ${isBeingDragged ? 'opacity-30' : ''}`}
                       style={{
                         top:             `${top}px`,
                         height:          `${Math.max(20, height)}px`,
                         backgroundColor: ev.bgColor ?? (ev.color + '22'),
                         borderLeft:      `3px solid ${ev.color}`,
                       }}
-                      onClick={e => { e.stopPropagation(); onEventClick?.(ev); }}
+                      onMouseDown={onMoveEvent ? e => startDrag(e, ev) : undefined}
+                      onClick={e => { e.stopPropagation(); if (!dragRef.current) onEventClick?.(ev); }}
                     >
                       <div className="px-1 py-0.5 h-full flex flex-col justify-start overflow-hidden">
                         <p
@@ -292,8 +412,11 @@ export function CalendarView({ events, loading, onEventClick, onAddEvent }: Prop
               </div>
             );
           })}
-          {onAddEvent && (
+          {onAddEvent && !onMoveEvent && (
             <p className="text-xs text-gray-600 ml-auto">Klick zum Erstellen</p>
+          )}
+          {onMoveEvent && (
+            <p className="text-xs text-gray-600 ml-auto">Einheit ziehen zum Verschieben</p>
           )}
         </div>
       )}

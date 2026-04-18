@@ -6,7 +6,7 @@ import { SessionDetail } from '../../attendance/SessionDetail';
 import { SessionPlanner } from '../../attendance/SessionPlanner';
 import { TrainerDashboard } from '../../TrainerDashboard';
 import { loadTeamSessionsAsEvents } from '../../../lib/calendarLoaders';
-import { loadSessionsByTeam } from '../../../lib/attendanceStorage';
+import { loadSessionsByTeam, updateSession } from '../../../lib/attendanceStorage';
 import type { CalEvent } from '../../../types/calEvent';
 import type { AttendanceSession } from '../../../types/attendance';
 import type { DepartmentCalendarSession } from '../../../types/organization';
@@ -56,6 +56,13 @@ export function TeamScreen() {
 
   function handleAddEvent(datum: string, time: string) {
     setPlanDatum(datum); setPlanTime(time); setShowPlanner(true);
+  }
+
+  async function handleMoveEvent(ev: CalEvent, newDatum: string, newStartTime: string, newEndTime: string) {
+    if (!ev.sourceId) return;
+    setEvents(prev => prev.map(e => e.id === ev.id ? { ...e, datum: newDatum, startTime: newStartTime, endTime: newEndTime } : e));
+    await updateSession(ev.sourceId, { datum: newDatum, startTime: newStartTime, endTime: newEndTime });
+    load();
   }
 
   if (!team) {
@@ -123,6 +130,7 @@ export function TeamScreen() {
               if (raw) setOpenSession(raw);
             }}
             onAddEvent={handleAddEvent}
+            onMoveEvent={handleMoveEvent}
           />
 
           {openSession && (

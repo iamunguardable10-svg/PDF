@@ -5,7 +5,7 @@ import { CalendarView } from '../../calendar/CalendarView';
 import { SessionDetail } from '../../attendance/SessionDetail';
 import { SessionPlanner } from '../../attendance/SessionPlanner';
 import { loadDeptSessionsAsEvents } from '../../../lib/calendarLoaders';
-import { loadSessionsByDepartment } from '../../../lib/attendanceStorage';
+import { loadSessionsByDepartment, updateSession } from '../../../lib/attendanceStorage';
 import type { CalEvent } from '../../../types/calEvent';
 import type { AttendanceSession } from '../../../types/attendance';
 import type { DepartmentCalendarSession, Department } from '../../../types/organization';
@@ -94,6 +94,13 @@ export function DepartmentScreen() {
     setPlanDatum(datum); setPlanTime(time); setShowPlanner(true);
   }
 
+  async function handleMoveEvent(ev: CalEvent, newDatum: string, newStartTime: string, newEndTime: string) {
+    if (!ev.sourceId) return;
+    setEvents(prev => prev.map(e => e.id === ev.id ? { ...e, datum: newDatum, startTime: newStartTime, endTime: newEndTime } : e));
+    await updateSession(ev.sourceId, { datum: newDatum, startTime: newStartTime, endTime: newEndTime });
+    loadCalendar();
+  }
+
   // ── Derived: filtered events ──────────────────────────────────────────────
 
   const visibleEvents = filterTeamId
@@ -165,6 +172,7 @@ export function DepartmentScreen() {
             if (raw) setOpenSession(raw);
           }}
           onAddEvent={handleAddEvent}
+          onMoveEvent={handleMoveEvent}
         />
 
         {/* Modals */}
