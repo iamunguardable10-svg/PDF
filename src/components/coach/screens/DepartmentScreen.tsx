@@ -195,8 +195,6 @@ export function DepartmentScreen() {
 
   // ── Department list view ──────────────────────────────────────────────────
 
-  const today = new Date().toISOString().split('T')[0];
-
   return (
     <div className="space-y-4">
 
@@ -255,10 +253,6 @@ export function DepartmentScreen() {
         <div className="space-y-2">
           {visibleDepts.map(dept => {
             const dt           = teams.filter(t => t.departmentId === dept.id);
-            const upcoming     = dt.reduce((n, t) => n + (
-              // count sessions this dept has upcoming
-              0 // sessions aren't dept-tagged in the coarse view; show team count only
-            ), 0);
             const isConfirming = confirmDel === dept.id;
 
             return (
