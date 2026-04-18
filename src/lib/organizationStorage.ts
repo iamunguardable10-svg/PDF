@@ -118,11 +118,16 @@ export async function createOrganization(
     console.error('[createOrganization]', error?.message, error?.code, error?.details);
     return { error: error?.message ?? 'Unbekannter Fehler' };
   }
-  // Add creator as owner
+  // Add creator as org_admin (role: 'admin' maps to org_admin in coachRole.ts)
   const { error: memErr } = await supabase.from('organization_memberships').insert({
-    id: randomId('om'), organization_id: id, user_id: creatorId, role: 'owner',
+    id: randomId('om'), organization_id: id, user_id: creatorId, role: 'admin',
   });
-  if (memErr) console.warn('[createOrganization] membership insert:', memErr.message);
+  if (memErr) {
+    console.error('[createOrganization] membership insert:', memErr.message);
+    // Roll back: delete the org so it isn't orphaned
+    await supabase.from('organizations').delete().eq('id', id);
+    return { error: 'Verein konnte nicht angelegt werden (Mitgliedschaft fehlgeschlagen).' };
+  }
   return { org: rowToOrg(data as Record<string, unknown>) };
 }
 
