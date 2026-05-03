@@ -1,111 +1,191 @@
+import { useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import { AlertTriangle, CalendarDays, CheckCircle2, UsersRound } from 'lucide-react';
 import { JoinRequestsPanel } from '../JoinRequestsPanel';
 import type { CoachOutletContext } from '../CoachShell';
 
 export function DashboardScreen() {
-  const { user, org, departments, teams, sessions, loading, reload, coachContext } =
-    useOutletContext<CoachOutletContext>();
+  const { user, teams, sessions, loading, reload, roster, groups } = useOutletContext<CoachOutletContext>();
 
-  const today    = new Date().toISOString().split('T')[0];
-  const weekStart = (() => {
-    const d = new Date();
-    const diff = d.getDay() === 0 ? -6 : 1 - d.getDay();
-    d.setDate(d.getDate() + diff);
-    return d.toISOString().split('T')[0];
-  })();
-  const weekEnd = (() => {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + 6);
-    return d.toISOString().split('T')[0];
-  })();
+  const today = new Date().toISOString().split('T')[0];
+  const upcomingSessions = useMemo(
+    () => sessions.filter(s => s.datum >= today).sort((a, b) => `${a.datum}${a.startTime ?? ''}`.localeCompare(`${b.datum}${b.startTime ?? ''}`)),
+    [sessions, today],
+  );
+  const todaySessions = upcomingSessions.filter(s => s.datum === today);
+  const focusSessions = todaySessions.length > 0 ? todaySessions : upcomingSessions.slice(0, 1);
+  const focusLabel = todaySessions.length > 0 ? 'Today' : 'Next session';
 
-  const todayCount = sessions.filter(s => s.datum === today).length;
-  const weekCount  = sessions.filter(s => s.datum >= weekStart && s.datum <= weekEnd).length;
+  const expectedPlayers = roster.length;
+  const availablePlayers = expectedPlayers;
+  const unavailablePlayers = 0;
+  const atRiskPlayers = 0;
 
-  const roleLabel: Record<string, string> = {
-    org_admin:       'Vereins-Admin',
-    head_coach:      'Head Coach',
-    assistant_coach: 'Assistent',
-  };
+  const alerts = [
+    ...(focusSessions.length === 0 ? ['No upcoming session scheduled.'] : []),
+    ...(expectedPlayers === 0 ? ['No players in roster yet. Add players to unlock availability and load insights.'] : []),
+    ...(atRiskPlayers > 0 ? [`${atRiskPlayers} players are currently above the risk threshold.`] : []),
+  ];
 
   return (
-    <div className="space-y-5">
-
-      {/* Join requests */}
+    <div className="space-y-6">
       <JoinRequestsPanel trainerId={user.id} onChanged={reload} />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Heute"       value={loading ? '…' : String(todayCount)}     sub="Einheiten"   color="violet" />
-        <Stat label="Diese Woche" value={loading ? '…' : String(weekCount)}       sub="Einheiten"   color="sky" />
-        <Stat label="Teams"       value={loading ? '…' : String(teams.length)}    sub="aktiv"       color="emerald" />
-        <Stat label="Abteilungen" value={loading ? '…' : String(departments.length)} sub="gesamt"  color="amber" />
-      </div>
-
-      {/* Org overview */}
-      {org && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-800/60 border border-gray-700/50">
-          <div className="w-9 h-9 bg-gradient-to-br from-violet-600 to-purple-800 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
-            🏟
+      <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-blue-300">Coach overview</p>
+            <h2 className="mt-2 text-3xl font-black tracking-tight">Ready for {focusLabel.toLowerCase()}?</h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+              See availability, risk, upcoming sessions and operational alerts in one place.
+            </p>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white truncate">{org.name}</p>
-            {org.sport && <p className="text-xs text-gray-500">{org.sport}</p>}
+          <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-slate-200">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
           </div>
-          {coachContext && (
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300 border border-violet-800/50 flex-shrink-0">
-              {roleLabel[coachContext.role] ?? coachContext.role}
-            </span>
-          )}
         </div>
-      )}
+      </section>
 
-      {/* Recent sessions */}
-      {sessions.length > 0 && (
-        <section>
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Kommende Einheiten</p>
-          <div className="space-y-1.5">
-            {sessions
-              .filter(s => s.datum >= today)
-              .slice(0, 6)
-              .map(s => (
-                <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-gray-800/50 border border-gray-700/40">
-                  <div className="flex-shrink-0 text-center w-10">
-                    <p className="text-[10px] text-gray-500">
-                      {new Date(s.datum + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short' })}
-                    </p>
-                    <p className="text-xs text-gray-400 font-medium">
-                      {new Date(s.datum + 'T12:00:00').toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Available Players" value={loading ? '...' : availablePlayers} helper="Expected by default" Icon={CheckCircle2} tone="green" />
+        <MetricCard label="Unavailable" value={loading ? '...' : unavailablePlayers} helper="Cancelled or excused" Icon={UsersRound} tone="red" />
+        <MetricCard label="At Risk" value={loading ? '...' : atRiskPlayers} helper="ACWR risk summary" Icon={AlertTriangle} tone="amber" />
+        <MetricCard label="Sessions Today" value={loading ? '...' : todaySessions.length} helper={`${upcomingSessions.length} upcoming total`} Icon={CalendarDays} tone="blue" />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-950">{focusLabel}</h3>
+              <p className="text-sm text-slate-500">Main operating block for the coach.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{focusSessions.length} session{focusSessions.length === 1 ? '' : 's'}</span>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {focusSessions.length === 0 ? (
+              <EmptyState text="No upcoming sessions yet." />
+            ) : focusSessions.map(session => (
+              <div key={session.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-bold text-slate-950">{session.title}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {formatDate(session.datum)}{session.startTime ? ` - ${session.startTime}` : ''}{session.location ? ` - ${session.location}` : ''}
                     </p>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">{s.title}</p>
-                    <p className="text-[11px] text-gray-500">
-                      {teams.find(t => t.id === s.teamId)?.name ?? ''}
-                      {s.startTime ? ` · ${s.startTime}` : ''}
-                    </p>
+                  <div className="text-sm font-semibold text-slate-700">
+                    {teams.find(t => t.id === session.teamId)?.name ?? 'No team'}
                   </div>
                 </div>
-              ))}
+              </div>
+            ))}
           </div>
-        </section>
-      )}
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-950">Availability</h3>
+          <p className="text-sm text-slate-500">Default status is attending until a player changes it.</p>
+          <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+            <SmallStat label="Available" value={availablePlayers} />
+            <SmallStat label="Unsure" value={0} />
+            <SmallStat label="Out" value={unavailablePlayers} />
+          </div>
+          <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-green-500" style={{ width: expectedPlayers > 0 ? `${(availablePlayers / expectedPlayers) * 100}%` : '0%' }} />
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Detailed availability and attendance workflows are prepared as dedicated screens.</p>
+        </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-3">
+        <Panel title="Upcoming Sessions" className="xl:col-span-1">
+          <div className="space-y-2">
+            {upcomingSessions.length === 0 ? <EmptyState text="No sessions planned." /> : upcomingSessions.slice(0, 5).map(session => (
+              <div key={session.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-slate-950">{session.title}</p>
+                  <p className="text-xs text-slate-500">{formatDate(session.datum)}{session.startTime ? ` - ${session.startTime}` : ''}</p>
+                </div>
+                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-500 shadow-sm">{teams.find(t => t.id === session.teamId)?.name ?? 'Team'}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Players at Risk">
+          <EmptyState text="ACWR risk list will be powered by the Load Monitor data." />
+        </Panel>
+
+        <Panel title="Alerts">
+          <div className="space-y-2">
+            {alerts.length === 0 ? <EmptyState text="No alerts right now." /> : alerts.map(alert => (
+              <div key={alert} className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm font-medium text-amber-900">
+                {alert}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-950">Team structure</h3>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <SmallStat label="Teams" value={teams.length} />
+          <SmallStat label="Groups" value={groups.length} />
+          <SmallStat label="Players" value={roster.length} />
+        </div>
+      </section>
     </div>
   );
 }
 
-function Stat({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
-  const cls: Record<string, string> = {
-    violet: 'text-violet-400 bg-violet-900/20 border-violet-800/40',
-    sky:    'text-sky-400 bg-sky-900/20 border-sky-800/40',
-    emerald:'text-emerald-400 bg-emerald-900/20 border-emerald-800/40',
-    amber:  'text-amber-400 bg-amber-900/20 border-amber-800/40',
+function MetricCard({ label, value, helper, Icon, tone }: { label: string; value: string | number; helper: string; Icon: React.ElementType; tone: 'green' | 'red' | 'amber' | 'blue' }) {
+  const tones = {
+    green: 'bg-green-50 text-green-700 border-green-100',
+    red: 'bg-red-50 text-red-700 border-red-100',
+    amber: 'bg-amber-50 text-amber-700 border-amber-100',
+    blue: 'bg-blue-50 text-blue-700 border-blue-100',
   };
   return (
-    <div className={`rounded-xl border px-3 py-2.5 ${cls[color] ?? cls.violet}`}>
-      <p className="text-[11px] text-gray-500">{label}</p>
-      <p className="text-2xl font-bold leading-tight">{value}</p>
-      <p className="text-[11px] text-gray-600">{sub}</p>
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-500">{label}</p>
+          <p className="mt-2 text-3xl font-black text-slate-950">{value}</p>
+          <p className="mt-1 text-xs text-slate-500">{helper}</p>
+        </div>
+        <div className={`rounded-2xl border p-2.5 ${tones[tone]}`}>
+          <Icon size={20} />
+        </div>
+      </div>
     </div>
   );
+}
+
+function Panel({ title, className = '', children }: { title: string; className?: string; children: React.ReactNode }) {
+  return (
+    <div className={`rounded-3xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
+      <h3 className="text-lg font-bold text-slate-950">{title}</h3>
+      <div className="mt-4">{children}</div>
+    </div>
+  );
+}
+
+function SmallStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+      <p className="text-2xl font-black text-slate-950">{value}</p>
+      <p className="text-xs font-semibold text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">{text}</div>;
+}
+
+function formatDate(iso: string) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
