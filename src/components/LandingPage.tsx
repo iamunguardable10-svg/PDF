@@ -108,18 +108,15 @@ const PLANS: Plan[] = [
 
 const FINAL_STATES = ['Present', 'Late', 'Partial', 'Excused', 'Unexcused'];
 const REEL_STEPS = ['Plan session', 'Collect exceptions', 'Finalize attendance', 'Read load'];
+const LOAD_POINTS = [34, 52, 46, 72, 64, 88, 58, 76, 62, 94];
 
 export function LandingPage({ onStart, onGuest }: Props) {
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#05060a] text-white">
       <style>{`
         @keyframes tl-float {
-          0%, 100% { transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(-7deg); }
-          50% { transform: translate3d(0, -18px, 0) rotateX(3deg) rotateY(7deg); }
-        }
-        @keyframes tl-orbit {
-          0% { transform: rotate(0deg) translateX(16px) rotate(0deg); }
-          100% { transform: rotate(360deg) translateX(16px) rotate(-360deg); }
+          0%, 100% { transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(-5deg); }
+          50% { transform: translate3d(0, -14px, 0) rotateX(2deg) rotateY(5deg); }
         }
         @keyframes tl-scan {
           0% { transform: translateX(-110%); opacity: 0; }
@@ -128,8 +125,8 @@ export function LandingPage({ onStart, onGuest }: Props) {
           100% { transform: translateX(110%); opacity: 0; }
         }
         @keyframes tl-pulse-line {
-          0%, 100% { width: 22%; opacity: .45; }
-          50% { width: 92%; opacity: 1; }
+          0%, 100% { width: 26%; opacity: .45; }
+          50% { width: 94%; opacity: 1; }
         }
         @keyframes tl-reel {
           0%, 20% { transform: translateY(0); }
@@ -141,6 +138,10 @@ export function LandingPage({ onStart, onGuest }: Props) {
         @keyframes tl-glow {
           0%, 100% { opacity: .35; transform: scale(.98); }
           50% { opacity: .75; transform: scale(1.04); }
+        }
+        @keyframes tl-risk {
+          0%, 100% { box-shadow: 0 0 0 rgba(251, 146, 60, 0); }
+          50% { box-shadow: 0 0 34px rgba(251, 146, 60, .32); }
         }
       `}</style>
 
@@ -173,17 +174,17 @@ export function LandingPage({ onStart, onGuest }: Props) {
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.12),transparent_32%),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:100%_100%,56px_56px,56px_56px]" />
           </div>
 
-          <div className="relative mx-auto grid max-w-7xl gap-14 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div className="relative mx-auto grid max-w-7xl gap-14 lg:grid-cols-[0.88fr_1.12fr] lg:items-center">
             <div>
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-violet-400/25 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-100 shadow-xl shadow-violet-950/30">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]" />
-                Live product preview · Coach workflow in 30 seconds
+                Product preview · sessions, attendance and load in one view
               </div>
               <h1 className="max-w-4xl text-5xl font-black tracking-tight text-white sm:text-7xl lg:text-8xl">
-                See the whole team week in one motion.
+                Know who is coming, who played and who is at risk.
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-8 text-gray-400 sm:text-lg">
-                TeamLoad turns training plans, athlete availability, coach-final attendance and load monitoring into one visual operating system for serious teams.
+                TeamLoad gives coaches one operating screen for the week: plan sessions, see athlete exceptions, finalize attendance and turn participation into load context.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <button onClick={onGuest} className="rounded-2xl bg-violet-500 px-7 py-4 text-sm font-black text-white shadow-2xl shadow-violet-950/50 transition-all hover:bg-violet-400 hover:shadow-violet-800/40 active:scale-[0.98]">
@@ -194,9 +195,9 @@ export function LandingPage({ onStart, onGuest }: Props) {
                 </button>
               </div>
               <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
-                <Metric value="4" label="workflow layers" />
+                <Metric value="15" label="players tracked" />
                 <Metric value="5" label="final states" />
-                <Metric value="1" label="coach command center" />
+                <Metric value="2" label="load alerts" />
               </div>
             </div>
 
@@ -311,46 +312,46 @@ export function LandingPage({ onStart, onGuest }: Props) {
 
 function CinematicHero() {
   return (
-    <div className="relative min-h-[620px] perspective-[1400px]">
-      <div className="absolute inset-x-4 bottom-20 h-24 rounded-[100%] bg-violet-500/20 blur-3xl" style={{ animation: 'tl-glow 4.5s ease-in-out infinite' }} />
+    <div className="relative min-h-[660px] perspective-[1400px]">
+      <div className="absolute inset-x-4 bottom-16 h-28 rounded-[100%] bg-violet-500/20 blur-3xl" style={{ animation: 'tl-glow 4.5s ease-in-out infinite' }} />
 
-      <div className="absolute left-0 top-10 hidden w-48 rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-4 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl lg:block" style={{ animation: 'tl-orbit 12s linear infinite' }}>
-        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Availability</p>
-        <p className="mt-1 text-2xl font-black text-white">12/15</p>
-        <p className="mt-1 text-xs text-emerald-100/70">Expected tonight</p>
+      <div className="absolute -left-2 top-12 hidden w-52 rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-4 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl lg:block">
+        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Tonight</p>
+        <p className="mt-1 text-2xl font-black text-white">12 expected</p>
+        <p className="mt-1 text-xs text-emerald-100/70">2 late · 1 maybe · 1 out</p>
       </div>
 
-      <div className="absolute right-4 top-20 hidden w-52 rounded-3xl border border-amber-400/20 bg-amber-500/10 p-4 shadow-2xl shadow-amber-950/30 backdrop-blur-xl lg:block">
-        <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">Load Watch</p>
-        <p className="mt-1 text-2xl font-black text-white">2 alerts</p>
-        <p className="mt-1 text-xs text-amber-100/70">ACWR elevated</p>
+      <div className="absolute -right-1 top-24 hidden w-56 rounded-3xl border border-orange-400/20 bg-orange-500/10 p-4 shadow-2xl shadow-orange-950/30 backdrop-blur-xl lg:block" style={{ animation: 'tl-risk 3.2s ease-in-out infinite' }}>
+        <p className="text-[10px] font-black uppercase tracking-widest text-orange-300">Coach decision</p>
+        <p className="mt-1 text-2xl font-black text-white">Reduce load</p>
+        <p className="mt-1 text-xs text-orange-100/70">Elias M. ACWR 1.38 after late/partial week</p>
       </div>
 
-      <div className="absolute inset-x-0 top-12 mx-auto max-w-[720px]" style={{ animation: 'tl-float 7s ease-in-out infinite', transformStyle: 'preserve-3d' }}>
+      <div className="absolute inset-x-0 top-8 mx-auto max-w-[760px]" style={{ animation: 'tl-float 7s ease-in-out infinite', transformStyle: 'preserve-3d' }}>
         <div className="relative rotate-[-1deg] rounded-[2rem] border border-white/15 bg-gray-950/90 p-3 shadow-[0_40px_120px_rgba(0,0,0,0.65)] backdrop-blur-2xl">
-          <div className="absolute -inset-0.5 -z-10 rounded-[2.1rem] bg-gradient-to-br from-violet-500/60 via-cyan-400/25 to-emerald-400/30 blur-xl" />
+          <div className="absolute -inset-0.5 -z-10 rounded-[2.1rem] bg-gradient-to-br from-violet-500/55 via-cyan-400/25 to-orange-400/25 blur-xl" />
           <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#080a12]">
             <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.04] px-5 py-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-violet-300">Coach Command Center</p>
-                <h3 className="mt-1 text-lg font-black text-white">Munich Hoops Academy</h3>
+                <p className="text-[10px] font-black uppercase tracking-widest text-violet-300">TeamLoad Coach Dashboard</p>
+                <h3 className="mt-1 text-lg font-black text-white">Munich Hoops Academy · U18 Boys</h3>
               </div>
-              <div className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black text-emerald-300">Live demo</div>
+              <div className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black text-emerald-300">Demo data</div>
             </div>
 
-            <div className="grid gap-4 p-5 lg:grid-cols-[1fr_0.72fr]">
+            <div className="grid gap-4 p-5 lg:grid-cols-[0.92fr_1.08fr]">
               <div className="space-y-4">
                 <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-4">
                   <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-cyan-400/20 to-transparent" style={{ animation: 'tl-scan 3.8s ease-in-out infinite' }} />
-                  <div className="relative flex items-center justify-between">
+                  <div className="relative flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Today · 18:30</p>
+                      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Today · 18:30 · Main Court</p>
                       <h4 className="mt-1 text-xl font-black text-white">U18 Practice</h4>
                       <p className="mt-1 text-xs text-gray-500">Defense shell + small-sided games</p>
                     </div>
                     <div className="rounded-2xl bg-violet-500/15 px-4 py-3 text-center">
                       <p className="text-2xl font-black text-violet-200">15</p>
-                      <p className="text-[10px] font-bold uppercase text-violet-300">players</p>
+                      <p className="text-[10px] font-bold uppercase text-violet-300">roster</p>
                     </div>
                   </div>
                 </div>
@@ -358,54 +359,88 @@ function CinematicHero() {
                 <div className="grid grid-cols-3 gap-3">
                   <MiniCard label="Expected" value="12" tone="text-emerald-300" />
                   <MiniCard label="Late" value="2" tone="text-amber-300" />
-                  <MiniCard label="Maybe / No" value="3" tone="text-rose-300" />
+                  <MiniCard label="Maybe / No" value="4" tone="text-rose-300" />
                 </div>
 
-                <div className="space-y-2">
-                  <AvailabilityPreview name="Elias M." status="20 min late" text="School ends later" accent="amber" />
-                  <AvailabilityPreview name="Leo S." status="Maybe" text="Knee tight, decide after warm-up" accent="gray" />
-                  <AvailabilityPreview name="Mika T." status="No" text="Sick" accent="rose" />
+                <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Athlete exceptions</p>
+                    <span className="rounded-full bg-amber-500/15 px-2 py-1 text-[10px] font-black text-amber-300">Coach sees this before practice</span>
+                  </div>
+                  <div className="space-y-2">
+                    <AvailabilityPreview name="Elias M." status="20 min late" text="School ends later" accent="amber" />
+                    <AvailabilityPreview name="Leo S." status="Maybe" text="Knee tight, decide after warm-up" accent="gray" />
+                    <AvailabilityPreview name="Mika T." status="No" text="Sick" accent="rose" />
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-4">
-                <div className="h-32 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Workflow Reel</p>
-                  <div className="mt-3 h-20 overflow-hidden">
-                    <div className="space-y-3" style={{ animation: 'tl-reel 9s ease-in-out infinite' }}>
-                      {REEL_STEPS.map(step => (
-                        <div key={step} className="h-20 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3">
-                          <p className="text-sm font-black text-white">{step}</p>
-                          <div className="mt-3 h-1.5 rounded-full bg-gray-800">
-                            <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ animation: 'tl-pulse-line 2.2s ease-in-out infinite' }} />
-                          </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Final attendance</p>
+                    <div className="mt-3 space-y-2">
+                      {FINAL_STATES.slice(0, 4).map((state, index) => (
+                        <div key={state} className="flex items-center justify-between rounded-xl border border-white/10 bg-gray-900/80 px-3 py-2">
+                          <span className="text-xs font-bold text-gray-300">{state}</span>
+                          <span className="text-xs font-black text-white">{[9, 2, 1, 3][index]}</span>
                         </div>
                       ))}
                     </div>
                   </div>
+
+                  <div className="h-44 overflow-hidden rounded-3xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">What happens next</p>
+                    <div className="mt-3 h-28 overflow-hidden">
+                      <div className="space-y-3" style={{ animation: 'tl-reel 9s ease-in-out infinite' }}>
+                        {REEL_STEPS.map(step => (
+                          <div key={step} className="h-28 rounded-2xl border border-cyan-400/20 bg-gray-950/50 p-3">
+                            <p className="text-sm font-black text-white">{step}</p>
+                            <p className="mt-1 text-xs text-cyan-100/70">TeamLoad keeps the next action visible.</p>
+                            <div className="mt-3 h-1.5 rounded-full bg-gray-800">
+                              <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ animation: 'tl-pulse-line 2.2s ease-in-out infinite' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Coach final attendance</p>
-                  <div className="mt-3 grid grid-cols-1 gap-2">
-                    {FINAL_STATES.slice(0, 4).map((state, index) => (
-                      <div key={state} className="flex items-center justify-between rounded-xl border border-white/10 bg-gray-900/80 px-3 py-2">
-                        <span className="text-xs font-bold text-gray-300">{state}</span>
-                        <span className="text-xs font-black text-white">{[9, 2, 1, 3][index]}</span>
+                <div className="rounded-3xl border border-orange-400/25 bg-orange-400/10 p-4 shadow-2xl shadow-orange-950/20">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-orange-300">Load monitor</p>
+                      <h4 className="mt-1 text-lg font-black text-white">Attendance becomes load context</h4>
+                      <p className="mt-1 text-xs leading-5 text-orange-100/70">Late, partial and missed sessions are visible before the next training decision.</p>
+                    </div>
+                    <span className="rounded-full border border-orange-400/30 bg-orange-500/15 px-2.5 py-1 text-[10px] font-black text-orange-200">ACWR 1.38</span>
+                  </div>
+
+                  <div className="mt-5 flex h-32 items-end gap-2 rounded-2xl border border-white/10 bg-gray-950/55 px-3 pb-3 pt-5">
+                    {LOAD_POINTS.map((height, index) => (
+                      <div key={index} className="relative flex flex-1 justify-center">
+                        {index === 5 && <span className="absolute -top-5 text-[9px] font-black text-orange-300">risk</span>}
+                        <div className={`w-full rounded-t-lg ${height > 82 ? 'bg-gradient-to-t from-orange-500 to-red-400' : 'bg-gradient-to-t from-violet-500 to-cyan-400'}`} style={{ height }} />
                       </div>
                     ))}
                   </div>
-                </div>
 
-                <div className="rounded-3xl border border-orange-400/20 bg-orange-400/10 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-orange-300">Load context</p>
-                  <div className="mt-3 flex items-end gap-2">
-                    {[34, 58, 42, 74, 62, 88, 52].map((height, index) => (
-                      <div key={index} className="flex-1 rounded-t-lg bg-gradient-to-t from-orange-500 to-violet-400" style={{ height }} />
-                    ))}
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <LoadChip label="Optimal" value="6" tone="green" />
+                    <LoadChip label="Elevated" value="2" tone="amber" />
+                    <LoadChip label="Return" value="1" tone="blue" />
                   </div>
-                  <p className="mt-3 text-xs text-orange-100/70">Participation drives load decisions.</p>
                 </div>
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 bg-white/[0.025] px-5 py-3">
+              <div className="grid gap-2 text-[11px] font-bold text-gray-400 sm:grid-cols-4">
+                <span>1. Plan session</span>
+                <span>2. Athletes report exceptions</span>
+                <span>3. Coach finalizes attendance</span>
+                <span>4. Load graph updates context</span>
               </div>
             </div>
           </div>
@@ -429,6 +464,20 @@ function MiniCard({ label, value, tone }: { label: string; value: string; tone: 
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
       <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{label}</p>
       <p className={`mt-1 text-2xl font-black ${tone}`}>{value}</p>
+    </div>
+  );
+}
+
+function LoadChip({ label, value, tone }: { label: string; value: string; tone: 'green' | 'amber' | 'blue' }) {
+  const tones = {
+    green: 'border-emerald-700/50 bg-emerald-950/30 text-emerald-300',
+    amber: 'border-amber-700/50 bg-amber-950/30 text-amber-300',
+    blue: 'border-blue-700/50 bg-blue-950/30 text-blue-300',
+  };
+  return (
+    <div className={`rounded-xl border px-2 py-2 ${tones[tone]}`}>
+      <p className="text-base font-black leading-none">{value}</p>
+      <p className="mt-1 text-[9px] font-black uppercase tracking-wide opacity-80">{label}</p>
     </div>
   );
 }
