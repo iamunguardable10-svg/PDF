@@ -15,6 +15,19 @@ type WorkflowStep = {
   text: string;
 };
 
+type BuyerSignal = {
+  title: string;
+  text: string;
+};
+
+type Plan = {
+  name: string;
+  price: string;
+  description: string;
+  features: string[];
+  highlighted?: boolean;
+};
+
 const FEATURES: Feature[] = [
   {
     eyebrow: 'Planning',
@@ -53,6 +66,43 @@ const WORKFLOW: WorkflowStep[] = [
     step: '03',
     title: 'Coach operates attendance',
     text: 'Exceptions and final statuses sit in one operational board, ready for matchday or practice.',
+  },
+];
+
+const BUYER_SIGNALS: BuyerSignal[] = [
+  {
+    title: 'For head coaches',
+    text: 'Stop chasing replies before every practice and know the expected roster before you arrive at the gym.',
+  },
+  {
+    title: 'For academy coordinators',
+    text: 'Create one shared operating view across teams, coaches and player groups without another spreadsheet layer.',
+  },
+  {
+    title: 'For performance staff',
+    text: 'Connect attendance, partial participation and workload so missed or modified sessions are not invisible.',
+  },
+];
+
+const PLANS: Plan[] = [
+  {
+    name: 'Demo',
+    price: 'Free',
+    description: 'Try the workflow locally before inviting a team.',
+    features: ['Sample club data', 'Coach and athlete flows', 'Local demo mode'],
+  },
+  {
+    name: 'Team',
+    price: '9-29 EUR / month',
+    description: 'For one serious team that needs shared availability and attendance.',
+    features: ['Cloud sync', 'Team sessions', 'Availability exceptions', 'Coach-final attendance'],
+    highlighted: true,
+  },
+  {
+    name: 'Club',
+    price: 'Custom',
+    description: 'For multi-team academies and clubs with staff permissions.',
+    features: ['Departments', 'Multi-coach roles', 'Exports and reports', 'Load analytics'],
   },
 ];
 
@@ -189,6 +239,38 @@ export function LandingPage({ onStart, onGuest }: Props) {
           </div>
         </section>
 
+        <section className="border-y border-white/10 bg-white/[0.02] px-5 py-16">
+          <div className="mx-auto max-w-6xl">
+            <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">Who buys this</p>
+                <h2 className="mt-3 text-3xl font-black text-white sm:text-5xl">Built for the person who owns the weekly chaos.</h2>
+                <p className="mt-5 text-sm leading-7 text-gray-400">
+                  The first customer is not a casual athlete. It is the coach, coordinator or performance lead who needs fewer excuses, cleaner attendance and better load context.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                {BUYER_SIGNALS.map(signal => <BuyerCard key={signal.title} signal={signal} />)}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="px-5 py-20">
+          <div className="mx-auto max-w-6xl">
+            <div className="max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-300">Commercial direction</p>
+              <h2 className="mt-3 text-3xl font-black text-white sm:text-5xl">Start free, then pay for shared team operations.</h2>
+              <p className="mt-5 text-sm leading-7 text-gray-400">
+                Pricing is not live yet. This direction makes the business model clear: demo is free, real cloud-synced team usage becomes the paid product.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 lg:grid-cols-3">
+              {PLANS.map(plan => <PlanCard key={plan.name} plan={plan} />)}
+            </div>
+          </div>
+        </section>
+
         <section className="px-5 pb-24">
           <div className="mx-auto max-w-6xl rounded-[2rem] border border-violet-400/20 bg-gradient-to-br from-violet-500/15 via-white/[0.04] to-cyan-500/10 p-8 text-center sm:p-12">
             <p className="text-xs font-bold uppercase tracking-widest text-violet-200">Ready for the next build step</p>
@@ -252,6 +334,34 @@ function FeatureCard({ feature }: { feature: Feature }) {
       <p className="text-[10px] font-black uppercase tracking-widest text-violet-300">{feature.eyebrow}</p>
       <h3 className="mt-3 text-lg font-black text-white">{feature.title}</h3>
       <p className="mt-3 text-sm leading-6 text-gray-400">{feature.text}</p>
+    </div>
+  );
+}
+
+function BuyerCard({ signal }: { signal: BuyerSignal }) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-gray-950/70 p-5">
+      <h3 className="text-lg font-black text-white">{signal.title}</h3>
+      <p className="mt-3 text-sm leading-6 text-gray-400">{signal.text}</p>
+    </div>
+  );
+}
+
+function PlanCard({ plan }: { plan: Plan }) {
+  return (
+    <div className={`rounded-3xl border p-6 ${plan.highlighted ? 'border-violet-400/50 bg-violet-500/10 shadow-2xl shadow-violet-950/30' : 'border-white/10 bg-white/[0.03]'}`}>
+      {plan.highlighted && <p className="mb-3 w-fit rounded-full bg-violet-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-white">Likely first paid plan</p>}
+      <h3 className="text-xl font-black text-white">{plan.name}</h3>
+      <p className="mt-2 text-2xl font-black text-white">{plan.price}</p>
+      <p className="mt-3 text-sm leading-6 text-gray-400">{plan.description}</p>
+      <ul className="mt-5 space-y-2">
+        {plan.features.map(feature => (
+          <li key={feature} className="flex gap-2 text-sm text-gray-300">
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

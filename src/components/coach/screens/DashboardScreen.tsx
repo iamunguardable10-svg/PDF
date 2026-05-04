@@ -89,6 +89,19 @@ export function DashboardScreen() {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-cyan-800/50 bg-cyan-950/20 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-cyan-300">Product readiness</p>
+            <h3 className="mt-1 text-sm font-bold text-white">Demo is ready for inspection. Shared team sync is the next production gate.</h3>
+            <p className="mt-1 text-xs leading-5 text-cyan-100/70">
+              Sessions and core coach flows are usable, but availability and final attendance still need Supabase persistence before TeamLoad can be trusted across coach and athlete devices.
+            </p>
+          </div>
+          <span className="w-fit rounded-full border border-cyan-700 bg-cyan-900/40 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-cyan-200">Next: cloud sync</span>
+        </div>
+      </section>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Available" value={loading && !demoMode ? '...' : String(demoMode ? demoAvailable : roster.length)} sub="players" color="emerald" />
         <Stat label="Unsure / Out" value={loading && !demoMode ? '...' : String(demoMode ? demoUnsure + demoOut : 0)} sub="availability" color="amber" />
