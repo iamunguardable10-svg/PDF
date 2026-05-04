@@ -4,36 +4,46 @@ import { CalendarView } from '../../calendar/CalendarView';
 import type { CoachOutletContext } from '../CoachShell';
 import type { CalEvent } from '../../../types/calEvent';
 import type { AttendanceSession, AttendanceTeam } from '../../../types/attendance';
+import { canEditSession, isSessionAssignedToCoach, roleLabel } from '../../../lib/rolePermissions';
 
-type FilterMode = 'mine' | 'team' | 'department' | 'all';
+type FilterMode = 'mine' | 'editable' | 'team' | 'department' | 'all';
 
 export function CalendarScreen() {
-  const { user, sessions, teams, departments, loading } = useOutletContext<CoachOutletContext>();
+  const { user, sessions, teams, departments, loading, coachContext, permissions } = useOutletContext<CoachOutletContext>();
   const [filter, setFilter] = useState<FilterMode>('mine');
 
+  const sessionRows = useMemo(() => {
+    return sessions.map(session => ({
+      session,
+      assigned: isSessionAssignedToCoach(session, teams, user.id, coachContext),
+      editable: canEditSession(session, teams, user.id, permissions, coachContext),
+    }));
+  }, [coachContext, permissions, sessions, teams, user.id]);
+
   const assignedSessions = useMemo(
-    () => sessions.filter(session => isAssignedSession(session, teams, user.id)),
-    [sessions, teams, user.id]
+    () => sessionRows.filter(row => row.assigned).map(row => row.session),
+    [sessionRows]
   );
 
-  const visibleSessions = useMemo(() => {
-    if (filter === 'mine') return assignedSessions;
-    if (filter === 'team') return sessions.filter(session => {
-      const team = teams.find(t => t.id === session.teamId);
-      return session.trainerId === user.id || team?.trainerId === user.id;
+  const visibleRows = useMemo(() => {
+    if (filter === 'mine') return sessionRows.filter(row => row.assigned);
+    if (filter === 'editable') return sessionRows.filter(row => row.editable);
+    if (filter === 'team') return sessionRows.filter(row => {
+      const team = teams.find(t => t.id === row.session.teamId);
+      return row.assigned || row.session.trainerId === user.id || team?.trainerId === user.id;
     });
     if (filter === 'department') {
       const myTeamDepartmentIds = new Set(
         teams.filter(team => team.trainerId === user.id && team.departmentId).map(team => team.departmentId)
       );
-      return sessions.filter(session => session.departmentId && myTeamDepartmentIds.has(session.departmentId));
+      return sessionRows.filter(row => row.session.departmentId && myTeamDepartmentIds.has(row.session.departmentId));
     }
-    return sessions;
-  }, [assignedSessions, filter, sessions, teams, user.id]);
+    return sessionRows;
+  }, [filter, sessionRows, teams, user.id]);
 
   const events = useMemo(
-    () => visibleSessions.map(session => toCalendarEvent(session, teams, assignedSessions.some(item => item.id === session.id))),
-    [assignedSessions, teams, visibleSessions]
+    () => visibleRows.map(row => toCalendarEvent(row.session, teams, row.assigned, row.editable)),
+    [teams, visibleRows]
   );
 
   const today = new Date().toISOString().split('T')[0];
@@ -48,11 +58,12 @@ export function CalendarScreen() {
           <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">TeamLoad</p>
           <h2 className="mt-1 text-2xl font-black text-white">Calendar</h2>
           <p className="mt-1 text-sm text-gray-400">
-            Coach planning calendar. Sessions assigned to you are highlighted and shown first.
+            Coach planning calendar for {roleLabel(permissions.role)}. Assigned and editable sessions are prioritized.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <FilterButton active={filter === 'mine'} onClick={() => setFilter('mine')}>My sessions</FilterButton>
+          <FilterButton active={filter === 'editable'} onClick={() => setFilter('editable')}>Editable</FilterButton>
           <FilterButton active={filter === 'team'} onClick={() => setFilter('team')}>My teams</FilterButton>
           <FilterButton active={filter === 'department'} onClick={() => setFilter('department')}>Department</FilterButton>
           <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>All</FilterButton>
@@ -60,8 +71,8 @@ export function CalendarScreen() {
       </div>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <SummaryCard label="Assigned" value={String(assignedSessions.length)} text="Sessions directly assigned to you." tone="violet" />
-        <SummaryCard label="Visible" value={String(visibleSessions.length)} text={`Current filter: ${filter}.`} tone="cyan" />
+        <SummaryCard label="Assigned" value={String(sessionRows.filter(row => row.assigned).length)} text="Sessions directly assigned to you." tone="violet" />
+        <SummaryCard label="Editable" value={String(sessionRows.filter(row => row.editable).length)} text="Sessions your role may manage." tone="cyan" />
         <SummaryCard label="Departments" value={String(departments.length)} text="Department context available." tone="emerald" />
       </section>
 
@@ -94,14 +105,9 @@ export function CalendarScreen() {
   );
 }
 
-function isAssignedSession(session: AttendanceSession, teams: AttendanceTeam[], userId: string) {
+function toCalendarEvent(session: AttendanceSession, teams: AttendanceTeam[], isAssigned: boolean, isEditable: boolean): CalEvent {
   const team = teams.find(item => item.id === session.teamId);
-  return session.trainerId === userId || team?.trainerId === userId;
-}
-
-function toCalendarEvent(session: AttendanceSession, teams: AttendanceTeam[], isAssigned: boolean): CalEvent {
-  const team = teams.find(item => item.id === session.teamId);
-  const color = isAssigned ? '#a78bfa' : team?.color ?? '#64748b';
+  const color = isAssigned ? '#a78bfa' : isEditable ? '#22d3ee' : team?.color ?? '#64748b';
   return {
     id: session.id,
     sourceId: session.id,
@@ -111,12 +117,12 @@ function toCalendarEvent(session: AttendanceSession, teams: AttendanceTeam[], is
     startTime: session.startTime ?? '18:00',
     endTime: session.endTime ?? fallbackEndTime(session.startTime ?? '18:00'),
     color,
-    bgColor: isAssigned ? '#4c1d9533' : `${color}22`,
+    bgColor: isAssigned ? '#4c1d9533' : isEditable ? '#164e6333' : `${color}22`,
     teamId: session.teamId,
     teamName: team?.name,
     departmentId: session.departmentId ?? team?.departmentId,
     trainingType: session.trainingType || undefined,
-    coachName: isAssigned ? 'Assigned to you' : undefined,
+    coachName: isAssigned ? 'Assigned to you' : isEditable ? 'Editable' : undefined,
   };
 }
 
