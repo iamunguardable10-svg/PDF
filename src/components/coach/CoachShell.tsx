@@ -84,9 +84,11 @@ interface Props {
   user: User;
   trainerName: string;
   onBack: () => void;
+  initialDemoMode?: boolean;
+  lockDemoMode?: boolean;
 }
 
-export function CoachShell({ user, trainerName, onBack }: Props) {
+export function CoachShell({ user, trainerName, onBack, initialDemoMode = false, lockDemoMode = false }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -94,11 +96,11 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
   const [departments,  setDepartments]  = useState<Department[]>([]);
   const [coachName,    setCoachName]    = useState(trainerName);
   const [coachContext, setCoachContext] = useState<CoachContext | null>(null);
-  const [demoMode,     setDemoMode]     = useState(false);
+  const [demoMode,     setDemoModeState] = useState(initialDemoMode);
 
   const [teams,    setTeams]    = useState<AttendanceTeam[]>([]);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [loading,  setLoading]  = useState(!initialDemoMode);
 
   const [roster, setRoster] = useState<ManagedAthlete[]>([]);
   const [groups, setGroups] = useState<AthleteGroup[]>([]);
@@ -115,7 +117,19 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
   const activeRoster = demoMode ? demoData.roster : roster;
   const activeGroups = demoMode ? demoData.groups : groups;
 
+  const setDemoMode = useCallback((value: boolean) => {
+    if (lockDemoMode) {
+      setDemoModeState(true);
+      return;
+    }
+    setDemoModeState(value);
+  }, [lockDemoMode]);
+
   const reload = useCallback(async () => {
+    if (lockDemoMode) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const [ctx, orgData, ss, profileRow] = await Promise.all([
       loadMyCoachContext(user.id),
@@ -142,11 +156,12 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
     }
 
     setLoading(false);
-  }, [user.id]);
+  }, [lockDemoMode, user.id]);
 
   useEffect(() => { reload(); }, [reload]);
 
   useEffect(() => {
+    if (lockDemoMode) return;
     const saved = loadRoster();
     setRoster(saved.athletes);
     setGroups(saved.groups);
@@ -166,7 +181,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
         saveRoster(mapped);
       }
     });
-  }, [user.id]);
+  }, [lockDemoMode, user.id]);
 
   async function onCreateDepartment(name: string, sport?: string) {
     if (demoMode || !org || !permissions.canManageDepartments) return;
@@ -236,8 +251,9 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setDemoMode(!demoMode)}
-              title="Toggle demo data"
-              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${demoMode ? 'bg-green-900/40 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}
+              disabled={lockDemoMode}
+              title={lockDemoMode ? 'Demo preview is locked for local demo mode' : 'Toggle demo data'}
+              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${demoMode ? 'bg-green-900/40 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'} ${lockDemoMode ? 'cursor-not-allowed opacity-80' : ''}`}
             >
               Demo {demoMode ? 'on' : 'off'}
             </button>

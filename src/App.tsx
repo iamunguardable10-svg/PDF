@@ -36,6 +36,17 @@ import type { AppMode } from './types/appMode';
 import type { AthleteProfile } from './types/profile';
 import type { User } from '@supabase/supabase-js';
 
+const DEMO_COACH_USER = {
+  id: 'teamload-demo-coach',
+  aud: 'authenticated',
+  role: 'authenticated',
+  email: 'demo@teamload.local',
+  app_metadata: {},
+  user_metadata: { name: 'Demo Coach' },
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-01T00:00:00.000Z',
+} as User;
+
 function LoadingSpinner() {
   return (
     <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
@@ -98,14 +109,30 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const loggedInUser = user && user !== 'loading' ? user as User : null;
+  const demoCoachActive = isGuest && appMode === 'coach';
+  const coachUser = loggedInUser ?? (demoCoachActive ? DEMO_COACH_USER : null);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setCloudReady(false);
   };
 
-  const handleGuestMode = () => {
+  const activateDemoCoach = () => {
     localStorage.setItem('fitfuel_guest', '1');
+    localStorage.setItem('fitfuel_seen_landing', '1');
+    localStorage.setItem('fitfuel_tour_done', '1');
+    localStorage.setItem('teamload_tour_done', '1');
+    saveAppMode('coach');
     setIsGuest(true);
+    setAppMode('coach');
+    setShowLanding(false);
+    setShowTour(false);
+    navigate('/coach/dashboard', { replace: true });
+  };
+
+  const handleGuestMode = () => {
+    activateDemoCoach();
   };
 
   const handleLoggedIn = () => {
@@ -125,6 +152,7 @@ function App() {
       localStorage.setItem('teamload_tour_done', '1');
       setShowTour(false);
       if (loggedInUser && !isGuest) navigate('/coach/dashboard', { replace: true });
+      else if (isGuest) navigate('/coach/dashboard', { replace: true });
     } else if ((mode === 'athlete' || mode === 'solo') && profile.onboardingCompleted) {
       navigate('/athlete', { replace: true });
     }
@@ -147,7 +175,6 @@ function App() {
     saveProfile(p);
   };
 
-  const loggedInUser = user && user !== 'loading' ? user as User : null;
   const userId = loggedInUser && !isGuest ? loggedInUser.id : null;
   const isCoachRoute = location.pathname.startsWith('/coach');
   const isTrainerRoute = location.pathname.startsWith('/trainer') || location.hash.startsWith('#trainer');
@@ -175,12 +202,12 @@ function App() {
       <>
         <LandingPage
           onStart={dismissLanding}
-          onGuest={() => { dismissLanding(); handleGuestMode(); }}
+          onGuest={handleGuestMode}
         />
         {showAuthModal && CLOUD_ENABLED && (
           <AuthScreen
             onClose={() => setShowAuthModal(false)}
-            onGuest={() => { dismissLanding(); handleGuestMode(); setShowAuthModal(false); }}
+            onGuest={() => { handleGuestMode(); setShowAuthModal(false); }}
             onLoggedIn={() => { handleLoggedIn(); dismissLanding(); setShowAuthModal(false); }}
           />
         )}
@@ -256,8 +283,8 @@ function App() {
         <Route
           path="/coach/*"
           element={
-            loggedInUser && !isGuest ? (
-              showCoachSetup ? (
+            coachUser ? (
+              !demoCoachActive && loggedInUser && showCoachSetup ? (
                 <CoachSetupWizard
                   userId={loggedInUser.id}
                   onDone={() => {
@@ -271,8 +298,10 @@ function App() {
                 />
               ) : (
                 <CoachShell
-                  user={loggedInUser}
-                  trainerName={profile.name || loggedInUser.email || 'Trainer'}
+                  user={coachUser}
+                  trainerName={demoCoachActive ? 'Demo Coach' : profile.name || loggedInUser?.email || 'Trainer'}
+                  initialDemoMode={demoCoachActive}
+                  lockDemoMode={demoCoachActive}
                   onBack={() => navigate('/select-role')}
                 />
               )
@@ -347,7 +376,7 @@ function ModeRouter({
   loggedInUser: User | null;
   isGuest: boolean;
 }) {
-  if (appMode === 'coach' && loggedInUser && !isGuest) {
+  if (appMode === 'coach' && ((loggedInUser && !isGuest) || isGuest)) {
     return <Navigate to="/coach/dashboard" replace />;
   }
   if (appMode === 'athlete' || appMode === 'solo') {
