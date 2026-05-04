@@ -54,7 +54,7 @@ function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const [showLanding, setShowLanding] = useState(() => !localStorage.getItem('fitfuel_seen_landing'));
-  const [showTour, setShowTour] = useState(() => !localStorage.getItem('fitfuel_tour_done'));
+  const [showTour, setShowTour] = useState(() => !localStorage.getItem('teamload_tour_done'));
   const [profile, setProfile]   = useState<AthleteProfile>(() => loadProfile());
 
   const [appMode, setAppMode]   = useState<AppMode | null>(() => loadAppMode());
@@ -68,6 +68,7 @@ function App() {
       if (session?.user) {
         localStorage.setItem('fitfuel_seen_landing', '1');
         localStorage.setItem('fitfuel_tour_done', '1');
+        localStorage.setItem('teamload_tour_done', '1');
         setShowLanding(false);
         setShowTour(false);
         setIsGuest(false);
@@ -86,6 +87,7 @@ function App() {
       if (session?.user) {
         localStorage.setItem('fitfuel_seen_landing', '1');
         localStorage.setItem('fitfuel_tour_done', '1');
+        localStorage.setItem('teamload_tour_done', '1');
         setShowLanding(false);
         setShowTour(false);
         localStorage.removeItem('fitfuel_guest');
@@ -111,15 +113,21 @@ function App() {
     setIsGuest(false);
     setCloudReady(false);
     const mode = loadAppMode();
-    if (mode === 'coach') navigate('/coach/dashboard');
-    else navigate('/athlete');
+    if (mode === 'coach') navigate('/coach/dashboard', { replace: true });
+    else navigate('/athlete', { replace: true });
   };
 
   const handleSelectMode = (mode: AppMode) => {
     saveAppMode(mode);
     setAppMode(mode);
-    if (mode === 'coach' && loggedInUser) navigate('/coach/dashboard');
-    else if ((mode === 'athlete' || mode === 'solo') && profile.onboardingCompleted) navigate('/athlete');
+    if (mode === 'coach') {
+      localStorage.setItem('fitfuel_tour_done', '1');
+      localStorage.setItem('teamload_tour_done', '1');
+      setShowTour(false);
+      if (loggedInUser && !isGuest) navigate('/coach/dashboard', { replace: true });
+    } else if ((mode === 'athlete' || mode === 'solo') && profile.onboardingCompleted) {
+      navigate('/athlete', { replace: true });
+    }
   };
 
   const handleSwitchRole = () => {
@@ -130,6 +138,7 @@ function App() {
 
   const handleTourDone = () => {
     localStorage.setItem('fitfuel_tour_done', '1');
+    localStorage.setItem('teamload_tour_done', '1');
     setShowTour(false);
   };
 
@@ -140,6 +149,10 @@ function App() {
 
   const loggedInUser = user && user !== 'loading' ? user as User : null;
   const userId = loggedInUser && !isGuest ? loggedInUser.id : null;
+  const isCoachRoute = location.pathname.startsWith('/coach');
+  const isTrainerRoute = location.pathname.startsWith('/trainer') || location.hash.startsWith('#trainer');
+  const isInviteRoute = location.pathname.startsWith('/invite') || location.hash.startsWith('#invite/');
+  const shouldShowTour = showTour && !userId && appMode !== 'coach' && !isCoachRoute && !isTrainerRoute && !isInviteRoute;
 
   const trainerHash = location.hash.match(/^#trainer\/(.+)$/)?.[1];
   if (trainerHash) {
@@ -182,7 +195,7 @@ function App() {
         userName={profile.name || loggedInUser?.email || ''}
         userSport={profile.sport || ''}
         onSelect={handleSelectMode}
-        onJoined={() => navigate('/athlete')}
+        onJoined={() => navigate('/athlete', { replace: true })}
       />
     );
   }
@@ -195,7 +208,7 @@ function App() {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 
-  const tourOverlay = showTour && !userId ? <AppTour onDone={handleTourDone} /> : null;
+  const tourOverlay = shouldShowTour ? <AppTour onDone={handleTourDone} /> : null;
 
   const authModalOverlay = showAuthModal && CLOUD_ENABLED ? (
     <AuthScreen
@@ -236,12 +249,12 @@ function App() {
             userName={profile.name || loggedInUser?.email || ''}
             userSport={profile.sport || ''}
             onSelect={handleSelectMode}
-            onJoined={() => navigate('/athlete')}
+            onJoined={() => navigate('/athlete', { replace: true })}
           />
         } />
 
         <Route
-          path="/coach"
+          path="/coach/*"
           element={
             loggedInUser && !isGuest ? (
               showCoachSetup ? (
@@ -289,7 +302,7 @@ function App() {
         </Route>
 
         {(location.hash === '#coach' || location.hash === '#coach-legacy') && (
-          <Route path="*" element={<Navigate to="/coach" replace />} />
+          <Route path="*" element={<Navigate to="/coach/dashboard" replace />} />
         )}
 
         <Route path="/athlete" element={

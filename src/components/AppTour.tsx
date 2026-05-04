@@ -6,54 +6,53 @@ interface Props {
 
 const STEPS = [
   {
-    emoji: '👋',
-    title: 'Willkommen bei FitFuel!',
-    desc: 'Dein persönlicher KI-Assistent für Ernährung und Trainingssteuerung. Hier ein kurzer Überblick.',
+    emoji: '🏀',
+    title: 'Welcome to TeamLoad',
+    desc: 'TeamLoad is the coach workflow for team sports: sessions, availability, final attendance and load context.',
     details: [
-      { icon: '🥗', text: 'Tab "Ernährung" — KI-Ernährungsplan' },
-      { icon: '📊', text: 'Tab "ACWR" — Trainingsbelastung tracken' },
-      { icon: '⚙️', text: 'Profil oben rechts jederzeit ändern' },
+      { icon: '📅', text: 'Sessions: plan practices, games and team events' },
+      { icon: '✅', text: 'Availability: athletes only report exceptions' },
+      { icon: '📊', text: 'Load: use participation context for smarter decisions' },
     ],
   },
   {
-    emoji: '🤖',
-    title: 'KI-Ernährungsplan',
-    desc: 'Vollständig personalisiert auf dein Profil, Niveau und deinen aktuellen ACWR-Wert.',
+    emoji: '📅',
+    title: 'Start with sessions',
+    desc: 'The session calendar is the operational base. Every availability and attendance decision should connect back to a real team event.',
     details: [
-      { icon: '🔥', text: 'Kalorienbedarf steigt bei ACWR >1.3 automatisch (+12% Recovery)' },
-      { icon: '💪', text: 'Leistungssportler: 2,0g Protein/kg · Einsteiger: 1,2g/kg' },
-      { icon: '🛒', text: 'Einkaufsliste wird automatisch mitgeneriert' },
+      { icon: '🧩', text: 'Create trainings, games and recovery blocks' },
+      { icon: '👥', text: 'Assign sessions to the right team or group' },
+      { icon: '📝', text: 'Add coach notes so athletes know the context' },
     ],
   },
   {
-    emoji: '⌚',
-    title: 'Wearable Daten',
-    desc: 'Gib deine täglichen Werte manuell ein — direkt aus deiner Smartwatch-App abgelesen.',
+    emoji: '🙋',
+    title: 'Athletes report exceptions',
+    desc: 'Players are expected by default. They only need to act when something changes.',
     details: [
-      { icon: '✏️', text: 'Klick auf "Bearbeiten" im Wearable-Bereich' },
-      { icon: '📲', text: 'Schritte, Herzrate, Schlaf, Kalorien eintragen' },
-      { icon: '🔄', text: 'Werte fließen sofort in den Ernährungsplan ein' },
+      { icon: '🟢', text: 'Expected: no action needed' },
+      { icon: '🟡', text: 'Maybe or late: reason/context matters' },
+      { icon: '🔴', text: 'No: coach sees the absence before planning' },
     ],
   },
   {
-    emoji: '📋',
-    title: 'Trainer-Plan einlesen',
-    desc: 'Kopiere die Nachricht deines Trainers rein — die KI erkennt Datum, Einheit und Uhrzeit automatisch.',
+    emoji: '🧾',
+    title: 'Coach finalizes attendance',
+    desc: 'Availability is planned intent. Final attendance is the coach-confirmed truth after the session.',
     details: [
-      { icon: '🏆', text: 'Bei jedem Spiel wird Aufwärmen automatisch eingefügt' },
-      { icon: '✍️', text: 'Manuell eintragen: alle TE-Typen inkl. Aufwärmen wählbar' },
-      { icon: '🔔', text: 'Push-Erinnerung nach Training: RPE & Dauer eintragen' },
+      { icon: '✅', text: 'Present, late, partial or absent' },
+      { icon: '🧠', text: 'Final status creates better load context' },
+      { icon: '☁️', text: 'Shared cloud persistence is the next production gate' },
     ],
   },
   {
-    emoji: '📈',
-    title: 'ACWR verstehen',
-    desc: 'Der ACWR misst deine aktuelle Belastung (7 Tage) im Verhältnis zu deiner Fitness (28 Tage).',
+    emoji: '🧭',
+    title: 'Use the Coach Workspace first',
+    desc: 'The newest TeamLoad product path is the Coach Workspace. Older personal or legacy areas are secondary and mainly useful for testing.',
     details: [
-      { icon: '🟢', text: 'Optimal: 0.8 – 1.3 · geringes Verletzungsrisiko' },
-      { icon: '🔴', text: 'High Risk: >1.3 · Regeneration priorisieren' },
-      { icon: '🔵', text: 'Low Risk: <0.8 · zu wenig Reiz, Fitness baut ab' },
-      { icon: '📅', text: 'TL = RPE × Dauer (Minuten) nach jeder Einheit eintragen' },
+      { icon: '⭐', text: 'Recommended: Coach Dashboard, Sessions, Calendar, Attendance, Load' },
+      { icon: '🧪', text: 'Demo mode: inspect the product with sample club data' },
+      { icon: '🔒', text: 'Real teams need accounts and shared sync' },
     ],
   },
 ];
@@ -66,8 +65,6 @@ export function AppTour({ onDone }: Props) {
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-gray-900 rounded-3xl border border-gray-800 shadow-2xl overflow-hidden">
-
-        {/* Progress bar */}
         <div className="flex">
           {STEPS.map((_, i) => (
             <div
@@ -78,14 +75,12 @@ export function AppTour({ onDone }: Props) {
         </div>
 
         <div className="p-7">
-          {/* Icon + title */}
           <div className="text-center mb-5">
             <div className="text-5xl mb-3">{current.emoji}</div>
             <h2 className="text-xl font-bold text-white">{current.title}</h2>
             <p className="text-gray-400 text-sm mt-2 leading-relaxed">{current.desc}</p>
           </div>
 
-          {/* Details list */}
           <div className="space-y-2.5 mb-6">
             {current.details.map((d, i) => (
               <div key={i} className="flex items-start gap-3 bg-gray-800/60 rounded-xl px-4 py-2.5">
@@ -95,24 +90,23 @@ export function AppTour({ onDone }: Props) {
             ))}
           </div>
 
-          {/* Step dots */}
           <div className="flex gap-1.5 justify-center mb-6">
             {STEPS.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setStep(i)}
                 className={`rounded-full transition-all ${i === step ? 'w-5 h-1.5 bg-violet-500' : 'w-1.5 h-1.5 bg-gray-700 hover:bg-gray-600'}`}
+                aria-label={`Go to tour step ${i + 1}`}
               />
             ))}
           </div>
 
-          {/* Navigation */}
           <div className="flex gap-2">
             <button
               onClick={onDone}
               className="px-4 py-2.5 rounded-xl border border-gray-700 text-gray-500 hover:text-gray-300 text-sm transition-colors"
             >
-              Überspringen
+              Skip
             </button>
             {step > 0 && (
               <button
@@ -126,7 +120,7 @@ export function AppTour({ onDone }: Props) {
               onClick={() => isLast ? onDone() : setStep(s => s + 1)}
               className="flex-1 py-2.5 rounded-xl font-semibold text-sm bg-violet-600 hover:bg-violet-500 text-white transition-colors"
             >
-              {isLast ? "✓ Los geht's" : 'Weiter →'}
+              {isLast ? "Open TeamLoad" : 'Next →'}
             </button>
           </div>
         </div>
