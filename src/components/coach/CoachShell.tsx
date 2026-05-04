@@ -39,6 +39,8 @@ export interface CoachOutletContext {
   loading: boolean;
   roster: ManagedAthlete[];
   groups: AthleteGroup[];
+  demoMode: boolean;
+  setDemoMode: (value: boolean) => void;
   reload: () => void;
   onCreateDepartment: (name: string, sport?: string) => Promise<void>;
   onDeleteDepartment: (deptId: string) => Promise<void>;
@@ -86,6 +88,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
   const [departments,  setDepartments]  = useState<Department[]>([]);
   const [coachName,    setCoachName]    = useState(trainerName);
   const [coachContext, setCoachContext] = useState<CoachContext | null>(null);
+  const [demoMode,     setDemoMode]     = useState(false);
 
   const [teams,    setTeams]    = useState<AttendanceTeam[]>([]);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
@@ -185,7 +188,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
   const outletCtx: CoachOutletContext = {
     user, org, departments, teams, sessions,
     coachContext, coachName, loading,
-    roster, groups, reload,
+    roster, groups, demoMode, setDemoMode, reload,
     onCreateDepartment, onDeleteDepartment,
     onCreateTeam, onDeleteTeam,
     onAssignTeam,
@@ -203,11 +206,18 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
             <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-purple-700 rounded-lg flex items-center justify-center text-xs font-black shadow-lg shadow-violet-900/30 flex-shrink-0">TL</div>
             <div className="min-w-0">
               <span className="text-sm font-semibold text-white leading-none">{org?.name ?? 'TeamLoad'}</span>
-              <span className="text-[11px] text-gray-500 ml-2 hidden sm:inline">{coachName}</span>
+              <span className="text-[11px] text-gray-500 ml-2 hidden sm:inline">{demoMode ? 'Demo roster active' : coachName}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setDemoMode(!demoMode)}
+              title="Toggle demo data"
+              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${demoMode ? 'bg-green-900/40 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}
+            >
+              Demo {demoMode ? 'on' : 'off'}
+            </button>
             <span className={`hidden sm:block text-xs font-medium px-2.5 py-1 rounded-lg ${activeNav.accent} ${activeNav.accentText}`}>{activeNav.label}</span>
             <button onClick={reload} title="Refresh data" className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-gray-800 transition-colors">
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
