@@ -13,7 +13,7 @@ import {
   saveFinalAttendance,
   validateFinalAttendance,
 } from '../../../lib/finalAttendance';
-import type { CoachFinalAttendanceRecord } from '../../../lib/finalAttendance';
+import type { CoachFinalAttendanceInput, CoachFinalAttendanceRecord } from '../../../lib/finalAttendance';
 
 type CoachAvailabilityRow = {
   id: string;
@@ -29,7 +29,6 @@ type CoachAvailabilityRow = {
 };
 
 type StatusSummary = Record<AthleteAvailabilityStatus, number>;
-
 type FinalSummary = Record<FinalAttendanceStatus, number>;
 
 type DemoAvailabilitySpec = {
@@ -59,8 +58,7 @@ export function AttendanceScreen() {
   const upcomingSessions = sessions
     .filter(session => session.datum >= today)
     .sort((a, b) => `${a.datum} ${a.startTime ?? ''}`.localeCompare(`${b.datum} ${b.startTime ?? ''}`));
-  const activeSession = todaySessionsFirst(sessions)[0] ?? upcomingSessions[0] ?? sessions[0];
-  const todaySessions = sessions.filter(session => session.datum === today);
+  const activeSession = todaySessionsFirst(sessions)[0] ?? upcomingSessions[0] ?? sessions[0] ?? null;
 
   const availabilityRows = useMemo(() => buildAvailabilityRows(upcomingSessions, roster, demoMode), [upcomingSessions, roster, demoMode]);
   const summary = useMemo(() => summarize(availabilityRows), [availabilityRows]);
@@ -71,11 +69,9 @@ export function AttendanceScreen() {
 
   function handleFinalize(sessionId: string, athleteId: string, athleteName: string, status: FinalAttendanceStatus) {
     const key = `${sessionId}:${athleteId}`;
-    const input = {
-      status,
-      minutesParticipated: status === 'partial' ? minutesByKey[key] : undefined,
-      note: noteByKey[key],
-    };
+    const input: CoachFinalAttendanceInput = { status, note: noteByKey[key] };
+    if (status === 'partial') input.minutesParticipated = minutesByKey[key] ?? 30;
+
     const validation = validateFinalAttendance(input);
     if (validation) {
       setErrorByKey(prev => ({ ...prev, [key]: validation }));
@@ -124,12 +120,10 @@ export function AttendanceScreen() {
             </div>
           ))}
         </div>
-        {activeSessionFinalRows.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-gray-500">No roster athletes available for final attendance.</div>
-        ) : (
+        {activeSession && activeSessionFinalRows.length > 0 ? (
           <div className="divide-y divide-gray-800">
             {activeSessionFinalRows.map(row => {
-              const key = `${activeSession?.id ?? ''}:${row.athleteId}`;
+              const key = `${activeSession.id}:${row.athleteId}`;
               return (
                 <div key={row.athleteId} className="space-y-3 px-4 py-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -138,14 +132,14 @@ export function AttendanceScreen() {
                       <p className="mt-0.5 text-xs text-gray-500">Current final: {row.finalRecord ? finalAttendanceLabel(row.finalRecord.status) : 'Not finalized'}</p>
                     </div>
                     {row.finalRecord && (
-                      <button onClick={() => handleClearFinal(activeSession!.id, row.athleteId)} className="w-fit rounded-lg border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-400 hover:border-gray-500 hover:text-white">Clear</button>
+                      <button onClick={() => handleClearFinal(activeSession.id, row.athleteId)} className="w-fit rounded-lg border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-400 hover:border-gray-500 hover:text-white">Clear</button>
                     )}
                   </div>
                   <div className="grid gap-2 sm:grid-cols-5">
                     {FINAL_STATUS_OPTIONS.map(option => (
                       <button
                         key={option.status}
-                        onClick={() => handleFinalize(activeSession!.id, row.athleteId, row.athleteName, option.status)}
+                        onClick={() => handleFinalize(activeSession.id, row.athleteId, row.athleteName, option.status)}
                         className={`rounded-xl border px-2.5 py-2 text-xs font-bold transition-colors ${row.finalRecord?.status === option.status ? 'border-green-500 bg-green-900/30 text-green-200' : 'border-gray-800 bg-gray-950/50 text-gray-400 hover:border-gray-600 hover:text-white'}`}
                       >
                         {option.label}
@@ -179,6 +173,8 @@ export function AttendanceScreen() {
               );
             })}
           </div>
+        ) : (
+          <div className="px-4 py-8 text-center text-sm text-gray-500">No roster athletes available for final attendance.</div>
         )}
       </section>
 
@@ -303,10 +299,13 @@ function buildDemoFinalRecords(sessions: AttendanceSession[], roster: ManagedAth
   const session = todaySessionsFirst(sessions)[0] ?? sessions[0];
   const demoRoster = roster.length > 0 ? roster : buildFallbackRoster();
   if (!session || demoRoster.length < 3) return [];
+  const first = demoRoster[0];
+  const second = demoRoster[1];
+  const third = demoRoster[2];
   return [
-    demoFinal(session.id, demoRoster[0].id, demoRoster[0].name, 'present'),
-    demoFinal(session.id, demoRoster[1].id, demoRoster[1].name, 'late', undefined, 'Arrived after school'),
-    demoFinal(session.id, demoRoster[2].id, demoRoster[2].name, 'partial', 45, 'Managed minutes'),
+    demoFinal(session.id, first.id, first.name, 'present'),
+    demoFinal(session.id, second.id, second.name, 'late', undefined, 'Arrived after school'),
+    demoFinal(session.id, third.id, third.name, 'partial', 45, 'Managed minutes'),
   ];
 }
 
