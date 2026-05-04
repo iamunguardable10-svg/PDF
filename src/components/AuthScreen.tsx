@@ -10,6 +10,8 @@ interface Props {
 
 type Mode = 'login' | 'register';
 
+const CORE_FLOW = ['Sessions', 'Availability', 'Final attendance', 'Load context'];
+
 export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -52,7 +54,19 @@ export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
           TL
         </div>
         <h1 className="mt-4 text-2xl font-black text-white">Welcome to TeamLoad</h1>
-        <p className="mt-1 text-sm text-gray-500">Sign in to sync teams, sessions, availability and attendance.</p>
+        <p className="mt-1 text-sm text-gray-500">Sign in when you want a real team workspace with shared cloud data.</p>
+      </div>
+
+      <div className="rounded-3xl border border-violet-800/50 bg-violet-950/15 p-4">
+        <p className="text-xs font-black uppercase tracking-wider text-violet-300">What you are signing into</p>
+        <p className="mt-2 text-sm leading-6 text-gray-300">
+          TeamLoad is built around the coach workflow: plan sessions, collect athlete exceptions, finalize attendance and connect that context to workload decisions.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {CORE_FLOW.map(item => (
+            <span key={item} className="rounded-full border border-violet-800 bg-gray-950/50 px-2.5 py-1 text-[11px] font-bold text-violet-100">{item}</span>
+          ))}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-gray-800 bg-gray-900/80 shadow-2xl shadow-black/30">
@@ -73,9 +87,9 @@ export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 p-6">
-          <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 px-4 py-3">
-            <p className="text-xs font-semibold leading-5 text-violet-100">
-              Coaches should use a real account. Demo mode is useful for testing, but club data needs cloud sync.
+          <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3">
+            <p className="text-xs font-semibold leading-5 text-cyan-100">
+              Use a real account for teams, invites and future shared sync. Use local demo mode only to inspect the product on one device.
             </p>
           </div>
 
@@ -135,7 +149,7 @@ export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
             <button onClick={onGuest} className="text-sm font-semibold text-gray-600 transition-colors hover:text-gray-400">
               Continue in local demo mode
             </button>
-            <p className="mt-1 text-xs text-gray-700">Demo data stays on this device.</p>
+            <p className="mt-1 text-xs text-gray-700">Local demo data stays on this device and is not a real shared team workspace.</p>
           </div>
         ) : null}
       </div>

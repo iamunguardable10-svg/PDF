@@ -16,6 +16,13 @@ const DEMO_PLAYERS = [
   { name: 'Mika T.', status: 'available', risk: 'under', note: 'Return to load' },
 ];
 
+const GUIDE_STEPS = [
+  { label: '1. Sessions', text: 'Plan the upcoming training or game block.' },
+  { label: '2. Availability', text: 'Athletes only report exceptions: late, maybe or no.' },
+  { label: '3. Attendance', text: 'Coach confirms the final status after the session.' },
+  { label: '4. Load', text: 'Use participation context for workload and risk decisions.' },
+];
+
 export function DashboardScreen() {
   const { user, org, departments, teams, sessions, loading, reload, coachContext, roster, groups, demoMode, setDemoMode } =
     useOutletContext<CoachOutletContext>();
@@ -77,7 +84,7 @@ export function DashboardScreen() {
             <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">TeamLoad Coach OS</p>
             <h2 className="mt-2 text-2xl font-black text-white">Coach Operations Dashboard</h2>
             <p className="mt-2 text-sm text-gray-400">
-              Daily overview for sessions, availability, team structure and load risk.
+              This is the command center. Start with sessions, let players report exceptions, then finalize attendance and read load context.
             </p>
           </div>
           <button
@@ -86,6 +93,26 @@ export function DashboardScreen() {
           >
             {demoMode ? 'Demo workspace active' : 'View demo workspace'}
           </button>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-violet-800/60 bg-violet-950/15 p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-violet-300">How to use TeamLoad</p>
+            <h3 className="mt-1 text-sm font-black text-white">Follow the operational loop, not every menu item.</h3>
+            <p className="mt-1 text-xs leading-5 text-violet-100/70">
+              The core product is not the old all-purpose trainer dashboard. The newest workflow is sessions, availability exceptions, coach-final attendance and load context.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:w-[560px]">
+            {GUIDE_STEPS.map(step => (
+              <div key={step.label} className="rounded-xl border border-violet-900/70 bg-gray-950/40 px-3 py-2">
+                <p className="text-xs font-black text-white">{step.label}</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-gray-500">{step.text}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
