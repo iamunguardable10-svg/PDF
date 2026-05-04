@@ -150,6 +150,52 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
+/* ── TeamLoad landing mobile safety pass ───────────────────────────────────
+   The cinematic landing hero is intentionally rich on desktop. On narrow
+   screens, the same 3D composition can overlap the next sections because the
+   mock dashboard is absolutely positioned. Keep the desktop version intact,
+   but collapse the mobile hero into a clean text-first landing section. */
+@media (max-width: 767px) {
+  main > section:first-child {
+    min-height: auto !important;
+    padding-top: 6rem !important;
+    padding-bottom: 3rem !important;
+  }
+
+  main > section:first-child > div.relative.mx-auto.grid {
+    gap: 1.75rem !important;
+  }
+
+  main > section:first-child > div.relative.mx-auto.grid > div:last-child {
+    display: none !important;
+  }
+
+  main > section:first-child h1 {
+    font-size: clamp(2.5rem, 12vw, 4rem) !important;
+    line-height: 0.98 !important;
+    letter-spacing: -0.03em !important;
+  }
+
+  main > section:first-child p {
+    max-width: 100% !important;
+  }
+
+  main > section:nth-of-type(2) {
+    position: relative !important;
+    z-index: 1 !important;
+    margin-top: 0 !important;
+  }
+
+  main > section:nth-of-type(2) h2 {
+    font-size: clamp(2rem, 10vw, 3rem) !important;
+    line-height: 1.05 !important;
+  }
+
+  main > section:nth-of-type(2) > div > div:first-child {
+    gap: 1.5rem !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
