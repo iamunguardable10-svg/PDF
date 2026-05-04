@@ -1,24 +1,25 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface Props {
   onGuest?: () => void;
   onLoggedIn: () => void;
-  onClose?: () => void;  // wenn gesetzt → Modal-Modus
+  onClose?: () => void;
 }
 
 type Mode = 'login' | 'register';
 
 export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
-  const [mode, setMode]         = useState<Mode>('login');
-  const [email, setEmail]       = useState('');
+  const [mode, setMode] = useState<Mode>('login');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState<string | null>(null);
-  const [success, setSuccess]   = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
     setError(null);
     setSuccess(null);
     setLoading(true);
@@ -27,130 +28,125 @@ export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
       if (mode === 'register') {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setSuccess('Bestätigungsmail gesendet — bitte E-Mail prüfen.');
+        setSuccess('Check your email to confirm the account. After that, sign in and choose your role.');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         onLoggedIn();
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      // German-friendly error messages
-      if (msg.includes('Invalid login')) setError('E-Mail oder Passwort falsch.');
-      else if (msg.includes('already registered')) setError('Diese E-Mail ist bereits registriert.');
-      else if (msg.includes('Password should')) setError('Passwort muss mindestens 6 Zeichen haben.');
-      else setError(msg);
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      if (message.includes('Invalid login')) setError('Email or password is incorrect.');
+      else if (message.includes('already registered')) setError('This email is already registered. Try signing in instead.');
+      else if (message.includes('Password should')) setError('Password must contain at least 6 characters.');
+      else setError(message);
     } finally {
       setLoading(false);
     }
   }
 
   const inner = (
-    <div className="w-full max-w-sm space-y-6">
-
-        {/* Logo */}
-        <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-purple-700 rounded-3xl flex items-center justify-center text-3xl mx-auto shadow-lg shadow-violet-900/40">
-            🥗
-          </div>
-          <h1 className="text-2xl font-bold text-white">FitFuel</h1>
-          <p className="text-sm text-gray-500">KI-Gesundheitsassistent für Athleten</p>
+    <div className="w-full max-w-md space-y-6">
+      <div className="text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500 to-cyan-500 text-xl font-black text-white shadow-lg shadow-violet-950/40">
+          TL
         </div>
-
-        {/* Card */}
-        <div className="bg-gray-900/80 rounded-3xl border border-gray-800 overflow-hidden">
-
-          {/* Tab switcher */}
-          <div className="flex border-b border-gray-800">
-            {(['login', 'register'] as Mode[]).map(m => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setError(null); setSuccess(null); }}
-                className={`flex-1 py-3.5 text-sm font-semibold transition-colors ${
-                  mode === m
-                    ? 'text-white border-b-2 border-violet-500'
-                    : 'text-gray-500 hover:text-gray-300'
-                }`}
-              >
-                {m === 'login' ? 'Anmelden' : 'Registrieren'}
-              </button>
-            ))}
-          </div>
-
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1.5">E-Mail</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="max@beispiel.de"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-500 block mb-1.5">Passwort</label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Mindestens 6 Zeichen"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500 transition-colors"
-              />
-            </div>
-
-            {error && (
-              <div className="text-xs text-red-400 bg-red-900/20 border border-red-800/60 rounded-xl px-3 py-2.5">
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="text-xs text-green-400 bg-green-900/20 border border-green-800/60 rounded-xl px-3 py-2.5">
-                {success}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-2xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
-            >
-              {loading ? '…' : mode === 'login' ? 'Anmelden' : 'Konto erstellen'}
-            </button>
-          </form>
-        </div>
-
-        {/* Guest option / Schließen */}
-        <div className="text-center">
-          {onClose ? (
-            <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-400 transition-colors">
-              Abbrechen
-            </button>
-          ) : (
-            <>
-              {onGuest && (
-                <>
-                  <button onClick={onGuest} className="text-sm text-gray-600 hover:text-gray-400 transition-colors">
-                    Als Gast fortfahren →
-                  </button>
-                  <p className="text-xs text-gray-700 mt-1">Daten werden nur lokal gespeichert</p>
-                </>
-              )}
-            </>
-          )}
-        </div>
+        <h1 className="mt-4 text-2xl font-black text-white">Welcome to TeamLoad</h1>
+        <p className="mt-1 text-sm text-gray-500">Sign in to sync teams, sessions, availability and attendance.</p>
       </div>
+
+      <div className="overflow-hidden rounded-3xl border border-gray-800 bg-gray-900/80 shadow-2xl shadow-black/30">
+        <div className="grid grid-cols-2 border-b border-gray-800 bg-gray-950/40">
+          {(['login', 'register'] as Mode[]).map(item => (
+            <button
+              key={item}
+              onClick={() => { setMode(item); setError(null); setSuccess(null); }}
+              className={`py-3.5 text-sm font-bold transition-colors ${
+                mode === item
+                  ? 'border-b-2 border-violet-500 text-white'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              {item === 'login' ? 'Sign in' : 'Create account'}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 p-6">
+          <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 px-4 py-3">
+            <p className="text-xs font-semibold leading-5 text-violet-100">
+              Coaches should use a real account. Demo mode is useful for testing, but club data needs cloud sync.
+            </p>
+          </div>
+
+          <label className="block text-xs font-semibold text-gray-500">
+            Email
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={event => setEmail(event.target.value)}
+              placeholder="coach@example.com"
+              className="mt-1.5 w-full rounded-xl border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm text-white placeholder-gray-600 outline-none transition-colors focus:border-violet-500"
+            />
+          </label>
+
+          <label className="block text-xs font-semibold text-gray-500">
+            Password
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={password}
+              onChange={event => setPassword(event.target.value)}
+              placeholder="At least 6 characters"
+              className="mt-1.5 w-full rounded-xl border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm text-white placeholder-gray-600 outline-none transition-colors focus:border-violet-500"
+            />
+          </label>
+
+          {error && (
+            <div className="rounded-xl border border-rose-800/60 bg-rose-950/30 px-3 py-2.5 text-xs font-semibold text-rose-300">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2.5 text-xs font-semibold text-emerald-300">
+              {success}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-2xl bg-violet-600 py-3 text-sm font-black text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? 'Working...' : mode === 'login' ? 'Sign in to TeamLoad' : 'Create TeamLoad account'}
+          </button>
+        </form>
+      </div>
+
+      <div className="text-center">
+        {onClose ? (
+          <button onClick={onClose} className="text-sm font-semibold text-gray-600 transition-colors hover:text-gray-400">
+            Cancel
+          </button>
+        ) : onGuest ? (
+          <div>
+            <button onClick={onGuest} className="text-sm font-semibold text-gray-600 transition-colors hover:text-gray-400">
+              Continue in local demo mode
+            </button>
+            <p className="mt-1 text-xs text-gray-700">Demo data stays on this device.</p>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 
   if (onClose) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-        onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+        onClick={event => { if (event.target === event.currentTarget) onClose(); }}
       >
         {inner}
       </div>
@@ -158,7 +154,7 @@ export function AuthScreen({ onGuest, onLoggedIn, onClose }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0b0f] p-4">
       {inner}
     </div>
   );
