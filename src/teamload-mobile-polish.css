@@ -1,0 +1,22 @@
+@media (max-width: 767px) {
+  main > section:first-child > div.relative.mx-auto.grid > div:last-child {
+    display: block !important;
+    height: 340px !important;
+    margin-top: 0.5rem !important;
+    overflow: hidden !important;
+    border-radius: 2rem !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    background: rgba(8,10,18,0.7) !important;
+    box-shadow: 0 28px 80px rgba(0,0,0,0.45) !important;
+  }
+
+  main > section:first-child > div.relative.mx-auto.grid > div:last-child > div.relative {
+    width: 760px !important;
+    max-width: none !important;
+    min-height: 660px !important;
+    left: 50% !important;
+    margin-left: -380px !important;
+    transform: scale(0.46) !important;
+    transform-origin: top center !important;
+  }
+}
