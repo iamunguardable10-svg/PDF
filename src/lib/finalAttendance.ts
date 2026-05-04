@@ -91,73 +91,25 @@ export function saveFinalAttendance(sessionId: string, athleteId: string, athlet
   };
   const next = [record, ...records.filter(item => item.id !== record.id)];
   persist(next);
+  void persistFinalAttendanceToCloud(sessionId, athleteId, athleteName, input, record);
   return record;
 }
 
 export async function saveFinalAttendanceAsync(sessionId: string, athleteId: string, athleteName: string, input: CoachFinalAttendanceInput): Promise<CoachFinalAttendanceRecord> {
   const record = saveFinalAttendance(sessionId, athleteId, athleteName, input);
-  if (!CLOUD_ENABLED) return record;
-
-  try {
-    const { data: existing, error: selectError } = await supabase
-      .from('att_records')
-      .select('id')
-      .eq('session_id', sessionId)
-      .or(`athlete_user_id.eq.${athleteId},athlete_roster_id.eq.${athleteId}`)
-      .maybeSingle();
-
-    if (selectError) {
-      console.warn('[saveFinalAttendanceAsync:select]', selectError.message);
-      return record;
-    }
-
-    const patch = {
-      final_status: input.status,
-      finalized_at: record.finalizedAt,
-      final_note: record.note,
-      minutes_participated: input.status === 'partial' ? input.minutesParticipated ?? null : null,
-    };
-
-    if (existing?.id) {
-      const { error } = await supabase.from('att_records').update(patch).eq('id', existing.id);
-      if (error) console.warn('[saveFinalAttendanceAsync:update]', error.message);
-    } else {
-      const { error } = await supabase.from('att_records').insert({
-        id: record.id,
-        session_id: sessionId,
-        athlete_user_id: athleteId,
-        athlete_name: athleteName,
-        ...patch,
-      });
-      if (error) console.warn('[saveFinalAttendanceAsync:insert]', error.message);
-    }
-  } catch (error) {
-    console.warn('[saveFinalAttendanceAsync]', error);
-  }
-
+  await persistFinalAttendanceToCloud(sessionId, athleteId, athleteName, input, record);
   return record;
 }
 
 export function clearFinalAttendance(sessionId: string, athleteId: string): void {
   const next = loadFinalAttendanceRecords().filter(record => record.id !== `${sessionId}:${athleteId}`);
   persist(next);
+  void clearFinalAttendanceInCloud(sessionId, athleteId);
 }
 
 export async function clearFinalAttendanceAsync(sessionId: string, athleteId: string): Promise<void> {
   clearFinalAttendance(sessionId, athleteId);
-  if (!CLOUD_ENABLED) return;
-
-  try {
-    const { error } = await supabase
-      .from('att_records')
-      .update({ final_status: null, finalized_at: null, final_note: '', minutes_participated: null })
-      .eq('session_id', sessionId)
-      .or(`athlete_user_id.eq.${athleteId},athlete_roster_id.eq.${athleteId}`);
-
-    if (error) console.warn('[clearFinalAttendanceAsync]', error.message);
-  } catch (error) {
-    console.warn('[clearFinalAttendanceAsync]', error);
-  }
+  await clearFinalAttendanceInCloud(sessionId, athleteId);
 }
 
 export function validateFinalAttendance(input: CoachFinalAttendanceInput): string | null {
@@ -179,6 +131,69 @@ export function finalAttendanceLabel(status: FinalAttendanceStatus): string {
 function persist(records: CoachFinalAttendanceRecord[]): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
+
+async function persistFinalAttendanceToCloud(
+  sessionId: string,
+  athleteId: string,
+  athleteName: string,
+  input: CoachFinalAttendanceInput,
+  record: CoachFinalAttendanceRecord,
+): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+
+  try {
+    const { data: existing, error: selectError } = await supabase
+      .from('att_records')
+      .select('id')
+      .eq('session_id', sessionId)
+      .or(`athlete_user_id.eq.${athleteId},athlete_roster_id.eq.${athleteId}`)
+      .maybeSingle();
+
+    if (selectError) {
+      console.warn('[persistFinalAttendanceToCloud:select]', selectError.message);
+      return;
+    }
+
+    const patch = {
+      final_status: input.status,
+      finalized_at: record.finalizedAt,
+      final_note: record.note,
+      minutes_participated: input.status === 'partial' ? input.minutesParticipated ?? null : null,
+    };
+
+    if (existing?.id) {
+      const { error } = await supabase.from('att_records').update(patch).eq('id', existing.id);
+      if (error) console.warn('[persistFinalAttendanceToCloud:update]', error.message);
+    } else {
+      const { error } = await supabase.from('att_records').insert({
+        id: record.id,
+        session_id: sessionId,
+        athlete_user_id: athleteId,
+        athlete_name: athleteName,
+        ...patch,
+      });
+      if (error) console.warn('[persistFinalAttendanceToCloud:insert]', error.message);
+    }
+  } catch (error) {
+    console.warn('[persistFinalAttendanceToCloud]', error);
+  }
+}
+
+async function clearFinalAttendanceInCloud(sessionId: string, athleteId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+
+  try {
+    const { error } = await supabase
+      .from('att_records')
+      .update({ final_status: null, finalized_at: null, final_note: '', minutes_participated: null })
+      .eq('session_id', sessionId)
+      .or(`athlete_user_id.eq.${athleteId},athlete_roster_id.eq.${athleteId}`);
+
+    if (error) console.warn('[clearFinalAttendanceInCloud]', error.message);
+  } catch (error) {
+    console.warn('[clearFinalAttendanceInCloud]', error);
+  }
 }
 
 function rowToFinalAttendanceRecord(row: FinalAttendanceRow): CoachFinalAttendanceRecord | null {
