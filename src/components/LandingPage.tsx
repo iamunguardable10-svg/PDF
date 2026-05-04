@@ -122,10 +122,10 @@ export function LandingPage({ onStart, onGuest }: Props) {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={onGuest} className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-gray-400 transition-colors hover:text-white sm:block">
-              Demo testen
+              View demo
             </button>
             <button onClick={onStart} className="rounded-xl bg-white px-4 py-2 text-sm font-black text-gray-950 transition-transform hover:scale-[1.02] active:scale-[0.98]">
-              App öffnen
+              Open TeamLoad
             </button>
           </div>
         </div>
@@ -152,10 +152,10 @@ export function LandingPage({ onStart, onGuest }: Props) {
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <button onClick={onStart} className="rounded-2xl bg-violet-500 px-7 py-4 text-sm font-black text-white shadow-xl shadow-violet-950/40 transition-all hover:bg-violet-400 hover:shadow-violet-900/40 active:scale-[0.98]">
-                  Start building your team hub
+                  Open coach workspace
                 </button>
                 <button onClick={onGuest} className="rounded-2xl border border-white/10 bg-white/[0.03] px-7 py-4 text-sm font-bold text-gray-300 transition-colors hover:border-white/20 hover:text-white">
-                  Explore demo mode
+                  Explore demo workspace
                 </button>
               </div>
               <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
@@ -283,7 +283,7 @@ export function LandingPage({ onStart, onGuest }: Props) {
                 Open TeamLoad
               </button>
               <button onClick={onGuest} className="rounded-2xl border border-white/15 px-7 py-4 text-sm font-bold text-white transition-colors hover:bg-white/10">
-                Try demo first
+                Try demo workspace
               </button>
             </div>
           </div>
