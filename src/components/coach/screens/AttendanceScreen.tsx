@@ -4,7 +4,7 @@ import { useOutletContext } from 'react-router-dom';
 import type { CoachOutletContext } from '../CoachShell';
 import type { AttendanceSession } from '../../../types/attendance';
 import type { ManagedAthlete } from '../../../types/trainerDashboard';
-import type { AthleteAvailabilityRecord, AthleteAvailabilityStatus } from '../../../lib/availability';
+import type { AthleteAvailabilityStatus } from '../../../lib/availability';
 import { loadAvailabilityRecords } from '../../../lib/availability';
 
 type CoachAvailabilityRow = {
@@ -17,10 +17,17 @@ type CoachAvailabilityRow = {
   status: AthleteAvailabilityStatus;
   lateMinutes?: number;
   reason: string;
-  updatedAt: string;
 };
 
 type StatusSummary = Record<AthleteAvailabilityStatus, number>;
+
+type DemoAvailabilitySpec = {
+  sessionIndex: number;
+  athleteIndex: number;
+  status: 'late' | 'maybe' | 'no';
+  reason: string;
+  lateMinutes?: number;
+};
 
 export function AttendanceScreen() {
   const { sessions, teams, roster, demoMode } = useOutletContext<CoachOutletContext>();
@@ -121,7 +128,6 @@ function buildAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAth
         status: record.status,
         lateMinutes: record.lateMinutes,
         reason: record.reason,
-        updatedAt: record.updatedAt,
       };
     })
     .sort(sortRows);
@@ -129,11 +135,11 @@ function buildAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAth
 
 function buildDemoAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAthlete[]): CoachAvailabilityRow[] {
   if (sessions.length === 0 || roster.length === 0) return [];
-  const specs = [
-    { sessionIndex: 0, athleteIndex: 1, status: 'late' as const, lateMinutes: 20, reason: 'Schule endet spaeter' },
-    { sessionIndex: 0, athleteIndex: 3, status: 'maybe' as const, reason: 'Leichte Kniebeschwerden, entscheidet nach Warm-up' },
-    { sessionIndex: 1, athleteIndex: 4, status: 'no' as const, reason: 'Krank' },
-    { sessionIndex: 3, athleteIndex: 2, status: 'late' as const, lateMinutes: 15, reason: 'Bahn verspaetet' },
+  const specs: DemoAvailabilitySpec[] = [
+    { sessionIndex: 0, athleteIndex: 1, status: 'late', lateMinutes: 20, reason: 'Schule endet spaeter' },
+    { sessionIndex: 0, athleteIndex: 3, status: 'maybe', reason: 'Leichte Kniebeschwerden, entscheidet nach Warm-up' },
+    { sessionIndex: 1, athleteIndex: 4, status: 'no', reason: 'Krank' },
+    { sessionIndex: 3, athleteIndex: 2, status: 'late', lateMinutes: 15, reason: 'Bahn verspaetet' },
   ];
   return specs
     .map((spec, index) => {
@@ -149,7 +155,6 @@ function buildDemoAvailabilityRows(sessions: AttendanceSession[], roster: Manage
         status: spec.status,
         lateMinutes: spec.lateMinutes,
         reason: spec.reason,
-        updatedAt: new Date().toISOString(),
       };
     })
     .sort(sortRows);
