@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { CalendarDays, Lock, Plus, ShieldCheck } from 'lucide-react';
 import type { CoachOutletContext } from '../CoachShell';
@@ -33,6 +33,11 @@ export function SessionsScreen() {
 
   const assignedCount = sessionRows.filter(row => row.assigned).length;
   const editableCount = sessionRows.filter(row => row.editable).length;
+  const hasUpcomingSessions = sessions.some(session => session.datum >= today);
+  const emptyTitle = hasUpcomingSessions ? 'No sessions match this filter' : 'No upcoming sessions yet';
+  const emptyText = hasUpcomingSessions
+    ? 'Switch to All visible or Editable to find sessions outside your direct assignment.'
+    : 'Create the first training block so athletes can see what is coming and only report exceptions.';
 
   return (
     <div className="space-y-4">
@@ -55,7 +60,7 @@ export function SessionsScreen() {
         <div className="mb-3 flex items-center justify-between gap-3 px-1">
           <div>
             <p className="text-sm font-bold text-white">Upcoming operational block</p>
-            <p className="text-xs text-gray-500">Default player status is expected/available until they report maybe or no.</p>
+            <p className="text-xs text-gray-500">Default player status is expected/available until they report maybe, late or no.</p>
           </div>
           {permissions.canCreateSessions ? (
             <button className="inline-flex items-center gap-1.5 rounded-xl border border-violet-700 bg-violet-900/30 px-3 py-1.5 text-xs font-bold text-violet-200">
@@ -69,7 +74,7 @@ export function SessionsScreen() {
         </div>
 
         <div className="space-y-2">
-          {sessionRows.length === 0 ? <Empty text="No upcoming sessions match this filter." /> : sessionRows.map(({ session, assigned, editable }) => {
+          {sessionRows.length === 0 ? <Empty title={emptyTitle} text={emptyText} canCreate={permissions.canCreateSessions} /> : sessionRows.map(({ session, assigned, editable }) => {
             const team = teams.find(t => t.id === session.teamId);
             return (
               <div
@@ -109,15 +114,36 @@ export function SessionsScreen() {
 function Header({ title, text }: { title: string; text: string }) {
   return <div><p className="text-xs font-semibold uppercase tracking-wider text-violet-300">TeamLoad</p><h2 className="mt-1 text-2xl font-black text-white">{title}</h2><p className="mt-1 text-sm text-gray-400">{text}</p></div>;
 }
-function Empty({ text }: { text: string }) { return <div className="rounded-xl border border-dashed border-gray-700 bg-gray-800/30 px-4 py-5 text-sm text-gray-500">{text}</div>; }
+function Empty({ title, text, canCreate }: { title: string; text: string; canCreate: boolean }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-violet-800/70 bg-violet-950/15 px-5 py-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-white">{title}</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-400">{text}</p>
+        </div>
+        {canCreate && (
+          <button className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-violet-500 px-3 py-2 text-xs font-black text-white">
+            <Plus size={14} /> Plan first session
+          </button>
+        )}
+      </div>
+      <div className="mt-4 grid gap-2 text-xs text-gray-500 sm:grid-cols-3">
+        <span className="rounded-xl bg-gray-950/40 px-3 py-2">1. Add date, time and team</span>
+        <span className="rounded-xl bg-gray-950/40 px-3 py-2">2. Athletes report only exceptions</span>
+        <span className="rounded-xl bg-gray-950/40 px-3 py-2">3. Coach finalizes attendance</span>
+      </div>
+    </div>
+  );
+}
 function formatDate(iso: string) { return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
-function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button onClick={onClick} className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${active ? 'border-violet-600 bg-violet-900/40 text-violet-200' : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-500 hover:text-white'}`}>{children}</button>;
 }
 function InfoCard({ label, value, text }: { label: string; value: string; text: string }) {
   return <div className="rounded-xl border border-gray-800 bg-gray-900/70 px-4 py-3"><p className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{label}</p><p className="mt-1 text-xl font-black text-white">{value}</p><p className="mt-1 text-xs text-gray-500">{text}</p></div>;
 }
-function Badge({ tone, children }: { tone: 'violet' | 'green' | 'gray'; children: React.ReactNode }) {
+function Badge({ tone, children }: { tone: 'violet' | 'green' | 'gray'; children: ReactNode }) {
   const tones = {
     violet: 'border-violet-700 bg-violet-900/40 text-violet-200',
     green: 'border-green-700 bg-green-900/30 text-green-200',
