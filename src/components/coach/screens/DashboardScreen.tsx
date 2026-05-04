@@ -84,10 +84,25 @@ export function DashboardScreen() {
             onClick={() => setDemoMode(!demoMode)}
             className={`self-start rounded-xl border px-3 py-2 text-xs font-bold transition-colors ${demoMode ? 'border-green-700 bg-green-900/30 text-green-300' : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-violet-500 hover:text-white'}`}
           >
-            {demoMode ? 'Demo data on' : 'Show demo data'}
+            {demoMode ? 'Demo workspace active' : 'View demo workspace'}
           </button>
         </div>
       </section>
+
+      {demoMode && (
+        <section className="rounded-2xl border border-emerald-800/50 bg-emerald-950/20 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">Demo workspace</p>
+              <h3 className="mt-1 text-sm font-bold text-white">Munich Hoops Academy preview</h3>
+              <p className="mt-1 text-xs leading-5 text-emerald-100/70">
+                Use this sample club to inspect the coach workflow before connecting real teams, athletes and shared cloud data.
+              </p>
+            </div>
+            <span className="w-fit rounded-full border border-emerald-700 bg-emerald-900/40 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-200">Sample data</span>
+          </div>
+        </section>
+      )}
 
       <section className="rounded-2xl border border-cyan-800/50 bg-cyan-950/20 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
