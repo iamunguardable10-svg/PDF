@@ -1,11 +1,19 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, HelpCircle, XCircle } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import type { CoachOutletContext } from '../CoachShell';
-import type { AttendanceSession } from '../../../types/attendance';
+import type { AttendanceSession, FinalAttendanceStatus } from '../../../types/attendance';
 import type { ManagedAthlete } from '../../../types/trainerDashboard';
 import type { AthleteAvailabilityStatus } from '../../../lib/availability';
 import { loadAvailabilityRecords } from '../../../lib/availability';
+import {
+  clearFinalAttendance,
+  finalAttendanceLabel,
+  loadFinalAttendanceRecords,
+  saveFinalAttendance,
+  validateFinalAttendance,
+} from '../../../lib/finalAttendance';
+import type { CoachFinalAttendanceInput, CoachFinalAttendanceRecord } from '../../../lib/finalAttendance';
 
 type CoachAvailabilityRow = {
   id: string;
@@ -13,6 +21,7 @@ type CoachAvailabilityRow = {
   sessionTitle: string;
   sessionDate: string;
   sessionTime: string;
+  athleteId: string;
   athleteName: string;
   status: AthleteAvailabilityStatus;
   lateMinutes?: number;
@@ -20,6 +29,7 @@ type CoachAvailabilityRow = {
 };
 
 type StatusSummary = Record<AthleteAvailabilityStatus, number>;
+type FinalSummary = Record<FinalAttendanceStatus, number>;
 
 type DemoAvailabilitySpec = {
   sessionIndex: number;
@@ -29,33 +39,144 @@ type DemoAvailabilitySpec = {
   lateMinutes?: number;
 };
 
+const FINAL_STATUS_OPTIONS: { status: FinalAttendanceStatus; label: string }[] = [
+  { status: 'present', label: 'Present' },
+  { status: 'late', label: 'Late' },
+  { status: 'partial', label: 'Partial' },
+  { status: 'excused_absent', label: 'Excused' },
+  { status: 'unexcused_absent', label: 'Unexcused' },
+];
+
 export function AttendanceScreen() {
   const { sessions, teams, roster, demoMode } = useOutletContext<CoachOutletContext>();
+  const [finalRecords, setFinalRecords] = useState<CoachFinalAttendanceRecord[]>(() => demoMode ? buildDemoFinalRecords(sessions, roster) : loadFinalAttendanceRecords());
+  const [minutesByKey, setMinutesByKey] = useState<Record<string, number>>({});
+  const [noteByKey, setNoteByKey] = useState<Record<string, string>>({});
+  const [errorByKey, setErrorByKey] = useState<Record<string, string>>({});
+
   const today = new Date().toISOString().split('T')[0];
   const upcomingSessions = sessions
     .filter(session => session.datum >= today)
     .sort((a, b) => `${a.datum} ${a.startTime ?? ''}`.localeCompare(`${b.datum} ${b.startTime ?? ''}`));
-  const todaySessions = sessions.filter(session => session.datum === today);
+  const activeSession = todaySessionsFirst(sessions)[0] ?? upcomingSessions[0] ?? sessions[0] ?? null;
 
   const availabilityRows = useMemo(() => buildAvailabilityRows(upcomingSessions, roster, demoMode), [upcomingSessions, roster, demoMode]);
   const summary = useMemo(() => summarize(availabilityRows), [availabilityRows]);
+  const finalSummary = useMemo(() => summarizeFinal(finalRecords), [finalRecords]);
   const exceptionRows = availabilityRows.filter(row => row.status !== 'expected');
   const expectedCount = Math.max(0, estimateExpectedCount(upcomingSessions, roster, teams.length) - exceptionRows.length);
+  const activeSessionFinalRows = activeSession ? buildFinalRows(activeSession, roster, finalRecords, demoMode) : [];
+
+  function handleFinalize(sessionId: string, athleteId: string, athleteName: string, status: FinalAttendanceStatus) {
+    const key = `${sessionId}:${athleteId}`;
+    const input: CoachFinalAttendanceInput = { status, note: noteByKey[key] };
+    if (status === 'partial') input.minutesParticipated = minutesByKey[key] ?? 30;
+
+    const validation = validateFinalAttendance(input);
+    if (validation) {
+      setErrorByKey(prev => ({ ...prev, [key]: validation }));
+      return;
+    }
+    setErrorByKey(prev => ({ ...prev, [key]: '' }));
+    const record = saveFinalAttendance(sessionId, athleteId, athleteName, input);
+    setFinalRecords(prev => [record, ...prev.filter(item => item.id !== record.id)]);
+  }
+
+  function handleClearFinal(sessionId: string, athleteId: string) {
+    const key = `${sessionId}:${athleteId}`;
+    clearFinalAttendance(sessionId, athleteId);
+    setFinalRecords(prev => prev.filter(item => item.id !== key));
+    setErrorByKey(prev => ({ ...prev, [key]: '' }));
+  }
 
   return (
     <div className="space-y-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-green-300">TeamLoad</p>
         <h2 className="mt-1 text-2xl font-black text-white">Attendance</h2>
-        <p className="mt-1 text-sm text-gray-400">Operational availability board. Players are expected by default; only exceptions need action.</p>
+        <p className="mt-1 text-sm text-gray-400">Operational availability before the session, then coach-final attendance after or during the session.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Card label="Expected" value={String(expectedCount)} text="Default: available and planned unless marked otherwise." tone="green" />
         <Card label="Late" value={String(summary.late)} text="Players arriving later, including minute estimate." tone="amber" />
         <Card label="Maybe / No" value={String(summary.maybe + summary.no)} text="Requires a reason before the coach can plan around it." tone="red" />
-        <Card label="Today" value={String(todaySessions.length)} text="Sessions scheduled for today." tone="blue" />
+        <Card label="Finalized" value={String(finalRecords.length)} text="Coach-confirmed attendance records." tone="blue" />
       </div>
+
+      <section className="rounded-2xl border border-gray-800 bg-gray-900/60 overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-800 px-4 py-3">
+          <div>
+            <h3 className="text-sm font-bold text-white">Coach final attendance</h3>
+            <p className="mt-0.5 text-xs text-gray-500">Mark present, late, partial, excused or unexcused for the active session.</p>
+          </div>
+          <span className="rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{activeSession?.title ?? 'No session'}</span>
+        </div>
+        <div className="grid gap-2 border-b border-gray-800 px-4 py-3 sm:grid-cols-5">
+          {FINAL_STATUS_OPTIONS.map(option => (
+            <div key={option.status} className="rounded-xl border border-gray-800 bg-gray-950/60 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{option.label}</p>
+              <p className="mt-1 text-lg font-black text-white">{finalSummary[option.status]}</p>
+            </div>
+          ))}
+        </div>
+        {activeSession && activeSessionFinalRows.length > 0 ? (
+          <div className="divide-y divide-gray-800">
+            {activeSessionFinalRows.map(row => {
+              const key = `${activeSession.id}:${row.athleteId}`;
+              return (
+                <div key={row.athleteId} className="space-y-3 px-4 py-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-white">{row.athleteName}</p>
+                      <p className="mt-0.5 text-xs text-gray-500">Current final: {row.finalRecord ? finalAttendanceLabel(row.finalRecord.status) : 'Not finalized'}</p>
+                    </div>
+                    {row.finalRecord && (
+                      <button onClick={() => handleClearFinal(activeSession.id, row.athleteId)} className="w-fit rounded-lg border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-400 hover:border-gray-500 hover:text-white">Clear</button>
+                    )}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-5">
+                    {FINAL_STATUS_OPTIONS.map(option => (
+                      <button
+                        key={option.status}
+                        onClick={() => handleFinalize(activeSession.id, row.athleteId, row.athleteName, option.status)}
+                        className={`rounded-xl border px-2.5 py-2 text-xs font-bold transition-colors ${row.finalRecord?.status === option.status ? 'border-green-500 bg-green-900/30 text-green-200' : 'border-gray-800 bg-gray-950/50 text-gray-400 hover:border-gray-600 hover:text-white'}`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[150px_1fr]">
+                    <label className="text-xs text-gray-500">
+                      Partial minutes
+                      <input
+                        type="number"
+                        min={1}
+                        max={240}
+                        value={minutesByKey[key] ?? row.finalRecord?.minutesParticipated ?? 30}
+                        onChange={event => setMinutesByKey(prev => ({ ...prev, [key]: Number(event.target.value) }))}
+                        className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-white outline-none focus:border-green-500"
+                      />
+                    </label>
+                    <label className="text-xs text-gray-500">
+                      Coach note
+                      <input
+                        value={noteByKey[key] ?? row.finalRecord?.note ?? ''}
+                        onChange={event => setNoteByKey(prev => ({ ...prev, [key]: event.target.value }))}
+                        placeholder="Optional note, e.g. ankle management, left early, discipline"
+                        className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-white outline-none focus:border-green-500"
+                      />
+                    </label>
+                  </div>
+                  {errorByKey[key] && <p className="text-xs font-semibold text-rose-300">{errorByKey[key]}</p>}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="px-4 py-8 text-center text-sm text-gray-500">No roster athletes available for final attendance.</div>
+        )}
+      </section>
 
       <section className="rounded-2xl border border-gray-800 bg-gray-900/60 overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-gray-800 px-4 py-3">
@@ -110,6 +231,17 @@ export function AttendanceScreen() {
   );
 }
 
+type FinalRow = { athleteId: string; athleteName: string; finalRecord: CoachFinalAttendanceRecord | null };
+
+function buildFinalRows(session: AttendanceSession, roster: ManagedAthlete[], records: CoachFinalAttendanceRecord[], demoMode: boolean): FinalRow[] {
+  const baseAthletes = roster.length > 0 ? roster : demoMode ? buildFallbackRoster() : [];
+  return baseAthletes.map(athlete => {
+    const athleteId = athlete.id || athlete.token;
+    const record = records.find(item => item.sessionId === session.id && item.athleteId === athleteId) ?? null;
+    return { athleteId, athleteName: athlete.name, finalRecord: record };
+  });
+}
+
 function buildAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAthlete[], demoMode: boolean): CoachAvailabilityRow[] {
   if (demoMode) return buildDemoAvailabilityRows(sessions, roster);
   const bySession = new Map(sessions.map(session => [session.id, session]));
@@ -124,6 +256,7 @@ function buildAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAth
         sessionTitle: session.title,
         sessionDate: session.datum,
         sessionTime: formatTime(session),
+        athleteId: record.athleteUserId,
         athleteName: athlete?.name ?? 'Athlete',
         status: record.status,
         lateMinutes: record.lateMinutes,
@@ -134,7 +267,8 @@ function buildAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAth
 }
 
 function buildDemoAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAthlete[]): CoachAvailabilityRow[] {
-  if (sessions.length === 0 || roster.length === 0) return [];
+  const demoRoster = roster.length > 0 ? roster : buildFallbackRoster();
+  if (sessions.length === 0 || demoRoster.length === 0) return [];
   const specs: DemoAvailabilitySpec[] = [
     { sessionIndex: 0, athleteIndex: 1, status: 'late', lateMinutes: 20, reason: 'Schule endet spaeter' },
     { sessionIndex: 0, athleteIndex: 3, status: 'maybe', reason: 'Leichte Kniebeschwerden, entscheidet nach Warm-up' },
@@ -144,13 +278,14 @@ function buildDemoAvailabilityRows(sessions: AttendanceSession[], roster: Manage
   return specs
     .map((spec, index) => {
       const session = sessions[spec.sessionIndex % sessions.length];
-      const athlete = roster[spec.athleteIndex % roster.length];
+      const athlete = demoRoster[spec.athleteIndex % demoRoster.length];
       return {
         id: `demo-availability-${index}`,
         sessionId: session.id,
         sessionTitle: session.title,
         sessionDate: session.datum,
         sessionTime: formatTime(session),
+        athleteId: athlete.id,
         athleteName: athlete.name,
         status: spec.status,
         lateMinutes: spec.lateMinutes,
@@ -160,11 +295,63 @@ function buildDemoAvailabilityRows(sessions: AttendanceSession[], roster: Manage
     .sort(sortRows);
 }
 
+function buildDemoFinalRecords(sessions: AttendanceSession[], roster: ManagedAthlete[]): CoachFinalAttendanceRecord[] {
+  const session = todaySessionsFirst(sessions)[0] ?? sessions[0];
+  const demoRoster = roster.length > 0 ? roster : buildFallbackRoster();
+  if (!session || demoRoster.length < 3) return [];
+  const first = demoRoster[0];
+  const second = demoRoster[1];
+  const third = demoRoster[2];
+  return [
+    demoFinal(session.id, first.id, first.name, 'present'),
+    demoFinal(session.id, second.id, second.name, 'late', undefined, 'Arrived after school'),
+    demoFinal(session.id, third.id, third.name, 'partial', 45, 'Managed minutes'),
+  ];
+}
+
+function demoFinal(sessionId: string, athleteId: string, athleteName: string, status: FinalAttendanceStatus, minutesParticipated?: number, note = ''): CoachFinalAttendanceRecord {
+  return {
+    id: `${sessionId}:${athleteId}`,
+    sessionId,
+    athleteId,
+    athleteName,
+    status,
+    minutesParticipated,
+    note,
+    finalizedAt: new Date().toISOString(),
+  };
+}
+
+function buildFallbackRoster(): ManagedAthlete[] {
+  return ['Noah K.', 'Elias M.', 'Jonas B.', 'Leo S.', 'Mika T.', 'Amin R.'].map((name, index) => ({
+    id: `demo-final-athlete-${index}`,
+    name,
+    sport: 'Basketball',
+    token: `demo-final-${index}`,
+    groupIds: [],
+    addedAt: new Date().toISOString(),
+  }));
+}
+
+function todaySessionsFirst(sessions: AttendanceSession[]): AttendanceSession[] {
+  const today = new Date().toISOString().split('T')[0];
+  return sessions
+    .filter(session => session.datum === today)
+    .sort((a, b) => `${a.datum} ${a.startTime ?? ''}`.localeCompare(`${b.datum} ${b.startTime ?? ''}`));
+}
+
 function summarize(rows: CoachAvailabilityRow[]): StatusSummary {
   return rows.reduce<StatusSummary>((acc, row) => {
     acc[row.status] += 1;
     return acc;
   }, { expected: 0, maybe: 0, no: 0, late: 0 });
+}
+
+function summarizeFinal(rows: CoachFinalAttendanceRecord[]): FinalSummary {
+  return rows.reduce<FinalSummary>((acc, row) => {
+    acc[row.status] += 1;
+    return acc;
+  }, { present: 0, late: 0, partial: 0, excused_absent: 0, unexcused_absent: 0 });
 }
 
 function estimateExpectedCount(sessions: AttendanceSession[], roster: ManagedAthlete[], teamCount: number): number {
