@@ -87,6 +87,10 @@ export interface AttendanceRecord {
   overrideStatus?: AttendanceOverrideStatus;
   absenceReason?: AbsenceReason;
   absenceNote: string;
+  /** Optional athlete-entered late estimate in minutes. */
+  lateMinutes?: number;
+  /** Optional late reason text, e.g. traffic, school, train delay. */
+  lateReason?: string;
   overrideAt?: string;
   // GPS checks
   check1At?: string;
@@ -114,6 +118,7 @@ export function getEffectiveStatus(record: AttendanceRecord): EffectiveAttendanc
   if (record.finalStatus) return record.finalStatus;
   if (record.overrideStatus === 'no') return 'no';
   if (record.overrideStatus === 'maybe') return 'maybe';
+  if (record.overrideStatus === 'late') return 'late';
   return 'expected';
 }
 
