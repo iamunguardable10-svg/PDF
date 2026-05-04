@@ -97,22 +97,22 @@ export function AttendanceScreen() {
         <p className="mt-1 text-sm text-gray-400">Operational availability before the session, then coach-final attendance after or during the session.</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Card label="Expected" value={String(expectedCount)} text="Default: available and planned unless marked otherwise." tone="green" />
-        <Card label="Late" value={String(summary.late)} text="Players arriving later, including minute estimate." tone="amber" />
-        <Card label="Maybe / No" value={String(summary.maybe + summary.no)} text="Requires a reason before the coach can plan around it." tone="red" />
-        <Card label="Finalized" value={String(finalRecords.length)} text="Coach-confirmed attendance records." tone="blue" />
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <Card label="Expected" value={String(expectedCount)} text="Default: available unless marked otherwise." tone="green" />
+        <Card label="Late" value={String(summary.late)} text="Players arriving later." tone="amber" />
+        <Card label="Maybe / No" value={String(summary.maybe + summary.no)} text="Requires coach attention." tone="red" />
+        <Card label="Finalized" value={String(finalRecords.length)} text="Coach-confirmed records." tone="blue" />
       </div>
 
-      <section className="rounded-2xl border border-gray-800 bg-gray-900/60 overflow-hidden">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-800 px-4 py-3">
+      <section className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/60">
+        <div className="flex flex-col gap-2 border-b border-gray-800 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <div>
             <h3 className="text-sm font-bold text-white">Coach final attendance</h3>
             <p className="mt-0.5 text-xs text-gray-500">Mark present, late, partial, excused or unexcused for the active session.</p>
           </div>
-          <span className="rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{activeSession?.title ?? 'No session'}</span>
+          <span className="w-fit rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{activeSession?.title ?? 'No session'}</span>
         </div>
-        <div className="grid gap-2 border-b border-gray-800 px-4 py-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 border-b border-gray-800 px-3 py-3 sm:grid-cols-5 sm:px-4">
           {FINAL_STATUS_OPTIONS.map(option => (
             <div key={option.status} className="rounded-xl border border-gray-800 bg-gray-950/60 px-3 py-2">
               <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{option.label}</p>
@@ -125,7 +125,7 @@ export function AttendanceScreen() {
             {activeSessionFinalRows.map(row => {
               const key = `${activeSession.id}:${row.athleteId}`;
               return (
-                <div key={row.athleteId} className="space-y-3 px-4 py-3">
+                <div key={row.athleteId} className="space-y-3 px-3 py-3 sm:px-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-bold text-white">{row.athleteName}</p>
@@ -135,12 +135,12 @@ export function AttendanceScreen() {
                       <button onClick={() => handleClearFinal(activeSession.id, row.athleteId)} className="w-fit rounded-lg border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-400 hover:border-gray-500 hover:text-white">Clear</button>
                     )}
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-5">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                     {FINAL_STATUS_OPTIONS.map(option => (
                       <button
                         key={option.status}
                         onClick={() => handleFinalize(activeSession.id, row.athleteId, row.athleteName, option.status)}
-                        className={`rounded-xl border px-2.5 py-2 text-xs font-bold transition-colors ${row.finalRecord?.status === option.status ? 'border-green-500 bg-green-900/30 text-green-200' : 'border-gray-800 bg-gray-950/50 text-gray-400 hover:border-gray-600 hover:text-white'}`}
+                        className={`min-h-11 rounded-xl border px-2.5 py-2 text-xs font-bold transition-colors ${row.finalRecord?.status === option.status ? 'border-green-500 bg-green-900/30 text-green-200' : 'border-gray-800 bg-gray-950/50 text-gray-400 hover:border-gray-600 hover:text-white'}`}
                       >
                         {option.label}
                       </button>
@@ -155,7 +155,7 @@ export function AttendanceScreen() {
                         max={240}
                         value={minutesByKey[key] ?? row.finalRecord?.minutesParticipated ?? 30}
                         onChange={event => setMinutesByKey(prev => ({ ...prev, [key]: Number(event.target.value) }))}
-                        className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-white outline-none focus:border-green-500"
+                        className="mt-1 min-h-11 w-full rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-white outline-none focus:border-green-500"
                       />
                     </label>
                     <label className="text-xs text-gray-500">
@@ -163,8 +163,8 @@ export function AttendanceScreen() {
                       <input
                         value={noteByKey[key] ?? row.finalRecord?.note ?? ''}
                         onChange={event => setNoteByKey(prev => ({ ...prev, [key]: event.target.value }))}
-                        placeholder="Optional note, e.g. ankle management, left early, discipline"
-                        className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-white outline-none focus:border-green-500"
+                        placeholder="Optional note, e.g. left early"
+                        className="mt-1 min-h-11 w-full rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-white outline-none focus:border-green-500"
                       />
                     </label>
                   </div>
@@ -178,13 +178,13 @@ export function AttendanceScreen() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-gray-800 bg-gray-900/60 overflow-hidden">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-800 px-4 py-3">
+      <section className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/60">
+        <div className="flex flex-col gap-2 border-b border-gray-800 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <div>
             <h3 className="text-sm font-bold text-white">Availability exceptions</h3>
             <p className="mt-0.5 text-xs text-gray-500">Late, maybe and no are shown here. Everyone else remains expected.</p>
           </div>
-          <span className="rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{exceptionRows.length} open</span>
+          <span className="w-fit rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{exceptionRows.length} open</span>
         </div>
 
         {exceptionRows.length === 0 ? (
@@ -205,20 +205,20 @@ export function AttendanceScreen() {
           const rows = availabilityRows.filter(row => row.sessionId === session.id && row.status !== 'expected');
           const team = teams.find(item => item.id === session.teamId);
           return (
-            <div key={session.id} className="rounded-2xl border border-gray-800 bg-gray-900/40 px-4 py-3">
+            <div key={session.id} className="rounded-2xl border border-gray-800 bg-gray-900/40 px-3 py-3 sm:px-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-bold text-white">{session.title}</p>
                   <p className="mt-0.5 text-xs text-gray-500">{formatDate(session.datum)} · {formatTime(session)}{team ? ` · ${team.name}` : ''}</p>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${rows.length > 0 ? 'bg-amber-900/40 text-amber-200' : 'bg-emerald-900/40 text-emerald-200'}`}>{rows.length > 0 ? `${rows.length} exceptions` : 'all expected'}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${rows.length > 0 ? 'bg-amber-900/40 text-amber-200' : 'bg-emerald-900/40 text-emerald-200'}`}>{rows.length > 0 ? `${rows.length} exceptions` : 'all expected'}</span>
               </div>
               {rows.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {rows.map(row => (
                     <div key={row.id} className="flex items-center justify-between gap-2 rounded-xl bg-gray-950/60 px-3 py-2">
                       <span className="text-xs text-gray-300">{row.athleteName}</span>
-                      <span className="text-xs font-semibold text-gray-400">{row.status === 'late' ? `${row.lateMinutes ?? 0} min late` : statusLabel(row.status)}</span>
+                      <span className="shrink-0 text-xs font-semibold text-gray-400">{row.status === 'late' ? `${row.lateMinutes ?? 0} min late` : statusLabel(row.status)}</span>
                     </div>
                   ))}
                 </div>
@@ -373,7 +373,7 @@ function AvailabilityRow({ row }: { row: CoachAvailabilityRow }) {
       : 'border-rose-800/60 bg-rose-950/20 text-rose-200';
 
   return (
-    <div className="grid gap-3 px-4 py-3 sm:grid-cols-[1.1fr_1.3fr_auto] sm:items-center">
+    <div className="grid gap-3 px-3 py-3 sm:grid-cols-[1.1fr_1.3fr_auto] sm:items-center sm:px-4">
       <div>
         <div className="flex items-center gap-2">
           <Icon size={15} />
@@ -401,10 +401,10 @@ function Card({ label, value, text, tone }: { label: string; value: string; text
     blue: 'border-blue-800/50 bg-blue-950/20 text-blue-200',
   };
   return (
-    <div className={`rounded-xl border px-4 py-3 ${tones[tone]}`}>
+    <div className={`rounded-xl border px-3 py-3 sm:px-4 ${tones[tone]}`}>
       <p className="text-xs opacity-80">{label}</p>
       <p className="mt-1 text-2xl font-black text-white">{value}</p>
-      <p className="mt-1 text-xs text-gray-500">{text}</p>
+      <p className="mt-1 text-[11px] leading-4 text-gray-500 sm:text-xs">{text}</p>
     </div>
   );
 }

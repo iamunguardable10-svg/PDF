@@ -214,104 +214,112 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
   const hourLabels = Array.from({ length: TOTAL_H }, (_, i) => START_H + i);
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 flex-shrink-0">
-        <div className="flex items-center gap-1">
-          <button onClick={() => setWeekStart(d => addDays(d, -7))} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"><ChevronLeft size={16} /></button>
-          <button onClick={() => setWeekStart(d => addDays(d, 7))} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"><ChevronRight size={16} /></button>
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-800 bg-gray-900">
+      <div className="flex flex-col gap-2 border-b border-gray-800 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+        <div className="flex items-center justify-between gap-2 sm:justify-start">
+          <div className="flex items-center gap-1">
+            <button onClick={() => setWeekStart(d => addDays(d, -7))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"><ChevronLeft size={16} /></button>
+            <button onClick={() => setWeekStart(d => addDays(d, 7))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"><ChevronRight size={16} /></button>
+          </div>
+          <p className="text-sm font-semibold text-white sm:hidden">{weekLabel}</p>
         </div>
-        <p className="text-sm font-medium text-white">{weekLabel}</p>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setWeekStart(isoToMonday(new Date()))} className="text-xs text-violet-400 hover:text-violet-300 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors">Heute</button>
-          <button onClick={reload} className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-gray-800 transition-colors"><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /></button>
+        <p className="hidden text-sm font-medium text-white sm:block">{weekLabel}</p>
+        <div className="flex items-center justify-between gap-2 sm:justify-end">
+          <button onClick={() => setWeekStart(isoToMonday(new Date()))} className="min-h-9 rounded-lg px-3 py-1 text-xs font-semibold text-violet-400 transition-colors hover:bg-gray-800 hover:text-violet-300">Heute</button>
+          <button onClick={reload} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-800 hover:text-gray-400"><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /></button>
         </div>
       </div>
 
-      <div className="grid border-b border-gray-800 flex-shrink-0" style={{ gridTemplateColumns: '36px repeat(7, 1fr)' }}>
-        <div />
-        {weekDays.map((d, i) => {
-          const iso = toISO(d);
-          const isToday = iso === today;
-          return (
-            <div key={i} className={`text-center py-2 text-xs font-medium border-l border-gray-800 ${isToday ? 'text-violet-300' : 'text-gray-500'}`}>
-              <div>{d.toLocaleDateString('de-DE', { weekday: 'short' })}</div>
-              <div className={`w-6 h-6 mx-auto mt-0.5 flex items-center justify-center rounded-full text-xs font-bold ${isToday ? 'bg-violet-600 text-white' : 'text-gray-300'}`}>{d.getDate()}</div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[720px]">
+          <div className="grid border-b border-gray-800" style={{ gridTemplateColumns: '36px repeat(7, 1fr)' }}>
+            <div />
+            {weekDays.map((d, i) => {
+              const iso = toISO(d);
+              const isToday = iso === today;
+              return (
+                <div key={i} className={`border-l border-gray-800 py-2 text-center text-xs font-medium ${isToday ? 'text-violet-300' : 'text-gray-500'}`}>
+                  <div>{d.toLocaleDateString('de-DE', { weekday: 'short' })}</div>
+                  <div className={`mx-auto mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${isToday ? 'bg-violet-600 text-white' : 'text-gray-300'}`}>{d.getDate()}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="max-h-[62vh] overflow-y-auto sm:max-h-[500px]">
+            <div className="relative grid select-none" style={{ gridTemplateColumns: '36px repeat(7, 1fr)', height: `${TOTAL_H * HOUR_PX}px` }}>
+              {hourLabels.map(h => (
+                <div key={h} className="contents">
+                  <div className="pointer-events-none absolute left-0 w-[34px] pr-1.5 text-right text-[10px] text-gray-700" style={{ top: `${(h - START_H) * HOUR_PX - 6}px` }}>{h}:00</div>
+                  <div className="pointer-events-none absolute left-9 right-0 border-t border-gray-800" style={{ top: `${(h - START_H) * HOUR_PX}px` }} />
+                  <div className="pointer-events-none absolute left-9 right-0 border-t border-dashed border-gray-900" style={{ top: `${(h - START_H) * HOUR_PX + HOUR_PX / 2}px` }} />
+                </div>
+              ))}
+
+              {weekDays.map((d, colIdx) => {
+                const iso = toISO(d);
+                const isToday = iso === today;
+                const dayTeam = teamByDay.get(iso) ?? [];
+                const dayPersonal = personalByDay.get(iso) ?? [];
+
+                return (
+                  <div key={iso} className={`relative border-l border-gray-800 ${isToday ? 'bg-violet-950/10' : ''}`} style={{ gridColumn: colIdx + 2, height: `${TOTAL_H * HOUR_PX}px` }}>
+                    {isToday && (() => {
+                      const now = new Date();
+                      const mins = now.getHours() * 60 + now.getMinutes();
+                      if (mins < START_H * 60 || mins > END_H * 60) return null;
+                      return <div className="pointer-events-none absolute left-0 right-0 z-10 border-t-2 border-violet-500" style={{ top: `${minToPx(mins)}px` }}><div className="-ml-0.5 -mt-0.5 h-1.5 w-1.5 rounded-full bg-violet-500" /></div>;
+                    })()}
+
+                    {dayTeam.map(s => {
+                      const startMin = s.startTime ? timeToMin(s.startTime) : START_H * 60 + 60;
+                      const dur = durationMin(s);
+                      const top = minToPx(startMin);
+                      const height = Math.max(24, (dur / 60) * HOUR_PX);
+                      const color = TYPE_COLORS[s.trainingType ?? ''] ?? '#6b7280';
+                      const isPast = iso < today;
+                      return (
+                        <button key={s.id} onClick={() => setOpenBlock({ kind: 'team', session: s })} className={`absolute left-0.5 right-0.5 z-20 overflow-hidden rounded-md text-left transition-all hover:brightness-110 ${isPast ? 'opacity-60' : ''}`} style={{ top: `${top}px`, height: `${height}px`, backgroundColor: color + '22', borderLeft: `3px solid ${color}` }}>
+                          <div className="flex h-full flex-col justify-start overflow-hidden px-1 py-0.5">
+                            <p className="truncate text-[10px] font-semibold leading-tight" style={{ color }}>{s.title}</p>
+                            {height >= 36 && <p className="text-[9px] leading-tight text-gray-400">{s.startTime}{s.endTime ? `-${s.endTime}` : ''}</p>}
+                            {height >= 50 && s.rsvp !== 'yes' && (
+                              <p className="text-[9px] leading-tight" style={{ color: s.rsvp === 'no' ? '#f87171' : '#fbbf24' }}>
+                                {s.rsvp === 'no' ? 'Absage' : s.rsvp === 'late' ? `${s.availability?.lateMinutes ?? 0} Min. spaeter` : 'Unsicher'}
+                              </p>
+                            )}
+                            {height >= 50 && isPast && s.rpe && <p className="text-[9px] leading-tight text-emerald-400">RPE {s.rpe}</p>}
+                          </div>
+                        </button>
+                      );
+                    })}
+
+                    {dayPersonal.map((b, bi) => {
+                      const startMin = timeToMin(b.startTime);
+                      const endMin = timeToMin(b.endTime);
+                      const top = minToPx(startMin);
+                      const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_PX);
+                      return (
+                        <button key={bi} onClick={() => setOpenBlock({ kind: 'personal', block: b })} className="absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-md text-left opacity-70 transition-all hover:brightness-110" style={{ top: `${top}px`, height: `${height}px`, backgroundColor: '#1f2937', borderLeft: `3px solid ${b.kind === 'planned' ? '#4b5563' : '#374151'}` }}>
+                          <div className="h-full overflow-hidden px-1 py-0.5">
+                            <p className="truncate text-[10px] leading-tight text-gray-400">{b.title}</p>
+                            {height >= 36 && b.rpe && <p className="text-[9px] text-gray-500">RPE {b.rpe}</p>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
-
-      <div className="overflow-y-auto flex-1" style={{ maxHeight: 'min(500px, 60vh)' }}>
-        <div className="relative grid select-none" style={{ gridTemplateColumns: '36px repeat(7, 1fr)', height: `${TOTAL_H * HOUR_PX}px` }}>
-          {hourLabels.map(h => (
-            <div key={h} className="contents">
-              <div className="text-right pr-1.5 text-[10px] text-gray-700 pointer-events-none" style={{ position: 'absolute', top: `${(h - START_H) * HOUR_PX - 6}px`, left: 0, width: 34 }}>{h}:00</div>
-              <div className="pointer-events-none" style={{ position: 'absolute', left: 36, right: 0, top: `${(h - START_H) * HOUR_PX}px`, borderTop: '1px solid #1f2937' }} />
-              <div className="pointer-events-none" style={{ position: 'absolute', left: 36, right: 0, top: `${(h - START_H) * HOUR_PX + HOUR_PX / 2}px`, borderTop: '1px dashed #111827' }} />
-            </div>
-          ))}
-
-          {weekDays.map((d, colIdx) => {
-            const iso = toISO(d);
-            const isToday = iso === today;
-            const dayTeam = teamByDay.get(iso) ?? [];
-            const dayPersonal = personalByDay.get(iso) ?? [];
-
-            return (
-              <div key={iso} className={`relative border-l border-gray-800 ${isToday ? 'bg-violet-950/10' : ''}`} style={{ gridColumn: colIdx + 2, height: `${TOTAL_H * HOUR_PX}px` }}>
-                {isToday && (() => {
-                  const now = new Date();
-                  const mins = now.getHours() * 60 + now.getMinutes();
-                  if (mins < START_H * 60 || mins > END_H * 60) return null;
-                  return <div className="absolute left-0 right-0 border-t-2 border-violet-500 z-10 pointer-events-none" style={{ top: `${minToPx(mins)}px` }}><div className="w-1.5 h-1.5 rounded-full bg-violet-500 -mt-0.5 -ml-0.5" /></div>;
-                })()}
-
-                {dayTeam.map(s => {
-                  const startMin = s.startTime ? timeToMin(s.startTime) : START_H * 60 + 60;
-                  const dur = durationMin(s);
-                  const top = minToPx(startMin);
-                  const height = Math.max(24, (dur / 60) * HOUR_PX);
-                  const color = TYPE_COLORS[s.trainingType ?? ''] ?? '#6b7280';
-                  const isPast = iso < today;
-                  return (
-                    <button key={s.id} onClick={() => setOpenBlock({ kind: 'team', session: s })} className={`absolute left-0.5 right-0.5 rounded-md overflow-hidden z-20 text-left hover:brightness-110 transition-all ${isPast ? 'opacity-60' : ''}`} style={{ top: `${top}px`, height: `${height}px`, backgroundColor: color + '22', borderLeft: `3px solid ${color}` }}>
-                      <div className="px-1 py-0.5 h-full flex flex-col justify-start overflow-hidden">
-                        <p className="text-[10px] font-semibold truncate leading-tight" style={{ color }}>{s.title}</p>
-                        {height >= 36 && <p className="text-[9px] text-gray-400 leading-tight">{s.startTime}{s.endTime ? `-${s.endTime}` : ''}</p>}
-                        {height >= 50 && s.rsvp !== 'yes' && (
-                          <p className="text-[9px] leading-tight" style={{ color: s.rsvp === 'no' ? '#f87171' : '#fbbf24' }}>
-                            {s.rsvp === 'no' ? 'Absage' : s.rsvp === 'late' ? `${s.availability?.lateMinutes ?? 0} Min. spaeter` : 'Unsicher'}
-                          </p>
-                        )}
-                        {height >= 50 && isPast && s.rpe && <p className="text-[9px] text-emerald-400 leading-tight">RPE {s.rpe}</p>}
-                      </div>
-                    </button>
-                  );
-                })}
-
-                {dayPersonal.map((b, bi) => {
-                  const startMin = timeToMin(b.startTime);
-                  const endMin = timeToMin(b.endTime);
-                  const top = minToPx(startMin);
-                  const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_PX);
-                  return (
-                    <button key={bi} onClick={() => setOpenBlock({ kind: 'personal', block: b })} className="absolute left-0.5 right-0.5 rounded-md overflow-hidden z-10 text-left hover:brightness-110 transition-all opacity-70" style={{ top: `${top}px`, height: `${height}px`, backgroundColor: '#1f2937', borderLeft: `3px solid ${b.kind === 'planned' ? '#4b5563' : '#374151'}` }}>
-                      <div className="px-1 py-0.5 h-full overflow-hidden">
-                        <p className="text-[10px] text-gray-400 truncate leading-tight">{b.title}</p>
-                        {height >= 36 && b.rpe && <p className="text-[9px] text-gray-500">RPE {b.rpe}</p>}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-800 text-[10px] text-gray-600 flex-shrink-0">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-violet-500/30 border-l-2 border-violet-500 inline-block" />Team</span>
+      <div className="flex items-center gap-4 border-t border-gray-800 px-4 py-2 text-[10px] text-gray-600">
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-violet-500/30 border-l-2 border-violet-500" />Team</span>
         <span className="flex items-center gap-1"><Dumbbell size={10} />Eigenes Training</span>
+        <span className="sm:hidden">Horizontal scroll</span>
       </div>
 
       {openBlock && <SessionOverlay block={openBlock} today={today} userId={userId} saving={saving} onAvailability={handleAvailability} onRPE={handleRPE} onClose={() => setOpenBlock(null)} />}
@@ -340,9 +348,9 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
         <div className="space-y-2 text-sm text-gray-300">
           <p className="text-xs text-gray-500">{new Date(b.datum + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
           {b.startTime && <p className="text-xs text-gray-400">{b.startTime}-{b.endTime}</p>}
-          {b.rpe && <p className="text-xs">RPE: <span className="text-violet-400 font-semibold">{b.rpe}</span></p>}
+          {b.rpe && <p className="text-xs">RPE: <span className="font-semibold text-violet-400">{b.rpe}</span></p>}
           {b.durationMin && <p className="text-xs">{b.durationMin} Min.</p>}
-          <p className="text-xs text-gray-600 pt-1">{b.kind === 'planned' ? 'Geplante Einheit' : 'Persoenliches Training'}</p>
+          <p className="pt-1 text-xs text-gray-600">{b.kind === 'planned' ? 'Geplante Einheit' : 'Persoenliches Training'}</p>
         </div>
       </Overlay>
     );
@@ -357,13 +365,13 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
   return (
     <Overlay onClose={onClose} title={s.title} color={color}>
       <div className="space-y-3">
-        <div className="text-xs text-gray-400 space-y-0.5">
+        <div className="space-y-0.5 text-xs text-gray-400">
           <p>{dateLabel}</p>
           {s.startTime && <p>{s.startTime}{s.endTime ? `-${s.endTime}` : ''}</p>}
           {s.location && <p>{s.location}</p>}
         </div>
-        {s.coachNote && <p className="text-xs text-gray-500 italic bg-gray-800 rounded-xl px-3 py-2">{s.coachNote}</p>}
-        {s.trainingType && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">{s.trainingType}</span>}
+        {s.coachNote && <p className="rounded-xl bg-gray-800 px-3 py-2 text-xs italic text-gray-500">{s.coachNote}</p>}
+        {s.trainingType && <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[10px] text-gray-400">{s.trainingType}</span>}
 
         {!isPast && <AvailabilityControls sessionId={s.id} athleteUserId={userId} value={s.availability} saving={isSaving} onSubmit={input => onAvailability(s, input)} />}
 
@@ -371,27 +379,27 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
           <div>
             {s.rpe ? (
               <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-500">RPE eingetragen: <span className="text-emerald-400 font-semibold">{s.rpe}</span></p>
-                <button onClick={() => setShowRPEForm(true)} className="text-xs text-gray-600 hover:text-gray-400 transition-colors">Aendern</button>
+                <p className="text-xs text-gray-500">RPE eingetragen: <span className="font-semibold text-emerald-400">{s.rpe}</span></p>
+                <button onClick={() => setShowRPEForm(true)} className="text-xs text-gray-600 transition-colors hover:text-gray-400">Aendern</button>
               </div>
             ) : (
-              <button onClick={() => setShowRPEForm(true)} className="w-full py-2 rounded-xl bg-violet-900/30 border border-violet-800/50 text-violet-300 text-xs font-medium hover:bg-violet-800/40 transition-colors">RPE eintragen</button>
+              <button onClick={() => setShowRPEForm(true)} className="w-full rounded-xl border border-violet-800/50 bg-violet-900/30 py-2 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-800/40">RPE eintragen</button>
             )}
 
             {showRPEForm && (
-              <div className="mt-2 space-y-3 bg-gray-800 rounded-xl p-3">
+              <div className="mt-2 space-y-3 rounded-xl bg-gray-800 p-3">
                 <div>
-                  <p className="text-xs text-gray-400 mb-1.5">Belastungsempfinden (1-10): <span className="text-white font-semibold">{rpeValue}</span></p>
+                  <p className="mb-1.5 text-xs text-gray-400">Belastungsempfinden (1-10): <span className="font-semibold text-white">{rpeValue}</span></p>
                   <input type="range" min={1} max={10} value={rpeValue} onChange={e => setRpeValue(+e.target.value)} className="w-full accent-violet-500" />
-                  <div className="flex justify-between text-[10px] text-gray-600 mt-0.5"><span>1 Sehr leicht</span><span>10 Maximal</span></div>
+                  <div className="mt-0.5 flex justify-between text-[10px] text-gray-600"><span>1 Sehr leicht</span><span>10 Maximal</span></div>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Dauer (Min.): <span className="text-white font-semibold">{durValue}</span></p>
-                  <input type="number" min={1} max={360} value={durValue} onChange={e => setDurValue(+e.target.value)} className="w-full h-8 px-2 rounded-lg bg-gray-900 border border-gray-700 text-sm text-white outline-none focus:border-violet-500" />
+                  <p className="mb-1 text-xs text-gray-400">Dauer (Min.): <span className="font-semibold text-white">{durValue}</span></p>
+                  <input type="number" min={1} max={360} value={durValue} onChange={e => setDurValue(+e.target.value)} className="h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-2 text-sm text-white outline-none focus:border-violet-500" />
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={async () => { setSubmittingRPE(true); await onRPE(s, rpeValue, durValue); setSubmittingRPE(false); setShowRPEForm(false); }} disabled={submittingRPE} className="flex-1 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs rounded-xl font-medium transition-colors">{submittingRPE ? 'Speichern...' : 'Speichern'}</button>
-                  <button onClick={() => setShowRPEForm(false)} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-xl transition-colors">Abbrechen</button>
+                  <button onClick={async () => { setSubmittingRPE(true); await onRPE(s, rpeValue, durValue); setSubmittingRPE(false); setShowRPEForm(false); }} disabled={submittingRPE} className="flex-1 rounded-xl bg-violet-600 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40">{submittingRPE ? 'Speichern...' : 'Speichern'}</button>
+                  <button onClick={() => setShowRPEForm(false)} className="rounded-xl bg-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:bg-gray-600">Abbrechen</button>
                 </div>
               </div>
             )}
@@ -404,13 +412,13 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
 
 function Overlay({ title, color, onClose, children }: { title: string; color?: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-800 flex-shrink-0">
-          <h2 className="text-base font-semibold text-white truncate" style={color ? { color } : undefined}>{title}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none ml-2">x</button>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4">
+      <div className="flex max-h-[86vh] w-full flex-col rounded-t-2xl border border-gray-800 bg-gray-900 sm:max-w-md sm:rounded-2xl">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-800 px-4 pb-3 pt-4">
+          <h2 className="truncate text-base font-semibold text-white" style={color ? { color } : undefined}>{title}</h2>
+          <button onClick={onClose} className="ml-2 flex h-9 w-9 items-center justify-center rounded-lg text-xl leading-none text-gray-500 hover:bg-gray-800 hover:text-white">x</button>
         </div>
-        <div className="overflow-y-auto flex-1 px-4 py-3">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">{children}</div>
       </div>
     </div>
   );

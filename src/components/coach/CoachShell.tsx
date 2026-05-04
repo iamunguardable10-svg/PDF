@@ -78,6 +78,8 @@ const NAV_ITEMS: NavItem[] = [
   { path: 'settings', label: 'Settings', Icon: Settings, accent: 'bg-gray-800/70', accentText: 'text-gray-300', accentBorder: 'border-gray-500' },
 ];
 
+const MOBILE_PRIMARY_NAV = ['dashboard', 'sessions', 'calendar', 'attendance', 'load-monitor'];
+
 interface Props {
   user: User;
   trainerName: string;
@@ -103,6 +105,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
 
   const permissions = useMemo(() => getCoachPermissions(coachContext), [coachContext]);
   const navItems = useMemo(() => NAV_ITEMS.filter(item => !item.requires || Boolean(permissions[item.requires])), [permissions]);
+  const mobileNavItems = useMemo(() => navItems.filter(item => MOBILE_PRIMARY_NAV.includes(item.path)), [navItems]);
   const demoData = useMemo(() => buildCoachDemoData(user.id), [user.id]);
 
   const activeOrg = demoMode ? demoData.org : org;
@@ -217,16 +220,16 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
       <header className="flex-shrink-0 border-b border-gray-800 bg-gray-950/90 backdrop-blur-xl sticky top-0 z-20">
-        <div className="flex items-center gap-3 px-4 h-13 py-2.5">
+        <div className="flex items-center gap-3 px-3 sm:px-4 h-13 py-2.5">
           <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0">
             <ChevronLeft size={14} /> App
           </button>
 
-          <div className="flex items-center gap-2 flex-1">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
             <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-purple-700 rounded-lg flex items-center justify-center text-xs font-black shadow-lg shadow-violet-900/30 flex-shrink-0">TL</div>
             <div className="min-w-0">
-              <span className="text-sm font-semibold text-white leading-none">{activeOrg?.name ?? 'TeamLoad'}</span>
-              <span className="text-[11px] text-gray-500 ml-2 hidden sm:inline">{demoMode ? `Demo club · ${roleLabel(permissions.role)}` : `${coachName} · ${roleLabel(permissions.role)}`}</span>
+              <span className="block truncate text-sm font-semibold text-white leading-none">{activeOrg?.name ?? 'TeamLoad'}</span>
+              <span className="hidden text-[11px] text-gray-500 sm:inline">{demoMode ? `Demo club · ${roleLabel(permissions.role)}` : `${coachName} · ${roleLabel(permissions.role)}`}</span>
             </div>
           </div>
 
@@ -264,15 +267,15 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
         </nav>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-5xl mx-auto px-4 py-4 pb-28 sm:pb-6 space-y-4">
+          <div className="max-w-5xl mx-auto px-3 py-3 pb-28 sm:px-4 sm:py-4 sm:pb-6 space-y-4">
             <Outlet context={outletCtx} />
           </div>
         </main>
       </div>
 
       <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-gray-950/95 backdrop-blur-2xl border-t border-gray-800" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="flex items-stretch h-[60px] px-1">
-          {navItems.filter(item => ['dashboard', 'sessions', 'calendar', 'load-monitor', 'alerts'].includes(item.path)).map(item => {
+        <div className="flex items-stretch h-[64px] px-1">
+          {mobileNavItems.map(item => {
             const isActive = location.pathname.includes(`/coach/${item.path}`);
             return (
               <button key={item.path} onClick={() => navigate(`/coach/${item.path}`)} className="relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors">
