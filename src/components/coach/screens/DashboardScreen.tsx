@@ -93,7 +93,7 @@ export function DashboardScreen() {
         <Stat label="Available" value={loading && !demoMode ? '...' : String(demoMode ? demoAvailable : roster.length)} sub="players" color="emerald" />
         <Stat label="Unsure / Out" value={loading && !demoMode ? '...' : String(demoMode ? demoUnsure + demoOut : 0)} sub="availability" color="amber" />
         <Stat label="At Risk" value={loading && !demoMode ? '...' : String(demoMode ? demoAtRisk : 0)} sub="load" color="violet" />
-        <Stat label="Today" value={loading && !demoMode ? '...' : String(demoMode ? DEMO_SESSIONS.filter(s => s.datum === today).length : todaySessions.length)} sub="sessions" color="sky" />
+        <Stat label={demoMode ? 'Today' : 'This Week'} value={loading && !demoMode ? '...' : String(demoMode ? DEMO_SESSIONS.filter(s => s.datum === today).length : weekCount)} sub="sessions" color="sky" />
       </div>
 
       {org && !demoMode && (
