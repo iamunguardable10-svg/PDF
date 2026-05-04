@@ -19,6 +19,7 @@ Primary daily operator.
 Needs:
 
 - Today/next session overview
+- Assigned sessions highlighted before general club/team sessions
 - Availability and absence reasons
 - Attendance confirmation
 - Load risk summary
@@ -88,7 +89,8 @@ The dashboard is not a report page. It is the daily command center.
 
 It should show:
 
-- Today or next session
+- Assigned today/next session as the primary focus
+- Other relevant team/club sessions as secondary context
 - Available / unsure / unavailable
 - Missing reasons
 - At-risk athletes
@@ -102,14 +104,33 @@ Calendar should be the main planning surface.
 
 Where calendars should appear:
 
-- Coach Calendar: global planning view
-- Dashboard: compact today/next mini-calendar
+- Coach Calendar: global planning view with assigned sessions visually highlighted
+- Dashboard: compact today/next mini-calendar focused first on assigned sessions
 - Team Screen: team-specific calendar
 - Department Screen: department-wide calendar
 - Athlete Shell: personal calendar
 - Future Player Detail: player-specific attendance/load calendar
 
 The existing CalendarView should be reused where possible because it already includes drag-and-drop rescheduling logic.
+
+## Session priority model
+
+A coach should never have to search for the sessions they personally need to run.
+
+Session priority for coach-facing views:
+
+1. Assigned sessions where the current coach is explicitly linked as head coach or assistant coach
+2. Sessions for teams/groups the coach is responsible for
+3. Sessions in the coach's department
+4. Other organization sessions, shown only as secondary context if the role allows it
+
+Visual treatment:
+
+- Assigned sessions should be highlighted with a stronger border/accent
+- Secondary sessions should remain visible but visually quieter
+- Dashboard should show assigned today/next session first
+- Calendar should include filters: My sessions, Team, Department, All
+- Mobile view should prioritize My sessions by default
 
 ## Feature roadmap
 
@@ -128,6 +149,7 @@ Goal: make the daily coach workflow real.
 Build:
 
 - Coach Calendar screen using existing calendar components where safe
+- Assigned coach sessions highlighted in Dashboard and Calendar
 - Dashboard mini-calendar / today-next-session card
 - Sessions screen with clearer list and session focus
 - Availability model preparation
@@ -235,6 +257,14 @@ Separate layers:
 4. Coach final attendance confirmation
 
 Do not mix athlete response and final attendance into one status.
+
+Session assignment should be explicit and queryable:
+
+- head coach
+- assistant coach
+- responsible team/group
+- department
+- facility
 
 ## Safety and privacy principles
 
