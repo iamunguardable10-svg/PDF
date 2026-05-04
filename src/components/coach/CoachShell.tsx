@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { ElementType } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Users2, Building2, Warehouse,
-  ChevronLeft, RefreshCw,
+  LayoutDashboard, Users2, Building2, Warehouse, ChevronLeft, RefreshCw,
+  ClipboardList, CalendarDays, UserRound, Activity, CheckCircle2, BarChart3, Bell, Settings,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import type { AttendanceTeam, AttendanceSession } from '../../types/attendance';
@@ -27,8 +28,6 @@ import {
 import { loadMyCoachContext } from '../../lib/coachRole';
 import { supabase, CLOUD_ENABLED } from '../../lib/supabase';
 
-// ── Outlet context type (exported for screens) ────────────────────────────────
-
 export interface CoachOutletContext {
   user: User;
   org: Organization | null;
@@ -40,6 +39,8 @@ export interface CoachOutletContext {
   loading: boolean;
   roster: ManagedAthlete[];
   groups: AthleteGroup[];
+  demoMode: boolean;
+  setDemoMode: (value: boolean) => void;
   reload: () => void;
   onCreateDepartment: (name: string, sport?: string) => Promise<void>;
   onDeleteDepartment: (deptId: string) => Promise<void>;
@@ -48,49 +49,36 @@ export interface CoachOutletContext {
   onAssignTeam:       (teamId: string, deptId: string | null) => Promise<void>;
 }
 
-// ── Nav items ─────────────────────────────────────────────────────────────────
-
 interface NavItem {
-  path:        string;
-  label:       string;
-  Icon:        React.ElementType;
-  accent:      string;
-  accentText:  string;
-  accentBorder:string;
+  path: string;
+  label: string;
+  Icon: ElementType;
+  accent: string;
+  accentText: string;
+  accentBorder: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  {
-    path: 'dashboard', label: 'Dashboard',
-    Icon: LayoutDashboard,
-    accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500',
-  },
-  {
-    path: 'teams', label: 'Teams',
-    Icon: Users2,
-    accent: 'bg-sky-900/40', accentText: 'text-sky-300', accentBorder: 'border-sky-500',
-  },
-  {
-    path: 'department', label: 'Abteilung',
-    Icon: Building2,
-    accent: 'bg-emerald-900/40', accentText: 'text-emerald-300', accentBorder: 'border-emerald-500',
-  },
-  {
-    path: 'facilities', label: 'Hallen',
-    Icon: Warehouse,
-    accent: 'bg-teal-900/40', accentText: 'text-teal-300', accentBorder: 'border-teal-500',
-  },
+  { path: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard, accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500' },
+  { path: 'sessions', label: 'Sessions', Icon: ClipboardList, accent: 'bg-blue-900/40', accentText: 'text-blue-300', accentBorder: 'border-blue-500' },
+  { path: 'calendar', label: 'Calendar', Icon: CalendarDays, accent: 'bg-cyan-900/40', accentText: 'text-cyan-300', accentBorder: 'border-cyan-500' },
+  { path: 'players', label: 'Players', Icon: UserRound, accent: 'bg-indigo-900/40', accentText: 'text-indigo-300', accentBorder: 'border-indigo-500' },
+  { path: 'groups', label: 'Groups', Icon: Users2, accent: 'bg-purple-900/40', accentText: 'text-purple-300', accentBorder: 'border-purple-500' },
+  { path: 'teams', label: 'Teams', Icon: Users2, accent: 'bg-sky-900/40', accentText: 'text-sky-300', accentBorder: 'border-sky-500' },
+  { path: 'department', label: 'Departments', Icon: Building2, accent: 'bg-emerald-900/40', accentText: 'text-emerald-300', accentBorder: 'border-emerald-500' },
+  { path: 'facilities', label: 'Facilities', Icon: Warehouse, accent: 'bg-teal-900/40', accentText: 'text-teal-300', accentBorder: 'border-teal-500' },
+  { path: 'load-monitor', label: 'Load', Icon: Activity, accent: 'bg-orange-900/40', accentText: 'text-orange-300', accentBorder: 'border-orange-500' },
+  { path: 'attendance', label: 'Attendance', Icon: CheckCircle2, accent: 'bg-green-900/40', accentText: 'text-green-300', accentBorder: 'border-green-500' },
+  { path: 'analytics', label: 'Analytics', Icon: BarChart3, accent: 'bg-amber-900/40', accentText: 'text-amber-300', accentBorder: 'border-amber-500' },
+  { path: 'alerts', label: 'Alerts', Icon: Bell, accent: 'bg-red-900/40', accentText: 'text-red-300', accentBorder: 'border-red-500' },
+  { path: 'settings', label: 'Settings', Icon: Settings, accent: 'bg-gray-800/70', accentText: 'text-gray-300', accentBorder: 'border-gray-500' },
 ];
-
-// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   user: User;
   trainerName: string;
   onBack: () => void;
 }
-
-// ── Component ─────────────────────────────────────────────────────────────────
 
 export function CoachShell({ user, trainerName, onBack }: Props) {
   const navigate = useNavigate();
@@ -100,6 +88,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
   const [departments,  setDepartments]  = useState<Department[]>([]);
   const [coachName,    setCoachName]    = useState(trainerName);
   const [coachContext, setCoachContext] = useState<CoachContext | null>(null);
+  const [demoMode,     setDemoMode]     = useState(false);
 
   const [teams,    setTeams]    = useState<AttendanceTeam[]>([]);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
@@ -107,8 +96,6 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
 
   const [roster, setRoster] = useState<ManagedAthlete[]>([]);
   const [groups, setGroups] = useState<AthleteGroup[]>([]);
-
-  // ── Data loading ──────────────────────────────────────────────────────────
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -141,7 +128,6 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
 
   useEffect(() => { reload(); }, [reload]);
 
-  // Roster
   useEffect(() => {
     const saved = loadRoster();
     setRoster(saved.athletes);
@@ -162,10 +148,7 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
         saveRoster(mapped);
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
-
-  // ── Dept actions ──────────────────────────────────────────────────────────
 
   async function onCreateDepartment(name: string, sport?: string) {
     if (!org) return;
@@ -199,80 +182,59 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
     }
   }
 
-  // ── Active nav ────────────────────────────────────────────────────────────
-
   const activeNav = NAV_ITEMS.find(n => location.pathname.includes(`/coach/${n.path}`))
     ?? NAV_ITEMS[0];
-
-  // ── Outlet context ────────────────────────────────────────────────────────
 
   const outletCtx: CoachOutletContext = {
     user, org, departments, teams, sessions,
     coachContext, coachName, loading,
-    roster, groups, reload,
+    roster, groups, demoMode, setDemoMode, reload,
     onCreateDepartment, onDeleteDepartment,
     onCreateTeam, onDeleteTeam,
     onAssignTeam,
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-
-      {/* Top bar */}
       <header className="flex-shrink-0 border-b border-gray-800 bg-gray-950/90 backdrop-blur-xl sticky top-0 z-20">
         <div className="flex items-center gap-3 px-4 h-13 py-2.5">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0"
-          >
+          <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0">
             <ChevronLeft size={14} /> App
           </button>
 
           <div className="flex items-center gap-2 flex-1">
-            <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-purple-700 rounded-lg flex items-center justify-center text-sm shadow-lg shadow-violet-900/30 flex-shrink-0">
-              🏟
-            </div>
+            <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-purple-700 rounded-lg flex items-center justify-center text-xs font-black shadow-lg shadow-violet-900/30 flex-shrink-0">TL</div>
             <div className="min-w-0">
-              <span className="text-sm font-semibold text-white leading-none">
-                {org?.name ?? 'Club OS'}
-              </span>
-              <span className="text-[11px] text-gray-500 ml-2 hidden sm:inline">{coachName}</span>
+              <span className="text-sm font-semibold text-white leading-none">{org?.name ?? 'TeamLoad'}</span>
+              <span className="text-[11px] text-gray-500 ml-2 hidden sm:inline">{demoMode ? 'Demo roster active' : coachName}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className={`hidden sm:block text-xs font-medium px-2.5 py-1 rounded-lg ${activeNav.accent} ${activeNav.accentText}`}>
-              {activeNav.label}
-            </span>
             <button
-              onClick={reload}
-              title="Daten neu laden"
-              className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-gray-800 transition-colors"
+              onClick={() => setDemoMode(!demoMode)}
+              title="Toggle demo data"
+              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${demoMode ? 'bg-green-900/40 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}
             >
+              Demo {demoMode ? 'on' : 'off'}
+            </button>
+            <span className={`hidden sm:block text-xs font-medium px-2.5 py-1 rounded-lg ${activeNav.accent} ${activeNav.accentText}`}>{activeNav.label}</span>
+            <button onClick={reload} title="Refresh data" className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-gray-800 transition-colors">
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>
       </header>
 
-      {/* Body */}
       <div className="flex flex-1 min-h-0">
-
-        {/* Sidebar — desktop */}
-        <nav className="hidden sm:flex flex-col w-44 border-r border-gray-800 bg-gray-950 flex-shrink-0 py-3 gap-0.5">
+        <nav className="hidden sm:flex flex-col w-48 border-r border-gray-800 bg-gray-950 flex-shrink-0 py-3 gap-0.5 overflow-y-auto">
           {NAV_ITEMS.map(item => {
             const isActive = location.pathname.includes(`/coach/${item.path}`);
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(`/coach/${item.path}`)}
-                className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors border-l-2 ${
-                  isActive
-                    ? `${item.accent} ${item.accentText} ${item.accentBorder}`
-                    : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'
-                }`}
+                className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors border-l-2 ${isActive ? `${item.accent} ${item.accentText} ${item.accentBorder}` : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'}`}
               >
                 <item.Icon size={15} className="flex-shrink-0" />
                 {item.label}
@@ -281,40 +243,22 @@ export function CoachShell({ user, trainerName, onBack }: Props) {
           })}
         </nav>
 
-        {/* Main content — Outlet renders the matched screen */}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto px-4 py-4 pb-28 sm:pb-6 space-y-4">
+          <div className="max-w-5xl mx-auto px-4 py-4 pb-28 sm:pb-6 space-y-4">
             <Outlet context={outletCtx} />
           </div>
         </main>
       </div>
 
-      {/* Bottom nav — mobile */}
-      <nav
-        className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-gray-950/95 backdrop-blur-2xl border-t border-gray-800"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      >
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-gray-950/95 backdrop-blur-2xl border-t border-gray-800" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="flex items-stretch h-[60px] px-1">
-          {NAV_ITEMS.map(item => {
+          {NAV_ITEMS.filter(item => ['dashboard', 'sessions', 'calendar', 'load-monitor', 'alerts'].includes(item.path)).map(item => {
             const isActive = location.pathname.includes(`/coach/${item.path}`);
             return (
-              <button
-                key={item.path}
-                onClick={() => navigate(`/coach/${item.path}`)}
-                className="relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors"
-              >
-                {isActive && (
-                  <span className="absolute inset-x-1 top-1.5 bottom-1.5 rounded-xl bg-gray-800/80" />
-                )}
-                <item.Icon
-                  size={18}
-                  className={`relative transition-colors ${isActive ? item.accentText : 'text-gray-600'}`}
-                />
-                <span className={`relative text-[9px] font-semibold tracking-wide transition-colors ${
-                  isActive ? item.accentText : 'text-gray-600'
-                }`}>
-                  {item.label}
-                </span>
+              <button key={item.path} onClick={() => navigate(`/coach/${item.path}`)} className="relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors">
+                {isActive && <span className="absolute inset-x-1 top-1.5 bottom-1.5 rounded-xl bg-gray-800/80" />}
+                <item.Icon size={18} className={`relative transition-colors ${isActive ? item.accentText : 'text-gray-600'}`} />
+                <span className={`relative text-[9px] font-semibold tracking-wide transition-colors ${isActive ? item.accentText : 'text-gray-600'}`}>{item.label}</span>
               </button>
             );
           })}
