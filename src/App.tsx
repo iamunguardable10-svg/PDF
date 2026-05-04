@@ -11,13 +11,22 @@ import { RoleSelectScreen } from './components/onboarding/RoleSelectScreen';
 import { CoachSetupWizard } from './components/onboarding/CoachSetupWizard';
 import { InviteAccept } from './components/InviteAccept';
 import { TrainerDashboard } from './components/TrainerDashboard';
-import { DashboardScreen }   from './components/coach/screens/DashboardScreen';
-import { TeamsScreen }        from './components/coach/screens/TeamsScreen';
-import { TeamScreen }         from './components/coach/screens/TeamScreen';
-import { DepartmentScreen }   from './components/coach/screens/DepartmentScreen';
-import { FacilitiesScreen }   from './components/coach/screens/FacilitiesScreen';
-import { FacilityScreen }     from './components/coach/screens/FacilityScreen';
-import { PerformanceScreen }  from './components/coach/screens/PerformanceScreen';
+import { DashboardScreen } from './components/coach/screens/DashboardScreen';
+import { TeamsScreen } from './components/coach/screens/TeamsScreen';
+import { TeamScreen } from './components/coach/screens/TeamScreen';
+import { DepartmentScreen } from './components/coach/screens/DepartmentScreen';
+import { FacilitiesScreen } from './components/coach/screens/FacilitiesScreen';
+import { FacilityScreen } from './components/coach/screens/FacilityScreen';
+import { PerformanceScreen } from './components/coach/screens/PerformanceScreen';
+import { SessionsScreen } from './components/coach/screens/SessionsScreen';
+import { CalendarScreen } from './components/coach/screens/CalendarScreen';
+import { PlayersScreen } from './components/coach/screens/PlayersScreen';
+import { GroupsScreen } from './components/coach/screens/GroupsScreen';
+import { LoadMonitorScreen } from './components/coach/screens/LoadMonitorScreen';
+import { AttendanceScreen } from './components/coach/screens/AttendanceScreen';
+import { AnalyticsScreen } from './components/coach/screens/AnalyticsScreen';
+import { AlertsScreen } from './components/coach/screens/AlertsScreen';
+import { SettingsScreen } from './components/coach/screens/SettingsScreen';
 import { decodeShareData, isLiveToken } from './lib/trainerShare';
 import { loadProfile, saveProfile } from './lib/profileStorage';
 import { pullProfile } from './lib/cloudSync';
@@ -27,8 +36,6 @@ import type { AppMode } from './types/appMode';
 import type { AthleteProfile } from './types/profile';
 import type { User } from '@supabase/supabase-js';
 
-// ── Spinner ────────────────────────────────────────────────────────────────
-
 function LoadingSpinner() {
   return (
     <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
@@ -37,33 +44,19 @@ function LoadingSpinner() {
   );
 }
 
-// ── App ────────────────────────────────────────────────────────────────────
-
 function App() {
-  const navigate   = useNavigate();
-  const location   = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Auth state
-  const [user, setUser]           = useState<User | null | 'loading'>('loading');
-  const [isGuest, setIsGuest]     = useState(() => !CLOUD_ENABLED || !!localStorage.getItem('fitfuel_guest'));
+  const [user, setUser] = useState<User | null | 'loading'>('loading');
+  const [isGuest, setIsGuest] = useState(() => !CLOUD_ENABLED || !!localStorage.getItem('fitfuel_guest'));
   const [, setCloudReady] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
-
-  // Onboarding + tour
-  const [showLanding, setShowLanding] = useState(
-    () => !localStorage.getItem('fitfuel_seen_landing')
-  );
+  const [showLanding, setShowLanding] = useState(() => !localStorage.getItem('fitfuel_seen_landing'));
   const [showTour, setShowTour] = useState(() => !localStorage.getItem('fitfuel_tour_done'));
-  const [profile, setProfile]   = useState<AthleteProfile>(() => loadProfile());
-
-  // Role / mode
-  const [appMode, setAppMode]   = useState<AppMode | null>(() => loadAppMode());
-  // Show coach setup wizard once (first login as coach)
-  const [showCoachSetup, setShowCoachSetup] = useState(
-    () => !localStorage.getItem('club_os_coach_setup_done')
-  );
-
-  // ── Auth setup ─────────────────────────────────────────────────────────────
+  const [profile, setProfile] = useState<AthleteProfile>(() => loadProfile());
+  const [appMode, setAppMode] = useState<AppMode | null>(() => loadAppMode());
+  const [showCoachSetup, setShowCoachSetup] = useState(() => !localStorage.getItem('club_os_coach_setup_done'));
 
   useEffect(() => {
     if (!CLOUD_ENABLED) { setUser(null); return; }
@@ -76,7 +69,6 @@ function App() {
         setShowLanding(false);
         setShowTour(false);
         setIsGuest(false);
-        // Restore profile from Supabase so onboardingCompleted survives localStorage clears
         pullProfile(session.user.id).then(cloudProfile => {
           if (cloudProfile) {
             const merged = { ...loadProfile(), ...cloudProfile };
@@ -102,8 +94,6 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
-
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setCloudReady(false);
@@ -118,20 +108,19 @@ function App() {
     localStorage.removeItem('fitfuel_guest');
     setIsGuest(false);
     setCloudReady(false);
-    // Navigate to the right shell based on saved mode
     const mode = loadAppMode();
     if (mode === 'coach') navigate('/coach/dashboard');
     else navigate('/athlete');
   };
 
+  const loggedInUser = user && user !== 'loading' ? user as User : null;
+  const userId = loggedInUser && !isGuest ? loggedInUser.id : null;
+
   const handleSelectMode = (mode: AppMode) => {
     saveAppMode(mode);
     setAppMode(mode);
-    // Auth gate (step 4) will fire immediately for coach/athlete if not logged in.
-    // Once logged in, ModeRouter sends them to the right shell.
     if (mode === 'coach' && loggedInUser) navigate('/coach/dashboard');
     else if ((mode === 'athlete' || mode === 'solo') && profile.onboardingCompleted) navigate('/athlete');
-    // Otherwise fall through to auth gate / onboarding
   };
 
   const handleSwitchRole = () => {
@@ -150,10 +139,6 @@ function App() {
     saveProfile(p);
   };
 
-  const loggedInUser = user && user !== 'loading' ? user as User : null;
-  const userId = loggedInUser && !isGuest ? loggedInUser.id : null;
-
-  // ── Deep-link: trainer share URL (hash back-compat) ──────────────────────
   const trainerHash = location.hash.match(/^#trainer\/(.+)$/)?.[1];
   if (trainerHash) {
     if (isLiveToken(trainerHash)) return <TrainerView token={trainerHash} />;
@@ -161,26 +146,17 @@ function App() {
     if (trainerData) return <TrainerView data={trainerData} />;
   }
 
-  // ── 1. Auth loading — brief spinner while Supabase resolves session ────────
-  if (CLOUD_ENABLED && user === 'loading') {
-    return <LoadingSpinner />;
-  }
+  if (CLOUD_ENABLED && user === 'loading') return <LoadingSpinner />;
 
   const dismissLanding = () => {
     localStorage.setItem('fitfuel_seen_landing', '1');
     setShowLanding(false);
   };
 
-  // ── 2. Landing page — shown once to brand-new visitors ────────────────────
-  //    "Loslegen" → go to role select (no auth yet)
-  //    "Anmelden" → open auth modal, then role select after login
   if (showLanding && !loggedInUser) {
     return (
       <>
-        <LandingPage
-          onStart={dismissLanding}
-          onGuest={() => { dismissLanding(); handleGuestMode(); }}
-        />
+        <LandingPage onStart={dismissLanding} onGuest={() => { dismissLanding(); handleGuestMode(); }} />
         {showAuthModal && CLOUD_ENABLED && (
           <AuthScreen
             onClose={() => setShowAuthModal(false)}
@@ -192,7 +168,6 @@ function App() {
     );
   }
 
-  // ── 3. Role select — BEFORE login, always shown if no mode is saved ────────
   if (!appMode) {
     return (
       <RoleSelectScreen
@@ -205,22 +180,11 @@ function App() {
     );
   }
 
-  // ── 4. Auth gate — fires after role select, only for coach / athlete ───────
-  //    Solo mode can proceed without an account.
-  if (CLOUD_ENABLED && !isGuest && appMode !== 'solo' && !loggedInUser) {
-    return <AuthScreen onLoggedIn={handleLoggedIn} />;
-  }
+  if (CLOUD_ENABLED && !isGuest && appMode !== 'solo' && !loggedInUser) return <AuthScreen onLoggedIn={handleLoggedIn} />;
 
-  // ── 5. Onboarding — profile setup for solo mode only ─────────────────────
-  //    Coaches have their own wizard; team athletes don't need solo profile setup.
-  if (appMode === 'solo' && !profile.onboardingCompleted) {
-    return <Onboarding onComplete={handleOnboardingComplete} />;
-  }
+  if (appMode === 'solo' && !profile.onboardingCompleted) return <Onboarding onComplete={handleOnboardingComplete} />;
 
-  // ── Tour overlay ───────────────────────────────────────────────────────────
   const tourOverlay = showTour && !userId ? <AppTour onDone={handleTourDone} /> : null;
-
-  // ── Auth modal overlay (triggered from shells) ─────────────────────────────
   const authModalOverlay = showAuthModal && CLOUD_ENABLED ? (
     <AuthScreen
       onGuest={() => { handleGuestMode(); setShowAuthModal(false); }}
@@ -234,33 +198,17 @@ function App() {
       {tourOverlay}
       {authModalOverlay}
       <Routes>
-
-        {/* ── Trainer share view ── */}
-        <Route path="/trainer/:token" element={
-          <TrainerViewRoute />
-        } />
-
-        {/* ── Invite accept ── */}
+        <Route path="/trainer/:token" element={<TrainerViewRoute />} />
         <Route path="/invite/:code" element={
-          <InviteAccept
-            inviteCode={location.pathname.split('/invite/')[1] ?? ''}
-            user={loggedInUser}
-            onLoginRequest={() => setShowAuthModal(true)}
-          />
+          <InviteAccept inviteCode={location.pathname.split('/invite/')[1] ?? ''} user={loggedInUser} onLoginRequest={() => setShowAuthModal(true)} />
         } />
 
-        {/* ── Hash-based invite back-compat ── */}
         {location.hash.startsWith('#invite/') && (
           <Route path="*" element={
-            <InviteAccept
-              inviteCode={location.hash.replace('#invite/', '')}
-              user={loggedInUser}
-              onLoginRequest={() => setShowAuthModal(true)}
-            />
+            <InviteAccept inviteCode={location.hash.replace('#invite/', '')} user={loggedInUser} onLoginRequest={() => setShowAuthModal(true)} />
           } />
         )}
 
-        {/* ── Role selection ── */}
         <Route path="/select-role" element={
           <RoleSelectScreen
             userId={loggedInUser?.id}
@@ -271,7 +219,6 @@ function App() {
           />
         } />
 
-        {/* ── Coach shell (nested routes) ── */}
         <Route
           path="/coach"
           element={
@@ -279,46 +226,37 @@ function App() {
               showCoachSetup ? (
                 <CoachSetupWizard
                   userId={loggedInUser.id}
-                  onDone={() => {
-                    localStorage.setItem('club_os_coach_setup_done', '1');
-                    setShowCoachSetup(false);
-                  }}
-                  onSkip={() => {
-                    localStorage.setItem('club_os_coach_setup_done', '1');
-                    setShowCoachSetup(false);
-                  }}
+                  onDone={() => { localStorage.setItem('club_os_coach_setup_done', '1'); setShowCoachSetup(false); }}
+                  onSkip={() => { localStorage.setItem('club_os_coach_setup_done', '1'); setShowCoachSetup(false); }}
                 />
               ) : (
-                <CoachShell
-                  user={loggedInUser}
-                  trainerName={profile.name || loggedInUser.email || 'Trainer'}
-                  onBack={() => navigate('/select-role')}
-                />
+                <CoachShell user={loggedInUser} trainerName={profile.name || loggedInUser.email || 'Trainer'} onBack={() => navigate('/select-role')} />
               )
-            ) : (
-              <Navigate to="/select-role" replace />
-            )
+            ) : <Navigate to="/select-role" replace />
           }
         >
-          {/* Default: redirect to dashboard */}
           <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard"              element={<DashboardScreen />} />
-          <Route path="teams"                  element={<TeamsScreen />} />
-          <Route path="teams/:teamId"          element={<TeamScreen />} />
-          <Route path="department"             element={<DepartmentScreen />} />
-          <Route path="facilities"             element={<FacilitiesScreen />} />
+          <Route path="dashboard" element={<DashboardScreen />} />
+          <Route path="sessions" element={<SessionsScreen />} />
+          <Route path="calendar" element={<CalendarScreen />} />
+          <Route path="players" element={<PlayersScreen />} />
+          <Route path="groups" element={<GroupsScreen />} />
+          <Route path="teams" element={<TeamsScreen />} />
+          <Route path="teams/:teamId" element={<TeamScreen />} />
+          <Route path="department" element={<DepartmentScreen />} />
+          <Route path="facilities" element={<FacilitiesScreen />} />
           <Route path="facilities/:facilityId" element={<FacilityScreen />} />
-          <Route path="performance"            element={<PerformanceScreen />} />
-          {/* Catch-all within /coach → dashboard */}
+          <Route path="performance" element={<PerformanceScreen />} />
+          <Route path="load-monitor" element={<LoadMonitorScreen />} />
+          <Route path="attendance" element={<AttendanceScreen />} />
+          <Route path="analytics" element={<AnalyticsScreen />} />
+          <Route path="alerts" element={<AlertsScreen />} />
+          <Route path="settings" element={<SettingsScreen />} />
           <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Route>
 
-        {/* ── Legacy coach hash → redirect ── */}
-        {(location.hash === '#coach' || location.hash === '#coach-legacy') && (
-          <Route path="*" element={<Navigate to="/coach" replace />} />
-        )}
+        {(location.hash === '#coach' || location.hash === '#coach-legacy') && <Route path="*" element={<Navigate to="/coach" replace />} />}
 
-        {/* ── Athlete / Solo shell ── */}
         <Route path="/athlete" element={
           <AthleteShell
             user={loggedInUser}
@@ -334,48 +272,22 @@ function App() {
           />
         } />
 
-        {/* ── Legacy trainer dashboard ── */}
         <Route path="/trainer-legacy" element={
-          loggedInUser && !isGuest ? (
-            <TrainerDashboard
-              user={loggedInUser}
-              trainerName={profile.name || loggedInUser.email || 'Trainer'}
-            />
-          ) : (
-            <Navigate to="/select-role" replace />
-          )
+          loggedInUser && !isGuest ? <TrainerDashboard user={loggedInUser} trainerName={profile.name || loggedInUser.email || 'Trainer'} /> : <Navigate to="/select-role" replace />
         } />
 
-        {/* ── Default: route by mode ── */}
         <Route path="/" element={<ModeRouter appMode={appMode} loggedInUser={loggedInUser} isGuest={isGuest} />} />
         <Route path="*" element={<ModeRouter appMode={appMode} loggedInUser={loggedInUser} isGuest={isGuest} />} />
-
       </Routes>
     </>
   );
 }
 
-// ── Helper: route to appropriate shell based on saved mode ────────────────
-
-function ModeRouter({
-  appMode,
-  loggedInUser,
-  isGuest,
-}: {
-  appMode: AppMode | null;
-  loggedInUser: User | null;
-  isGuest: boolean;
-}) {
-  if (appMode === 'coach' && loggedInUser && !isGuest) {
-    return <Navigate to="/coach/dashboard" replace />;
-  }
-  if (appMode === 'athlete' || appMode === 'solo') {
-    return <Navigate to="/athlete" replace />;
-  }
+function ModeRouter({ appMode, loggedInUser, isGuest }: { appMode: AppMode | null; loggedInUser: User | null; isGuest: boolean }) {
+  if (appMode === 'coach' && loggedInUser && !isGuest) return <Navigate to="/coach/dashboard" replace />;
+  if (appMode === 'athlete' || appMode === 'solo') return <Navigate to="/athlete" replace />;
   return <Navigate to="/select-role" replace />;
 }
-
-// ── Helper: trainer share route ───────────────────────────────────────────
 
 function TrainerViewRoute() {
   const location = useLocation();
