@@ -4,6 +4,7 @@
  * together in a single time-based week grid.
  */
 import { useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw, Dumbbell } from 'lucide-react';
 import {
   loadMySessions,
@@ -20,7 +21,7 @@ import {
   type AthleteAvailabilityStatus,
 } from '../../lib/availability';
 import { AvailabilityControls } from './AvailabilityControls';
-import type { AttendanceSession } from '../../types/attendance';
+import type { AttendanceSession, AttendanceOverrideStatus } from '../../types/attendance';
 import type { Session as PersonalSession, PlannedSession } from '../../types/acwr';
 
 const HOUR_PX = 52;
@@ -49,7 +50,9 @@ function isoToMonday(d: Date): Date {
 }
 
 function addDays(d: Date, n: number): Date {
-  const r = new Date(d); r.setDate(r.getDate() + n); return r;
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
 }
 
 function toISO(d: Date): string {
@@ -73,6 +76,11 @@ function durationMin(s: AttendanceSession): number {
 function availabilityToRsvp(record: AthleteAvailabilityRecord | null): 'yes' | 'late' | 'maybe' | 'no' {
   if (!record || record.status === 'expected') return 'yes';
   return record.status;
+}
+
+function toLegacyOverrideStatus(status: AthleteAvailabilityStatus): AttendanceOverrideStatus | null {
+  if (status === 'expected') return null;
+  return status;
 }
 
 interface TeamSessionRow extends AttendanceSession {
@@ -177,12 +185,13 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
     if (saving === session.id) return;
     setSaving(session.id);
 
-    if (input.status === 'expected') {
+    const legacyStatus = toLegacyOverrideStatus(input.status);
+    if (legacyStatus === null) {
       clearAvailability(session.id, userId);
       await clearAthleteOverride(session.id, userId);
     } else {
       saveAvailability({ sessionId: session.id, athleteUserId: userId, ...input });
-      await submitAthleteOverride(session.id, userId, input.status === 'expected' ? 'maybe' : input.status);
+      await submitAthleteOverride(session.id, userId, legacyStatus);
     }
 
     const availability = getAvailabilityForSession(session.id, userId);
@@ -315,8 +324,8 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
   today: string;
   userId: string;
   saving: string | null;
-  onAvailability: (s: TeamSessionRow, input: { status: AthleteAvailabilityStatus; reason?: string; lateMinutes?: number }) => void;
-  onRPE: (s: TeamSessionRow, rpe: number, duration: number) => void;
+  onAvailability: (s: TeamSessionRow, input: { status: AthleteAvailabilityStatus; reason?: string; lateMinutes?: number }) => Promise<void> | void;
+  onRPE: (s: TeamSessionRow, rpe: number, duration: number) => Promise<void> | void;
   onClose: () => void;
 }) {
   const [rpeValue, setRpeValue] = useState(7);
@@ -393,7 +402,7 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
   );
 }
 
-function Overlay({ title, color, onClose, children }: { title: string; color?: string; onClose: () => void; children: React.ReactNode }) {
+function Overlay({ title, color, onClose, children }: { title: string; color?: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4">
       <div className="bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[80vh] flex flex-col">
