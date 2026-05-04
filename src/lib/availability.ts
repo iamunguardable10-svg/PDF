@@ -76,12 +76,14 @@ export function saveAvailability(input: SaveAvailabilityInput): AthleteAvailabil
   if (existingIndex >= 0) all[existingIndex] = record;
   else all.push(record);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  void persistAvailabilityToCloud(input, record);
   return record;
 }
 
 export function clearAvailability(sessionId: string, athleteUserId: string): void {
   const next = loadAvailabilityRecords().filter(item => !(item.sessionId === sessionId && item.athleteUserId === athleteUserId));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  void clearAvailabilityInCloud(sessionId, athleteUserId);
 }
 
 export function getAvailabilityForSession(sessionId: string, athleteUserId: string): AthleteAvailabilityRecord | null {
@@ -127,63 +129,13 @@ export async function loadAvailabilityForSessionsAsync(sessionIds: string[], ath
 
 export async function saveAvailabilityAsync(input: SaveAvailabilityInput): Promise<AthleteAvailabilityRecord | null> {
   const record = saveAvailability(input);
-  if (!record || !CLOUD_ENABLED) return record;
-
-  try {
-    const { data: existing, error: selectError } = await supabase
-      .from('att_records')
-      .select('id')
-      .eq('session_id', input.sessionId)
-      .eq('athlete_user_id', input.athleteUserId)
-      .maybeSingle();
-
-    if (selectError) {
-      console.warn('[saveAvailabilityAsync:select]', selectError.message);
-      return record;
-    }
-
-    const patch = {
-      override_status: input.status,
-      absence_reason: input.reason?.trim() ?? '',
-      late_minutes: input.status === 'late' ? record.lateMinutes ?? null : null,
-      override_at: record.updatedAt,
-    };
-
-    if (existing?.id) {
-      const { error } = await supabase.from('att_records').update(patch).eq('id', existing.id);
-      if (error) console.warn('[saveAvailabilityAsync:update]', error.message);
-    } else {
-      const { error } = await supabase.from('att_records').insert({
-        id: record.id,
-        session_id: input.sessionId,
-        athlete_user_id: input.athleteUserId,
-        athlete_name: 'Athlete',
-        ...patch,
-      });
-      if (error) console.warn('[saveAvailabilityAsync:insert]', error.message);
-    }
-  } catch (error) {
-    console.warn('[saveAvailabilityAsync]', error);
-  }
-
+  if (record) await persistAvailabilityToCloud(input, record);
   return record;
 }
 
 export async function clearAvailabilityAsync(sessionId: string, athleteUserId: string): Promise<void> {
   clearAvailability(sessionId, athleteUserId);
-  if (!CLOUD_ENABLED) return;
-
-  try {
-    const { error } = await supabase
-      .from('att_records')
-      .update({ override_status: null, absence_reason: '', late_minutes: null, override_at: new Date().toISOString() })
-      .eq('session_id', sessionId)
-      .eq('athlete_user_id', athleteUserId);
-
-    if (error) console.warn('[clearAvailabilityAsync]', error.message);
-  } catch (error) {
-    console.warn('[clearAvailabilityAsync]', error);
-  }
+  await clearAvailabilityInCloud(sessionId, athleteUserId);
 }
 
 export function statusLabel(status: AthleteAvailabilityStatus): string {
@@ -200,6 +152,63 @@ export function summarizeAvailability(record: AthleteAvailabilityRecord | null):
   if (!record || record.status === 'expected') return 'Erwartet / verfügbar';
   if (record.status === 'late') return `${record.lateMinutes ?? 0} Min. zu spät${record.reason ? ` · ${record.reason}` : ''}`;
   return record.reason ? `${statusLabel(record.status)} · ${record.reason}` : statusLabel(record.status);
+}
+
+async function persistAvailabilityToCloud(input: SaveAvailabilityInput, record: AthleteAvailabilityRecord): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+
+  try {
+    const { data: existing, error: selectError } = await supabase
+      .from('att_records')
+      .select('id')
+      .eq('session_id', input.sessionId)
+      .eq('athlete_user_id', input.athleteUserId)
+      .maybeSingle();
+
+    if (selectError) {
+      console.warn('[persistAvailabilityToCloud:select]', selectError.message);
+      return;
+    }
+
+    const patch = {
+      override_status: input.status,
+      absence_reason: input.reason?.trim() ?? '',
+      late_minutes: input.status === 'late' ? record.lateMinutes ?? null : null,
+      override_at: record.updatedAt,
+    };
+
+    if (existing?.id) {
+      const { error } = await supabase.from('att_records').update(patch).eq('id', existing.id);
+      if (error) console.warn('[persistAvailabilityToCloud:update]', error.message);
+    } else {
+      const { error } = await supabase.from('att_records').insert({
+        id: record.id,
+        session_id: input.sessionId,
+        athlete_user_id: input.athleteUserId,
+        athlete_name: 'Athlete',
+        ...patch,
+      });
+      if (error) console.warn('[persistAvailabilityToCloud:insert]', error.message);
+    }
+  } catch (error) {
+    console.warn('[persistAvailabilityToCloud]', error);
+  }
+}
+
+async function clearAvailabilityInCloud(sessionId: string, athleteUserId: string): Promise<void> {
+  if (!CLOUD_ENABLED) return;
+
+  try {
+    const { error } = await supabase
+      .from('att_records')
+      .update({ override_status: null, absence_reason: '', late_minutes: null, override_at: new Date().toISOString() })
+      .eq('session_id', sessionId)
+      .eq('athlete_user_id', athleteUserId);
+
+    if (error) console.warn('[clearAvailabilityInCloud]', error.message);
+  } catch (error) {
+    console.warn('[clearAvailabilityInCloud]', error);
+  }
 }
 
 function rowToAvailabilityRecord(row: AvailabilityRow): AthleteAvailabilityRecord | null {
