@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Check, HelpCircle, Timer, X } from 'lucide-react';
 import type { AthleteAvailabilityRecord, AthleteAvailabilityStatus } from '../../lib/availability';
 import { validateAvailability } from '../../lib/availability';
@@ -76,7 +77,7 @@ export function AvailabilityControls({ sessionId, athleteUserId, value, saving =
   );
 }
 
-function ChoiceButton({ active, disabled, onClick, tone, icon, label }: { active: boolean; disabled: boolean; onClick: () => void; tone: 'green' | 'amber' | 'gray' | 'red'; icon: React.ReactNode; label: string }) {
+function ChoiceButton({ active, disabled, onClick, tone, icon, label }: { active: boolean; disabled: boolean; onClick: () => void; tone: 'green' | 'amber' | 'gray' | 'red'; icon: ReactNode; label: string }) {
   const activeTones = {
     green: 'border-emerald-600 bg-emerald-700/50 text-emerald-100',
     amber: 'border-amber-600 bg-amber-700/50 text-amber-100',
