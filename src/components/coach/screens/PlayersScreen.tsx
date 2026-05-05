@@ -1,4 +1,5 @@
 import { Activity, CalendarDays, Layers3, UserRound } from 'lucide-react';
+import type { ElementType } from 'react';
 import { useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { CoachOutletContext } from '../CoachShell';
@@ -108,7 +109,7 @@ function MiniInfo({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, text, tone }: { icon: typeof UserRound; label: string; value: string; text: string; tone: 'indigo' | 'violet' | 'amber' | 'cyan' }) {
+function SummaryCard({ icon: Icon, label, value, text, tone }: { icon: ElementType; label: string; value: string; text: string; tone: 'indigo' | 'violet' | 'amber' | 'cyan' }) {
   const tones = {
     indigo: 'border-indigo-800/50 bg-indigo-950/20 text-indigo-300',
     violet: 'border-violet-800/50 bg-violet-950/20 text-violet-300',
