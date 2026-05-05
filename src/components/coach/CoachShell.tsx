@@ -297,7 +297,7 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
               className="w-full rounded-2xl border border-sky-900/40 bg-sky-950/20 px-3 py-3 text-left transition-colors hover:border-sky-700/70"
             >
               <p className="text-xs font-black uppercase tracking-wide text-sky-300">Lowest-friction path</p>
-              <p className="mt-1 text-[11px] leading-4 text-gray-500">Team -> Calendar session -> who comes -> final attendance. No separate attendance hunt.</p>
+              <p className="mt-1 text-[11px] leading-4 text-gray-500">Team, then calendar session, then attendance. No separate attendance hunt.</p>
             </button>
           </div>
 
