@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import type { ElementType } from 'react';
-import { Activity, AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, Clock3, UserRound, Users2 } from 'lucide-react';
+import { Activity, AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, Clock3, UserRound } from 'lucide-react';
 import { JoinRequestsPanel } from '../JoinRequestsPanel';
 import type { CoachOutletContext } from '../CoachShell';
 
