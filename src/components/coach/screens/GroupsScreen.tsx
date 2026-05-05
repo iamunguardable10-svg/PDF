@@ -4,6 +4,8 @@ import { Activity, AlertTriangle, Target, Users2 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import type { CoachOutletContext } from '../CoachShell';
 
+type GroupCardTone = 'violet' | 'amber' | 'emerald';
+
 const GROUP_GUIDE = [
   {
     title: 'Role groups',
@@ -30,7 +32,7 @@ export function GroupsScreen() {
       : lower.includes('guard') || lower.includes('big') || lower.includes('starter')
         ? 'Practice planning'
         : 'Coach-defined squad';
-    const tone = lower.includes('risk') || lower.includes('load')
+    const tone: GroupCardTone = lower.includes('risk') || lower.includes('load')
       ? 'amber'
       : lower.includes('return')
         ? 'emerald'
@@ -95,7 +97,7 @@ function GroupCard({
   group: { id: string; name: string; color: string };
   members: { id: string; name: string; sport?: string }[];
   purpose: string;
-  tone: 'violet' | 'amber' | 'emerald';
+  tone: GroupCardTone;
 }) {
   const tones = {
     violet: 'border-violet-800/50 bg-violet-950/20 text-violet-200',
