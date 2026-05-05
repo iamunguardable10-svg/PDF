@@ -99,6 +99,13 @@ export function loadAvailabilityForSessions(sessionIds: string[], athleteUserId:
   );
 }
 
+export function loadAvailabilityForCoachSessions(sessionIds: string[]): AthleteAvailabilityRecord[] {
+  const idSet = new Set(sessionIds);
+  return loadAvailabilityRecords()
+    .filter(item => idSet.has(item.sessionId) && item.status !== 'expected')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export async function loadAvailabilityForSessionsAsync(sessionIds: string[], athleteUserId: string): Promise<Record<string, AthleteAvailabilityRecord>> {
   const local = loadAvailabilityForSessions(sessionIds, athleteUserId);
   if (!CLOUD_ENABLED || sessionIds.length === 0) return local;
@@ -123,6 +130,34 @@ export async function loadAvailabilityForSessionsAsync(sessionIds: string[], ath
     return { ...local, ...Object.fromEntries(cloud.map(record => [record.sessionId, record])) };
   } catch (error) {
     console.warn('[loadAvailabilityForSessionsAsync]', error);
+    return local;
+  }
+}
+
+export async function loadAvailabilityForCoachSessionsAsync(sessionIds: string[]): Promise<AthleteAvailabilityRecord[]> {
+  const local = loadAvailabilityForCoachSessions(sessionIds);
+  if (!CLOUD_ENABLED || sessionIds.length === 0) return local;
+
+  try {
+    const { data, error } = await supabase
+      .from('att_records')
+      .select('id, session_id, athlete_user_id, override_status, absence_reason, late_minutes, override_at, updated_at')
+      .in('session_id', sessionIds)
+      .not('override_status', 'is', null);
+
+    if (error) {
+      console.warn('[loadAvailabilityForCoachSessionsAsync]', error.message);
+      return local;
+    }
+
+    const cloud = (data ?? [])
+      .map(rowToAvailabilityRecord)
+      .filter((record): record is AthleteAvailabilityRecord => Boolean(record));
+
+    if (cloud.length === 0) return local;
+    return mergeAvailabilityRecords(local, cloud).filter(record => record.status !== 'expected');
+  } catch (error) {
+    console.warn('[loadAvailabilityForCoachSessionsAsync]', error);
     return local;
   }
 }
@@ -222,4 +257,11 @@ function rowToAvailabilityRecord(row: AvailabilityRow): AthleteAvailabilityRecor
     lateMinutes: row.late_minutes ?? undefined,
     updatedAt: row.override_at ?? row.updated_at ?? new Date().toISOString(),
   };
+}
+
+function mergeAvailabilityRecords(local: AthleteAvailabilityRecord[], cloud: AthleteAvailabilityRecord[]): AthleteAvailabilityRecord[] {
+  const merged = new Map<string, AthleteAvailabilityRecord>();
+  for (const record of local) merged.set(`${record.sessionId}:${record.athleteUserId}`, record);
+  for (const record of cloud) merged.set(`${record.sessionId}:${record.athleteUserId}`, record);
+  return Array.from(merged.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
