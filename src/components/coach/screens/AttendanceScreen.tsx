@@ -58,6 +58,7 @@ export function AttendanceScreen() {
   const [errorByKey, setErrorByKey] = useState<Record<string, string>>({});
   const [hydratingFinal, setHydratingFinal] = useState(false);
   const [hydratingAvailability, setHydratingAvailability] = useState(false);
+  const [bulkConfirming, setBulkConfirming] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
   const upcomingSessions = useMemo(() => sessions
@@ -121,6 +122,10 @@ export function AttendanceScreen() {
   const exceptionRows = availabilityRows.filter(row => row.status !== 'expected');
   const expectedCount = Math.max(0, estimateExpectedCount(upcomingSessions, roster, teams.length) - exceptionRows.length);
   const activeSessionFinalRows = activeSession ? buildFinalRows(activeSession, roster, finalRecords, demoMode) : [];
+  const activeExceptionAthleteIds = new Set(exceptionRows.filter(row => row.sessionId === activeSession?.id).map(row => row.athleteId));
+  const activeUnfinalizedExpectedRows = activeSessionFinalRows.filter(row => !row.finalRecord && !activeExceptionAthleteIds.has(row.athleteId));
+  const activeFinalizedCount = activeSessionFinalRows.filter(row => row.finalRecord).length;
+  const activeExceptionCount = activeExceptionAthleteIds.size;
 
   async function handleFinalize(sessionId: string, athleteId: string, athleteName: string, status: FinalAttendanceStatus) {
     const key = `${sessionId}:${athleteId}`;
@@ -138,6 +143,22 @@ export function AttendanceScreen() {
     setFinalRecords(prev => [record, ...prev.filter(item => item.id !== record.id)]);
   }
 
+  async function handleConfirmExpectedAsPlanned() {
+    if (!activeSession || activeUnfinalizedExpectedRows.length === 0 || bulkConfirming) return;
+    setBulkConfirming(true);
+
+    try {
+      const records = await Promise.all(activeUnfinalizedExpectedRows.map(row => saveFinalAttendanceAsync(activeSession.id, row.athleteId, row.athleteName, {
+        status: 'present',
+        note: 'Confirmed as planned',
+      })));
+      const ids = new Set(records.map(record => record.id));
+      setFinalRecords(prev => [...records, ...prev.filter(item => !ids.has(item.id))].sort((a, b) => b.finalizedAt.localeCompare(a.finalizedAt)));
+    } finally {
+      setBulkConfirming(false);
+    }
+  }
+
   async function handleClearFinal(sessionId: string, athleteId: string) {
     const key = `${sessionId}:${athleteId}`;
     await clearFinalAttendanceAsync(sessionId, athleteId);
@@ -150,7 +171,7 @@ export function AttendanceScreen() {
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-green-300">TeamLoad</p>
         <h2 className="mt-1 text-2xl font-black text-white">Attendance</h2>
-        <p className="mt-1 text-sm text-gray-400">Operational availability before the session, then coach-final attendance after or during the session.</p>
+        <p className="mt-1 text-sm text-gray-400">Athlete reports are the default signal. Coach final attendance is a lightweight verification layer for confirming expected players and correcting exceptions.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
@@ -164,9 +185,23 @@ export function AttendanceScreen() {
         <div className="flex flex-col gap-2 border-b border-gray-800 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <div>
             <h3 className="text-sm font-bold text-white">Coach final attendance</h3>
-            <p className="mt-0.5 text-xs text-gray-500">Mark present, late, partial, excused or unexcused for the active session.</p>
+            <p className="mt-0.5 text-xs text-gray-500">Optional verification: confirm expected players in one click, then adjust only exceptions.</p>
           </div>
           <span className="w-fit rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{activeSession?.title ?? 'No session'}</span>
+        </div>
+        <div className="grid gap-2 border-b border-gray-800 px-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-4">
+          <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-3 py-3">
+            <p className="text-xs font-black uppercase tracking-wide text-emerald-200">Lightweight mode</p>
+            <p className="mt-1 text-xs leading-5 text-gray-400">No need to click every athlete every day. Confirm everyone who matched the plan, then manually correct late, partial or absent cases.</p>
+            <p className="mt-2 text-[11px] font-semibold text-gray-500">Active session: {activeFinalizedCount}/{activeSessionFinalRows.length} finalized - {activeExceptionCount} exception{activeExceptionCount === 1 ? '' : 's'} to review</p>
+          </div>
+          <button
+            onClick={() => void handleConfirmExpectedAsPlanned()}
+            disabled={!activeSession || activeUnfinalizedExpectedRows.length === 0 || bulkConfirming}
+            className="min-h-12 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-500"
+          >
+            {bulkConfirming ? 'Confirming...' : `Confirm expected (${activeUnfinalizedExpectedRows.length})`}
+          </button>
         </div>
         <div className="grid grid-cols-2 gap-2 border-b border-gray-800 px-3 py-3 sm:grid-cols-5 sm:px-4">
           {FINAL_STATUS_OPTIONS.map(option => (
@@ -180,12 +215,16 @@ export function AttendanceScreen() {
           <div className="divide-y divide-gray-800">
             {activeSessionFinalRows.map(row => {
               const key = `${activeSession.id}:${row.athleteId}`;
+              const isException = activeExceptionAthleteIds.has(row.athleteId);
               return (
                 <div key={row.athleteId} className="space-y-3 px-3 py-3 sm:px-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-bold text-white">{row.athleteName}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">Current final: {row.finalRecord ? finalAttendanceLabel(row.finalRecord.status) : 'Not finalized'}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-bold text-white">{row.athleteName}</p>
+                        {isException && <span className="rounded-full border border-amber-800/60 bg-amber-950/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">Exception</span>}
+                      </div>
+                      <p className="mt-0.5 text-xs text-gray-500">Current final: {row.finalRecord ? finalAttendanceLabel(row.finalRecord.status) : isException ? 'Needs review' : 'Uses athlete default until confirmed'}</p>
                     </div>
                     {row.finalRecord && (
                       <button onClick={() => void handleClearFinal(activeSession.id, row.athleteId)} className="w-fit rounded-lg border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-400 hover:border-gray-500 hover:text-white">Clear</button>
