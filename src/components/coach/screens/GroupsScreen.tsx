@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { ElementType } from 'react';
 import { Activity, AlertTriangle, Target, Users2 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import type { CoachOutletContext } from '../CoachShell';
@@ -138,7 +139,7 @@ function GroupCard({
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, text, tone }: { icon: typeof Users2; label: string; value: string; text: string; tone: 'violet' | 'gray' | 'cyan' }) {
+function SummaryCard({ icon: Icon, label, value, text, tone }: { icon: ElementType; label: string; value: string; text: string; tone: 'violet' | 'gray' | 'cyan' }) {
   const tones = {
     violet: 'border-violet-800/50 bg-violet-950/20 text-violet-300',
     gray: 'border-gray-800 bg-gray-900/60 text-gray-300',
