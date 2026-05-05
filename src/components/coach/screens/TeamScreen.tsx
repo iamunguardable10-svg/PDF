@@ -80,7 +80,7 @@ function buildTeamRows(roster: ManagedAthlete[], members: AttendanceTeamMember[]
 export function TeamScreen() {
   const { teamId }   = useParams<{ teamId: string }>();
   const navigate     = useNavigate();
-  const { teams, roster, groups, reload, demoMode } = useOutletContext<CoachOutletContext>();
+  const { user, teams, roster, groups, reload, demoMode } = useOutletContext<CoachOutletContext>();
 
   const team = teams.find(t => t.id === teamId) ?? null;
 
