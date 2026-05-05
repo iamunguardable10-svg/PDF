@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { Activity, BarChart3, CalendarDays, CheckCircle2, ChevronLeft, Plus, Users2, UserRound } from 'lucide-react';
+import { Activity, CalendarDays, ChevronLeft, Plus, Users2, UserRound } from 'lucide-react';
 import { CalendarView } from '../../calendar/CalendarView';
 import { SessionDetail } from '../../attendance/SessionDetail';
 import { SessionPlanner } from '../../attendance/SessionPlanner';
