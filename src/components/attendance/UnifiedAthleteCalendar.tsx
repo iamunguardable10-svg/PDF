@@ -1,5 +1,5 @@
 /**
- * Unified Athlete Calendar — Untis-style week view.
+ * Unified Athlete Calendar - Untis-style week view.
  * Shows team sessions, athlete availability and personal training entries
  * together in a single time-based week grid.
  */
@@ -12,6 +12,7 @@ import {
   clearAthleteOverride,
   submitAthleteRPE,
 } from '../../lib/attendanceStorage';
+import { applyTeamRpeToSession, loadAthleteTeamRpeMap } from '../../lib/rpeRecordHydration';
 import {
   getAvailabilityForSession,
   loadAvailabilityForSessionsAsync,
@@ -136,6 +137,8 @@ interface TeamSessionRow extends AttendanceSession {
   availability: AthleteAvailabilityRecord | null;
   finalAttendance: CoachFinalAttendanceRecord | null;
   rpe?: number | null;
+  actualDuration?: number | null;
+  rpeSubmittedAt?: string | null;
 }
 
 interface PersonalBlock {
@@ -176,8 +179,11 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
     setLoading(true);
     try {
       const raw = await loadMySessions(userId);
-      const availabilityBySession = await loadAvailabilityForSessionsAsync(raw.map(s => s.id), userId);
-      const finalRecords = await Promise.all(raw.map(session => loadFinalAttendanceForSessionAsync(session.id)));
+      const [availabilityBySession, finalRecords, rpeMap] = await Promise.all([
+        loadAvailabilityForSessionsAsync(raw.map(s => s.id), userId),
+        Promise.all(raw.map(session => loadFinalAttendanceForSessionAsync(session.id))),
+        loadAthleteTeamRpeMap(userId),
+      ]);
       const finalBySession = new Map<string, CoachFinalAttendanceRecord>();
 
       for (const records of finalRecords) {
@@ -187,13 +193,12 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
 
       setTeamSessions(raw.map(s => {
         const availability = availabilityBySession[s.id] ?? null;
-        return {
+        return applyTeamRpeToSession({
           ...s,
           availability,
           finalAttendance: finalBySession.get(s.id) ?? null,
           rsvp: availabilityToRsvp(availability),
-          rpe: null,
-        };
+        }, rpeMap);
       }));
     } finally {
       setLoading(false);
@@ -278,10 +283,11 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
   async function handleRPE(session: TeamSessionRow, rpe: number, duration: number) {
     const ok = await submitAthleteRPE(session.id, userId, rpe, duration);
     if (ok) {
-      setTeamSessions(prev => prev.map(s => s.id === session.id ? { ...s, rpe } : s));
+      const rpeSubmittedAt = new Date().toISOString();
+      setTeamSessions(prev => prev.map(s => s.id === session.id ? { ...s, rpe, actualDuration: duration, rpeSubmittedAt } : s));
       setOpenBlock(prev => {
         if (prev?.kind === 'team' && prev.session.id === session.id) {
-          return { kind: 'team', session: { ...prev.session, rpe } };
+          return { kind: 'team', session: { ...prev.session, rpe, actualDuration: duration, rpeSubmittedAt } };
         }
         return prev;
       });
@@ -416,7 +422,7 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
   onClose: () => void;
 }) {
   const [rpeValue, setRpeValue] = useState(7);
-  const [durValue, setDurValue] = useState(90);
+  const [durValue, setDurValue] = useState(block.kind === 'team' ? block.session.actualDuration ?? 90 : 90);
   const [showRPEForm, setShowRPEForm] = useState(false);
   const [submittingRPE, setSubmittingRPE] = useState(false);
 
@@ -461,7 +467,7 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
 
             {s.rpe ? (
               <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-500">RPE eingetragen: <span className="font-semibold text-emerald-400">{s.rpe}</span></p>
+                <p className="text-xs text-gray-500">RPE eingetragen: <span className="font-semibold text-emerald-400">{s.rpe}</span>{s.actualDuration ? ` / ${s.actualDuration} Min.` : ''}</p>
                 <button onClick={() => setShowRPEForm(true)} className="text-xs text-gray-600 transition-colors hover:text-gray-400">Aendern</button>
               </div>
             ) : (
