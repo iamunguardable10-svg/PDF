@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { CalendarDays, CheckCircle2, ChevronLeft, Clock, MapPin, ShieldCheck, UsersRound } from 'lucide-react';
-import type { AttendanceRecord, AttendanceSession, FinalAttendanceStatus } from '../../../types/attendance';
+import type { AttendanceRecord, FinalAttendanceStatus } from '../../../types/attendance';
 import { getEffectiveStatus } from '../../../types/attendance';
 import { clearFinalStatus, deleteSession, loadSessionRecords, setFinalStatus } from '../../../lib/attendanceStorage';
 import type { CoachOutletContext } from '../CoachShell';
