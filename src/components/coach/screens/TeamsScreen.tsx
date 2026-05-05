@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { ElementType } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { ChevronRight, Plus, Trash2, Check, X, Loader2 } from 'lucide-react';
+import { CalendarDays, ChevronRight, Check, Loader2, Plus, Trash2, Users2, X } from 'lucide-react';
 import type { CoachOutletContext } from '../CoachShell';
 
 const TEAM_COLORS = [
@@ -10,7 +11,7 @@ const TEAM_COLORS = [
 
 export function TeamsScreen() {
   const navigate = useNavigate();
-  const { teams, sessions, loading, onCreateTeam, onDeleteTeam, coachContext } =
+  const { teams, sessions, departments, roster, loading, onCreateTeam, onDeleteTeam, coachContext } =
     useOutletContext<CoachOutletContext>();
 
   const isAdmin = !coachContext || coachContext.role === 'org_admin';
@@ -24,12 +25,25 @@ export function TeamsScreen() {
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
+  const teamRows = useMemo(() => teams.map(team => {
+    const teamSessions = sessions.filter(session => session.teamId === team.id);
+    const upcoming = teamSessions.filter(session => session.datum >= today).length;
+    const nextSession = teamSessions
+      .filter(session => session.datum >= today)
+      .sort((a, b) => `${a.datum} ${a.startTime ?? ''}`.localeCompare(`${b.datum} ${b.startTime ?? ''}`))[0] ?? null;
+    const department = departments.find(item => item.id === team.departmentId)?.name ?? 'No department';
+    return { team, upcoming, nextSession, department };
+  }), [departments, sessions, teams, today]);
+
+  const activeTeams = teamRows.filter(row => row.upcoming > 0).length;
+  const unassignedTeams = teamRows.filter(row => row.department === 'No department').length;
+  const upcomingSessions = sessions.filter(session => session.datum >= today).length;
 
   async function handleCreate() {
     const name = newName.trim();
     if (!name) return;
     setSaving(true);
-    await onCreateTeam(name, newSport.trim(), TEAM_COLORS[colorIdx]);
+    await onCreateTeam(name, newSport.trim() || 'Basketball', TEAM_COLORS[colorIdx]);
     setSaving(false);
     setNewName(''); setNewSport(''); setShowForm(false);
   }
@@ -43,48 +57,62 @@ export function TeamsScreen() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-white">Teams</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{teams.length} Teams</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-sky-300">Club structure</p>
+          <h2 className="mt-1 text-2xl font-black text-white">Teams</h2>
+          <p className="mt-1 max-w-2xl text-sm text-gray-400">
+            Teams are the scheduling and responsibility layer. Use them for U18, U16 or position units that own sessions, calendars and attendance.
+          </p>
         </div>
         {isAdmin && (
           <button
             onClick={() => setShowForm(v => !v)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-violet-900/40 border border-violet-700/50 hover:bg-violet-800/50 text-violet-300 text-xs font-semibold transition-colors"
+            className="flex w-fit items-center gap-1 rounded-full border border-sky-700/50 bg-sky-900/40 px-3 py-1.5 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-800/50"
           >
-            <Plus size={12} /> Neues Team
+            <Plus size={12} /> New team
           </button>
         )}
       </div>
 
-      {/* Create form */}
+      <section className="grid gap-3 sm:grid-cols-4">
+        <SummaryCard icon={Users2} label="Teams" value={String(teams.length)} text="Scheduling units in this workspace." tone="sky" />
+        <SummaryCard icon={CalendarDays} label="Active" value={String(activeTeams)} text="Teams with upcoming sessions." tone="emerald" />
+        <SummaryCard icon={CalendarDays} label="Sessions" value={String(upcomingSessions)} text="Upcoming sessions across all teams." tone="violet" />
+        <SummaryCard icon={Users2} label="Roster base" value={String(roster.length)} text="Players are managed separately." tone="gray" />
+      </section>
+
+      {unassignedTeams > 0 && (
+        <div className="rounded-2xl border border-amber-800/50 bg-amber-950/20 px-4 py-3 text-sm text-amber-100/80">
+          {unassignedTeams} team{unassignedTeams === 1 ? '' : 's'} are not assigned to a department. That is fine for a small team, but clubs should connect teams to departments for cleaner planning.
+        </div>
+      )}
+
       {showForm && (
-        <div className="p-4 rounded-xl bg-gray-800/80 border border-gray-700 space-y-3">
-          <p className="text-xs font-medium text-gray-400">Neues Team erstellen</p>
-          <div className="flex gap-2">
+        <div className="rounded-2xl border border-gray-700 bg-gray-900/80 p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Create scheduling unit</p>
+          <div className="grid gap-2 sm:grid-cols-[1fr_160px]">
             <input
               autoFocus
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setShowForm(false); }}
-              placeholder="Teamname"
-              className="flex-1 h-9 px-3 rounded-xl bg-gray-900 border border-gray-700 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500"
+              placeholder="e.g. U18 Boys"
+              className="h-11 rounded-xl border border-gray-700 bg-gray-950 px-3 text-sm text-white placeholder-gray-600 outline-none focus:border-sky-500"
             />
             <input
               value={newSport}
               onChange={e => setNewSport(e.target.value)}
-              placeholder="Sportart"
-              className="w-28 h-9 px-3 rounded-xl bg-gray-900 border border-gray-700 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500"
+              placeholder="Sport"
+              className="h-11 rounded-xl border border-gray-700 bg-gray-950 px-3 text-sm text-white placeholder-gray-600 outline-none focus:border-sky-500"
             />
           </div>
-          {/* Color picker */}
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-wrap gap-2">
             {TEAM_COLORS.map((c, i) => (
               <button
                 key={c}
                 onClick={() => setColorIdx(i)}
-                className={`w-6 h-6 rounded-full transition-all ${colorIdx === i ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-800 scale-110' : 'opacity-70 hover:opacity-100'}`}
+                className={`h-7 w-7 rounded-full transition-all ${colorIdx === i ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-900 scale-110' : 'opacity-70 hover:opacity-100'}`}
                 style={{ backgroundColor: c }}
               />
             ))}
@@ -93,83 +121,106 @@ export function TeamsScreen() {
             <button
               onClick={handleCreate}
               disabled={saving || !newName.trim()}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-medium transition-colors"
+              className="flex items-center gap-1 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-sky-500 disabled:opacity-40"
             >
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-              Erstellen
+              Create team
             </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs transition-colors">
+            <button onClick={() => setShowForm(false)} className="rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-300 transition-colors hover:bg-gray-700">
               <X size={12} />
             </button>
           </div>
         </div>
       )}
 
-      {/* Team list */}
       {loading ? (
         <div className="flex items-center gap-2 py-8 text-xs text-gray-600">
-          <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-          Wird geladen…
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+          Loading teams...
         </div>
       ) : teams.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-gray-800 rounded-xl space-y-2">
-          <p className="text-gray-500 text-sm">Noch keine Teams</p>
-          {isAdmin && <p className="text-gray-600 text-xs">Klick auf "Neues Team" um zu starten</p>}
+        <div className="rounded-2xl border border-dashed border-gray-800 bg-gray-900/40 px-4 py-10 text-center">
+          <p className="text-sm font-semibold text-white">No teams yet</p>
+          {isAdmin && <p className="mt-1 text-xs text-gray-500">Create the first team before planning sessions or attendance.</p>}
         </div>
       ) : (
-        <div className="space-y-2">
-          {teams.map(team => {
-            const upcoming = sessions.filter(s => s.teamId === team.id && s.datum >= today).length;
-            const isConfirming = confirmDel === team.id;
+        <div className="grid gap-3 lg:grid-cols-2">
+          {teamRows.map(row => {
+            const isConfirming = confirmDel === row.team.id;
             return (
-              <div
-                key={team.id}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-800/60 border border-gray-700/50 hover:border-violet-700/40 transition-all group"
-              >
-                <button
-                  onClick={() => navigate(`/coach/teams/${team.id}`)}
-                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                >
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white group-hover:text-violet-200 truncate">{team.name}</p>
-                    <p className="text-[11px] text-gray-500 mt-0.5">
-                      {team.sport}
-                      {upcoming > 0 && ` · ${upcoming} kommende Einheiten`}
-                    </p>
-                  </div>
-                  <ChevronRight size={15} className="text-gray-600 group-hover:text-violet-400 flex-shrink-0" />
-                </button>
-
-                {/* Delete */}
-                {isAdmin && (
-                  isConfirming ? (
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => handleDelete(team.id)}
-                        disabled={deleting === team.id}
-                        className="text-[11px] px-2 py-1 rounded-lg bg-red-900/50 hover:bg-red-800/60 text-red-300 transition-colors"
-                      >
-                        {deleting === team.id ? <Loader2 size={11} className="animate-spin" /> : 'Löschen'}
-                      </button>
-                      <button onClick={() => setConfirmDel(null)} className="text-[11px] px-2 py-1 rounded-lg bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors">
-                        Abbruch
-                      </button>
+              <div key={row.team.id} className="rounded-2xl border border-gray-800 bg-gray-900/60 p-4 transition-all hover:border-sky-800/60">
+                <div className="flex items-start gap-3">
+                  <button onClick={() => navigate(`/coach/teams/${row.team.id}`)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                    <div className="mt-1 h-4 w-4 shrink-0 rounded-full" style={{ backgroundColor: row.team.color }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate text-base font-black text-white">{row.team.name}</h3>
+                        <ChevronRight size={15} className="shrink-0 text-gray-600" />
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">{row.team.sport || 'Sport'} · {row.department}</p>
                     </div>
-                  ) : (
-                    <button
-                      onClick={e => { e.stopPropagation(); setConfirmDel(team.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all flex-shrink-0"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  )
-                )}
+                  </button>
+
+                  {isAdmin && (
+                    isConfirming ? (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          onClick={() => handleDelete(row.team.id)}
+                          disabled={deleting === row.team.id}
+                          className="rounded-lg bg-red-900/50 px-2 py-1 text-[11px] text-red-300 transition-colors hover:bg-red-800/60"
+                        >
+                          {deleting === row.team.id ? <Loader2 size={11} className="animate-spin" /> : 'Delete'}
+                        </button>
+                        <button onClick={() => setConfirmDel(null)} className="rounded-lg bg-gray-800 px-2 py-1 text-[11px] text-gray-400 transition-colors hover:text-gray-200">
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setConfirmDel(row.team.id)} className="shrink-0 rounded-lg p-1.5 text-gray-600 transition-colors hover:bg-red-900/20 hover:text-red-400">
+                        <Trash2 size={13} />
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  <MiniInfo label="Upcoming" value={`${row.upcoming} sessions`} />
+                  <MiniInfo label="Next" value={row.nextSession ? `${row.nextSession.datum}${row.nextSession.startTime ? ` · ${row.nextSession.startTime}` : ''}` : 'None planned'} />
+                  <MiniInfo label="Use" value="Calendar + attendance" />
+                </div>
               </div>
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function MiniInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-950/50 px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-gray-600">{label}</p>
+      <p className="mt-1 truncate text-xs font-semibold text-gray-300">{value}</p>
+    </div>
+  );
+}
+
+function SummaryCard({ icon: Icon, label, value, text, tone }: { icon: ElementType; label: string; value: string; text: string; tone: 'sky' | 'emerald' | 'violet' | 'gray' }) {
+  const tones = {
+    sky: 'border-sky-800/50 bg-sky-950/20 text-sky-300',
+    emerald: 'border-emerald-800/50 bg-emerald-950/20 text-emerald-300',
+    violet: 'border-violet-800/50 bg-violet-950/20 text-violet-300',
+    gray: 'border-gray-800 bg-gray-900/60 text-gray-300',
+  };
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${tones[tone]}`}>
+      <div className="flex items-center gap-2">
+        <Icon size={16} />
+        <p className="text-xs font-bold uppercase tracking-wide opacity-80">{label}</p>
+      </div>
+      <p className="mt-2 text-2xl font-black text-white">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-gray-500">{text}</p>
     </div>
   );
 }
