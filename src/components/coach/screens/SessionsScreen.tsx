@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Activity, AlertTriangle, CalendarDays, CheckCircle2, Clock3, Lock, MapPin, Plus, ShieldCheck, UsersRound } from 'lucide-react';
+import { Activity, CalendarDays, CheckCircle2, Lock, MapPin, Plus, ShieldCheck, UsersRound } from 'lucide-react';
 import type { CoachOutletContext } from '../CoachShell';
 import type { AttendanceSession, FinalAttendanceStatus } from '../../../types/attendance';
 import { loadAvailabilityForCoachSessionsAsync } from '../../../lib/availability';
