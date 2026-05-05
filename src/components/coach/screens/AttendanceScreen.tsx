@@ -4,8 +4,8 @@ import { useOutletContext } from 'react-router-dom';
 import type { CoachOutletContext } from '../CoachShell';
 import type { AttendanceSession, FinalAttendanceStatus } from '../../../types/attendance';
 import type { ManagedAthlete } from '../../../types/trainerDashboard';
-import type { AthleteAvailabilityStatus } from '../../../lib/availability';
-import { loadAvailabilityRecords } from '../../../lib/availability';
+import type { AthleteAvailabilityRecord, AthleteAvailabilityStatus } from '../../../lib/availability';
+import { loadAvailabilityForCoachSessionsAsync } from '../../../lib/availability';
 import {
   clearFinalAttendanceAsync,
   finalAttendanceLabel,
@@ -52,10 +52,12 @@ const FINAL_STATUS_OPTIONS: { status: FinalAttendanceStatus; label: string }[] =
 export function AttendanceScreen() {
   const { sessions, teams, roster, demoMode } = useOutletContext<CoachOutletContext>();
   const [finalRecords, setFinalRecords] = useState<CoachFinalAttendanceRecord[]>(() => demoMode ? buildDemoFinalRecords(sessions, roster) : loadFinalAttendanceRecords());
+  const [availabilityRecords, setAvailabilityRecords] = useState<AthleteAvailabilityRecord[]>([]);
   const [minutesByKey, setMinutesByKey] = useState<Record<string, number>>({});
   const [noteByKey, setNoteByKey] = useState<Record<string, string>>({});
   const [errorByKey, setErrorByKey] = useState<Record<string, string>>({});
   const [hydratingFinal, setHydratingFinal] = useState(false);
+  const [hydratingAvailability, setHydratingAvailability] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
   const upcomingSessions = useMemo(() => sessions
@@ -87,7 +89,33 @@ export function AttendanceScreen() {
     };
   }, [activeSession?.id, demoMode]);
 
-  const availabilityRows = useMemo(() => buildAvailabilityRows(upcomingSessions, roster, demoMode), [upcomingSessions, roster, demoMode]);
+  useEffect(() => {
+    if (demoMode) return;
+
+    const sessionIds = upcomingSessions.map(session => session.id);
+    if (sessionIds.length === 0) {
+      setAvailabilityRecords([]);
+      return;
+    }
+
+    let cancelled = false;
+    setHydratingAvailability(true);
+
+    loadAvailabilityForCoachSessionsAsync(sessionIds)
+      .then(records => {
+        if (!cancelled) setAvailabilityRecords(records);
+      })
+      .catch(error => console.warn('[AttendanceScreen:hydrateAvailability]', error))
+      .finally(() => {
+        if (!cancelled) setHydratingAvailability(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [demoMode, upcomingSessions]);
+
+  const availabilityRows = useMemo(() => buildAvailabilityRows(upcomingSessions, roster, demoMode, availabilityRecords), [availabilityRecords, upcomingSessions, roster, demoMode]);
   const summary = useMemo(() => summarize(availabilityRows), [availabilityRows]);
   const finalSummary = useMemo(() => summarizeFinal(finalRecords), [finalRecords]);
   const exceptionRows = availabilityRows.filter(row => row.status !== 'expected');
@@ -128,7 +156,7 @@ export function AttendanceScreen() {
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <Card label="Expected" value={String(expectedCount)} text="Default: available unless marked otherwise." tone="green" />
         <Card label="Late" value={String(summary.late)} text="Players arriving later." tone="amber" />
-        <Card label="Maybe / No" value={String(summary.maybe + summary.no)} text="Requires coach attention." tone="red" />
+        <Card label="Maybe / No" value={String(summary.maybe + summary.no)} text={hydratingAvailability ? 'Loading cloud exceptions...' : 'Requires coach attention.'} tone="red" />
         <Card label="Finalized" value={String(finalRecords.length)} text={hydratingFinal ? 'Loading cloud records...' : 'Coach-confirmed records.'} tone="blue" />
       </div>
 
@@ -212,7 +240,7 @@ export function AttendanceScreen() {
             <h3 className="text-sm font-bold text-white">Availability exceptions</h3>
             <p className="mt-0.5 text-xs text-gray-500">Late, maybe and no are shown here. Everyone else remains expected.</p>
           </div>
-          <span className="w-fit rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{exceptionRows.length} open</span>
+          <span className="w-fit rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{hydratingAvailability ? 'Loading' : `${exceptionRows.length} open`}</span>
         </div>
 
         {exceptionRows.length === 0 ? (
@@ -268,10 +296,10 @@ function buildFinalRows(session: AttendanceSession, roster: ManagedAthlete[], re
   });
 }
 
-function buildAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAthlete[], demoMode: boolean): CoachAvailabilityRow[] {
+function buildAvailabilityRows(sessions: AttendanceSession[], roster: ManagedAthlete[], demoMode: boolean, records: AthleteAvailabilityRecord[]): CoachAvailabilityRow[] {
   if (demoMode) return buildDemoAvailabilityRows(sessions, roster);
   const bySession = new Map(sessions.map(session => [session.id, session]));
-  return loadAvailabilityRecords()
+  return records
     .filter(record => bySession.has(record.sessionId))
     .map(record => {
       const session = bySession.get(record.sessionId)!;
