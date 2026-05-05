@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, HelpCircle, XCircle } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import type { CoachOutletContext } from '../CoachShell';
@@ -7,10 +7,11 @@ import type { ManagedAthlete } from '../../../types/trainerDashboard';
 import type { AthleteAvailabilityStatus } from '../../../lib/availability';
 import { loadAvailabilityRecords } from '../../../lib/availability';
 import {
-  clearFinalAttendance,
+  clearFinalAttendanceAsync,
   finalAttendanceLabel,
+  loadFinalAttendanceForSessionAsync,
   loadFinalAttendanceRecords,
-  saveFinalAttendance,
+  saveFinalAttendanceAsync,
   validateFinalAttendance,
 } from '../../../lib/finalAttendance';
 import type { CoachFinalAttendanceInput, CoachFinalAttendanceRecord } from '../../../lib/finalAttendance';
@@ -30,6 +31,7 @@ type CoachAvailabilityRow = {
 
 type StatusSummary = Record<AthleteAvailabilityStatus, number>;
 type FinalSummary = Record<FinalAttendanceStatus, number>;
+type FinalRow = { athleteId: string; athleteName: string; finalRecord: CoachFinalAttendanceRecord | null };
 
 type DemoAvailabilitySpec = {
   sessionIndex: number;
@@ -53,12 +55,37 @@ export function AttendanceScreen() {
   const [minutesByKey, setMinutesByKey] = useState<Record<string, number>>({});
   const [noteByKey, setNoteByKey] = useState<Record<string, string>>({});
   const [errorByKey, setErrorByKey] = useState<Record<string, string>>({});
+  const [hydratingFinal, setHydratingFinal] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
-  const upcomingSessions = sessions
+  const upcomingSessions = useMemo(() => sessions
     .filter(session => session.datum >= today)
-    .sort((a, b) => `${a.datum} ${a.startTime ?? ''}`.localeCompare(`${b.datum} ${b.startTime ?? ''}`));
+    .sort((a, b) => `${a.datum} ${a.startTime ?? ''}`.localeCompare(`${b.datum} ${b.startTime ?? ''}`)), [sessions, today]);
   const activeSession = todaySessionsFirst(sessions)[0] ?? upcomingSessions[0] ?? sessions[0] ?? null;
+
+  useEffect(() => {
+    if (demoMode || !activeSession) return;
+
+    let cancelled = false;
+    setHydratingFinal(true);
+
+    loadFinalAttendanceForSessionAsync(activeSession.id)
+      .then(records => {
+        if (cancelled) return;
+        setFinalRecords(prev => {
+          const rest = prev.filter(item => item.sessionId !== activeSession.id);
+          return [...records, ...rest].sort((a, b) => b.finalizedAt.localeCompare(a.finalizedAt));
+        });
+      })
+      .catch(error => console.warn('[AttendanceScreen:hydrateFinal]', error))
+      .finally(() => {
+        if (!cancelled) setHydratingFinal(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession?.id, demoMode]);
 
   const availabilityRows = useMemo(() => buildAvailabilityRows(upcomingSessions, roster, demoMode), [upcomingSessions, roster, demoMode]);
   const summary = useMemo(() => summarize(availabilityRows), [availabilityRows]);
@@ -67,7 +94,7 @@ export function AttendanceScreen() {
   const expectedCount = Math.max(0, estimateExpectedCount(upcomingSessions, roster, teams.length) - exceptionRows.length);
   const activeSessionFinalRows = activeSession ? buildFinalRows(activeSession, roster, finalRecords, demoMode) : [];
 
-  function handleFinalize(sessionId: string, athleteId: string, athleteName: string, status: FinalAttendanceStatus) {
+  async function handleFinalize(sessionId: string, athleteId: string, athleteName: string, status: FinalAttendanceStatus) {
     const key = `${sessionId}:${athleteId}`;
     const input: CoachFinalAttendanceInput = { status, note: noteByKey[key] };
     if (status === 'partial') input.minutesParticipated = minutesByKey[key] ?? 30;
@@ -77,14 +104,15 @@ export function AttendanceScreen() {
       setErrorByKey(prev => ({ ...prev, [key]: validation }));
       return;
     }
+
     setErrorByKey(prev => ({ ...prev, [key]: '' }));
-    const record = saveFinalAttendance(sessionId, athleteId, athleteName, input);
+    const record = await saveFinalAttendanceAsync(sessionId, athleteId, athleteName, input);
     setFinalRecords(prev => [record, ...prev.filter(item => item.id !== record.id)]);
   }
 
-  function handleClearFinal(sessionId: string, athleteId: string) {
+  async function handleClearFinal(sessionId: string, athleteId: string) {
     const key = `${sessionId}:${athleteId}`;
-    clearFinalAttendance(sessionId, athleteId);
+    await clearFinalAttendanceAsync(sessionId, athleteId);
     setFinalRecords(prev => prev.filter(item => item.id !== key));
     setErrorByKey(prev => ({ ...prev, [key]: '' }));
   }
@@ -101,7 +129,7 @@ export function AttendanceScreen() {
         <Card label="Expected" value={String(expectedCount)} text="Default: available unless marked otherwise." tone="green" />
         <Card label="Late" value={String(summary.late)} text="Players arriving later." tone="amber" />
         <Card label="Maybe / No" value={String(summary.maybe + summary.no)} text="Requires coach attention." tone="red" />
-        <Card label="Finalized" value={String(finalRecords.length)} text="Coach-confirmed records." tone="blue" />
+        <Card label="Finalized" value={String(finalRecords.length)} text={hydratingFinal ? 'Loading cloud records...' : 'Coach-confirmed records.'} tone="blue" />
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/60">
@@ -132,14 +160,14 @@ export function AttendanceScreen() {
                       <p className="mt-0.5 text-xs text-gray-500">Current final: {row.finalRecord ? finalAttendanceLabel(row.finalRecord.status) : 'Not finalized'}</p>
                     </div>
                     {row.finalRecord && (
-                      <button onClick={() => handleClearFinal(activeSession.id, row.athleteId)} className="w-fit rounded-lg border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-400 hover:border-gray-500 hover:text-white">Clear</button>
+                      <button onClick={() => void handleClearFinal(activeSession.id, row.athleteId)} className="w-fit rounded-lg border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-400 hover:border-gray-500 hover:text-white">Clear</button>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                     {FINAL_STATUS_OPTIONS.map(option => (
                       <button
                         key={option.status}
-                        onClick={() => handleFinalize(activeSession.id, row.athleteId, row.athleteName, option.status)}
+                        onClick={() => void handleFinalize(activeSession.id, row.athleteId, row.athleteName, option.status)}
                         className={`min-h-11 rounded-xl border px-2.5 py-2 text-xs font-bold transition-colors ${row.finalRecord?.status === option.status ? 'border-green-500 bg-green-900/30 text-green-200' : 'border-gray-800 bg-gray-950/50 text-gray-400 hover:border-gray-600 hover:text-white'}`}
                       >
                         {option.label}
@@ -209,7 +237,7 @@ export function AttendanceScreen() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-bold text-white">{session.title}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">{formatDate(session.datum)} · {formatTime(session)}{team ? ` · ${team.name}` : ''}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">{formatDate(session.datum)} - {formatTime(session)}{team ? ` - ${team.name}` : ''}</p>
                 </div>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${rows.length > 0 ? 'bg-amber-900/40 text-amber-200' : 'bg-emerald-900/40 text-emerald-200'}`}>{rows.length > 0 ? `${rows.length} exceptions` : 'all expected'}</span>
               </div>
@@ -230,8 +258,6 @@ export function AttendanceScreen() {
     </div>
   );
 }
-
-type FinalRow = { athleteId: string; athleteName: string; finalRecord: CoachFinalAttendanceRecord | null };
 
 function buildFinalRows(session: AttendanceSession, roster: ManagedAthlete[], records: CoachFinalAttendanceRecord[], demoMode: boolean): FinalRow[] {
   const baseAthletes = roster.length > 0 ? roster : demoMode ? buildFallbackRoster() : [];
@@ -379,7 +405,7 @@ function AvailabilityRow({ row }: { row: CoachAvailabilityRow }) {
           <Icon size={15} />
           <p className="text-sm font-bold text-white">{row.athleteName}</p>
         </div>
-        <p className="mt-1 text-xs text-gray-500">{formatDate(row.sessionDate)} · {row.sessionTime}</p>
+        <p className="mt-1 text-xs text-gray-500">{formatDate(row.sessionDate)} - {row.sessionTime}</p>
       </div>
       <div>
         <p className="text-sm font-semibold text-gray-200">{row.sessionTitle}</p>

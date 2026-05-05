@@ -14,9 +14,9 @@ import {
 } from '../../lib/attendanceStorage';
 import {
   getAvailabilityForSession,
-  loadAvailabilityForSessions,
-  saveAvailability,
-  clearAvailability,
+  loadAvailabilityForSessionsAsync,
+  saveAvailabilityAsync,
+  clearAvailabilityAsync,
   type AthleteAvailabilityRecord,
   type AthleteAvailabilityStatus,
 } from '../../lib/availability';
@@ -125,13 +125,16 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
 
   const reload = useCallback(async () => {
     setLoading(true);
-    const raw = await loadMySessions(userId);
-    const availabilityBySession = loadAvailabilityForSessions(raw.map(s => s.id), userId);
-    setTeamSessions(raw.map(s => {
-      const availability = availabilityBySession[s.id] ?? null;
-      return { ...s, availability, rsvp: availabilityToRsvp(availability), rpe: null };
-    }));
-    setLoading(false);
+    try {
+      const raw = await loadMySessions(userId);
+      const availabilityBySession = await loadAvailabilityForSessionsAsync(raw.map(s => s.id), userId);
+      setTeamSessions(raw.map(s => {
+        const availability = availabilityBySession[s.id] ?? null;
+        return { ...s, availability, rsvp: availabilityToRsvp(availability), rpe: null };
+      }));
+    } finally {
+      setLoading(false);
+    }
   }, [userId]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -185,25 +188,28 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
     if (saving === session.id) return;
     setSaving(session.id);
 
-    const legacyStatus = toLegacyOverrideStatus(input.status);
-    if (legacyStatus === null) {
-      clearAvailability(session.id, userId);
-      await clearAthleteOverride(session.id, userId);
-    } else {
-      saveAvailability({ sessionId: session.id, athleteUserId: userId, ...input });
-      await submitAthleteOverride(session.id, userId, legacyStatus);
-    }
-
-    const availability = getAvailabilityForSession(session.id, userId);
-    const rsvp = availabilityToRsvp(availability);
-    setTeamSessions(prev => prev.map(s => s.id === session.id ? { ...s, availability, rsvp } : s));
-    setOpenBlock(prev => {
-      if (prev?.kind === 'team' && prev.session.id === session.id) {
-        return { kind: 'team', session: { ...prev.session, availability, rsvp } };
+    try {
+      const legacyStatus = toLegacyOverrideStatus(input.status);
+      if (legacyStatus === null) {
+        await clearAvailabilityAsync(session.id, userId);
+        await clearAthleteOverride(session.id, userId);
+      } else {
+        await saveAvailabilityAsync({ sessionId: session.id, athleteUserId: userId, ...input });
+        await submitAthleteOverride(session.id, userId, legacyStatus);
       }
-      return prev;
-    });
-    setSaving(null);
+
+      const availability = getAvailabilityForSession(session.id, userId);
+      const rsvp = availabilityToRsvp(availability);
+      setTeamSessions(prev => prev.map(s => s.id === session.id ? { ...s, availability, rsvp } : s));
+      setOpenBlock(prev => {
+        if (prev?.kind === 'team' && prev.session.id === session.id) {
+          return { kind: 'team', session: { ...prev.session, availability, rsvp } };
+        }
+        return prev;
+      });
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function handleRPE(session: TeamSessionRow, rpe: number, duration: number) {
