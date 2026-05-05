@@ -3,7 +3,7 @@ import type { ElementType } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users2, Warehouse, ChevronLeft, RefreshCw,
-  ClipboardList, CalendarDays, UserRound, Activity, CheckCircle2, BarChart3, Bell, Settings,
+  Activity, Bell, Settings,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import type { AttendanceTeam, AttendanceSession } from '../../types/attendance';
@@ -70,28 +70,29 @@ interface NavSection {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: 'dashboard', label: 'Home', helper: 'Daily decisions', Icon: LayoutDashboard, accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500' },
-  { path: 'teams', label: 'Teams', helper: 'Choose workspace first', Icon: Users2, accent: 'bg-sky-900/40', accentText: 'text-sky-300', accentBorder: 'border-sky-500', requires: 'canManageTeams' },
-  { path: 'sessions', label: 'Sessions', helper: 'Plan within a team', Icon: ClipboardList, accent: 'bg-blue-900/40', accentText: 'text-blue-300', accentBorder: 'border-blue-500' },
-  { path: 'calendar', label: 'Calendar', helper: 'Team schedule', Icon: CalendarDays, accent: 'bg-cyan-900/40', accentText: 'text-cyan-300', accentBorder: 'border-cyan-500' },
-  { path: 'players', label: 'Players', helper: 'Roster and profiles', Icon: UserRound, accent: 'bg-indigo-900/40', accentText: 'text-indigo-300', accentBorder: 'border-indigo-500' },
-  { path: 'groups', label: 'Groups', helper: 'Team and cross-team groups', Icon: Users2, accent: 'bg-purple-900/40', accentText: 'text-purple-300', accentBorder: 'border-purple-500' },
-  { path: 'attendance', label: 'Attendance', helper: 'Participation context', Icon: CheckCircle2, accent: 'bg-green-900/40', accentText: 'text-green-300', accentBorder: 'border-green-500', requires: 'canFinalizeAttendance' },
-  { path: 'load-monitor', label: 'Load', helper: 'Team performance', Icon: Activity, accent: 'bg-orange-900/40', accentText: 'text-orange-300', accentBorder: 'border-orange-500' },
-  { path: 'analytics', label: 'Analytics', helper: 'Team trends', Icon: BarChart3, accent: 'bg-amber-900/40', accentText: 'text-amber-300', accentBorder: 'border-amber-500', requires: 'canViewAnalytics' },
+  { path: 'dashboard', label: 'Home', helper: 'Today and open decisions', Icon: LayoutDashboard, accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500' },
+  { path: 'teams', label: 'Teams', helper: 'Calendar, roster, groups', Icon: Users2, accent: 'bg-sky-900/40', accentText: 'text-sky-300', accentBorder: 'border-sky-500', requires: 'canManageTeams' },
+  { path: 'load-monitor', label: 'Load', helper: 'ACWR and load signals', Icon: Activity, accent: 'bg-orange-900/40', accentText: 'text-orange-300', accentBorder: 'border-orange-500' },
   { path: 'alerts', label: 'Alerts', helper: 'Issues to review', Icon: Bell, accent: 'bg-red-900/40', accentText: 'text-red-300', accentBorder: 'border-red-500' },
   { path: 'facilities', label: 'Facilities', helper: 'Courts and rooms', Icon: Warehouse, accent: 'bg-teal-900/40', accentText: 'text-teal-300', accentBorder: 'border-teal-500', requires: 'canManageFacilities' },
   { path: 'settings', label: 'Settings', helper: 'Workflow and admin', Icon: Settings, accent: 'bg-gray-800/70', accentText: 'text-gray-300', accentBorder: 'border-gray-500' },
 ];
 
+const ROUTE_ALIASES: Record<string, string> = {
+  sessions: 'teams',
+  calendar: 'teams',
+  players: 'teams',
+  groups: 'teams',
+  attendance: 'teams',
+  analytics: 'load-monitor',
+};
+
 const NAV_SECTIONS: NavSection[] = [
-  { title: 'Start', description: 'Club-wide overview', paths: ['dashboard'] },
-  { title: 'Team Workspace', description: 'Pick a team, then work inside it', paths: ['teams', 'sessions', 'calendar', 'players', 'groups'] },
-  { title: 'Team Performance', description: 'View by selected team', paths: ['attendance', 'load-monitor', 'analytics', 'alerts'] },
-  { title: 'Operations', description: 'Resources and settings', paths: ['facilities', 'settings'] },
+  { title: 'Coach workflow', description: 'Start with today, then work inside a team', paths: ['dashboard', 'teams', 'load-monitor', 'alerts'] },
+  { title: 'Operations', description: 'Resources and preferences', paths: ['facilities', 'settings'] },
 ];
 
-const MOBILE_PRIMARY_NAV = ['dashboard', 'teams', 'sessions', 'attendance', 'load-monitor'];
+const MOBILE_PRIMARY_NAV = ['dashboard', 'teams', 'load-monitor', 'alerts', 'settings'];
 
 interface Props {
   user: User;
@@ -239,7 +240,9 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
     }
   }
 
-  const activeNav = navItems.find(n => location.pathname.includes(`/coach/${n.path}`))
+  const pathSegment = location.pathname.split('/coach/')[1]?.split('/')[0] ?? 'dashboard';
+  const activePath = ROUTE_ALIASES[pathSegment] ?? pathSegment;
+  const activeNav = navItems.find(n => n.path === activePath)
     ?? navItems[0]
     ?? NAV_ITEMS[0];
   const activeSection = navSections.find(section => section.items.some(item => item.path === activeNav.path)) ?? navSections[0];
@@ -293,8 +296,8 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
               onClick={() => navigate('/coach/teams')}
               className="w-full rounded-2xl border border-sky-900/40 bg-sky-950/20 px-3 py-3 text-left transition-colors hover:border-sky-700/70"
             >
-              <p className="text-xs font-black uppercase tracking-wide text-sky-300">Team-first workflow</p>
-              <p className="mt-1 text-[11px] leading-4 text-gray-500">Choose a team, then manage players, groups, sessions and performance in context.</p>
+              <p className="text-xs font-black uppercase tracking-wide text-sky-300">Lowest-friction path</p>
+              <p className="mt-1 text-[11px] leading-4 text-gray-500">Team -> Calendar session -> who comes -> final attendance. No separate attendance hunt.</p>
             </button>
           </div>
 
@@ -307,7 +310,7 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
                 </div>
                 <div className="space-y-0.5">
                   {section.items.map(item => {
-                    const isActive = location.pathname.includes(`/coach/${item.path}`);
+                    const isActive = activeNav.path === item.path;
                     return (
                       <button
                         key={item.path}
@@ -338,7 +341,7 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
       <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-gray-950/95 backdrop-blur-2xl border-t border-gray-800" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="flex items-stretch h-[64px] px-1">
           {mobileNavItems.map(item => {
-            const isActive = location.pathname.includes(`/coach/${item.path}`);
+            const isActive = activeNav.path === item.path;
             return (
               <button key={item.path} onClick={() => navigate(`/coach/${item.path}`)} className="relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors">
                 {isActive && <span className="absolute inset-x-1 top-1.5 bottom-1.5 rounded-xl bg-gray-800/80" />}
