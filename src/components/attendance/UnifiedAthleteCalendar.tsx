@@ -20,6 +20,8 @@ import {
   type AthleteAvailabilityRecord,
   type AthleteAvailabilityStatus,
 } from '../../lib/availability';
+import { loadFinalAttendanceForSessionAsync } from '../../lib/finalAttendance';
+import type { CoachFinalAttendanceRecord } from '../../lib/finalAttendance';
 import { AvailabilityControls } from './AvailabilityControls';
 import type { AttendanceSession, AttendanceOverrideStatus } from '../../types/attendance';
 import type { Session as PersonalSession, PlannedSession } from '../../types/acwr';
@@ -83,9 +85,56 @@ function toLegacyOverrideStatus(status: AthleteAvailabilityStatus): AttendanceOv
   return status;
 }
 
+function loadContextForSession(session: TeamSessionRow): { label: string; text: string; tone: 'amber' | 'blue' | 'green' } | null {
+  if (!session.finalAttendance) {
+    if (!session.rpe && session.rsvp === 'yes') {
+      return {
+        label: 'Load offen',
+        text: 'Du warst fuer diese Einheit erwartet. Trage RPE und Dauer ein, wenn du teilgenommen hast.',
+        tone: 'amber',
+      };
+    }
+    if (!session.rpe && session.rsvp === 'late') {
+      return {
+        label: 'Verspaetet',
+        text: 'Trage deinen Load nur fuer die tatsaechlich absolvierte Dauer ein.',
+        tone: 'blue',
+      };
+    }
+    return null;
+  }
+
+  if (session.finalAttendance.status === 'partial') {
+    return {
+      label: 'Partial attendance',
+      text: 'Der Coach hat partial markiert. Pruefe die Dauer bewusst, damit der Load nicht ueberschaetzt wird.',
+      tone: 'blue',
+    };
+  }
+
+  if (!session.rpe && (session.finalAttendance.status === 'present' || session.finalAttendance.status === 'late')) {
+    return {
+      label: 'Load fehlt',
+      text: 'Du bist als teilgenommen finalisiert. RPE und Dauer fehlen noch fuer deinen ACWR.',
+      tone: 'amber',
+    };
+  }
+
+  if (session.rpe && (session.finalAttendance.status === 'present' || session.finalAttendance.status === 'late')) {
+    return {
+      label: 'Participation bestaetigt',
+      text: 'Coach-Final und dein Load-Eintrag passen zusammen.',
+      tone: 'green',
+    };
+  }
+
+  return null;
+}
+
 interface TeamSessionRow extends AttendanceSession {
   rsvp: 'yes' | 'late' | 'maybe' | 'no';
   availability: AthleteAvailabilityRecord | null;
+  finalAttendance: CoachFinalAttendanceRecord | null;
   rpe?: number | null;
 }
 
@@ -128,9 +177,23 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
     try {
       const raw = await loadMySessions(userId);
       const availabilityBySession = await loadAvailabilityForSessionsAsync(raw.map(s => s.id), userId);
+      const finalRecords = await Promise.all(raw.map(session => loadFinalAttendanceForSessionAsync(session.id)));
+      const finalBySession = new Map<string, CoachFinalAttendanceRecord>();
+
+      for (const records of finalRecords) {
+        const ownRecord = records.find(record => record.athleteId === userId);
+        if (ownRecord) finalBySession.set(ownRecord.sessionId, ownRecord);
+      }
+
       setTeamSessions(raw.map(s => {
         const availability = availabilityBySession[s.id] ?? null;
-        return { ...s, availability, rsvp: availabilityToRsvp(availability), rpe: null };
+        return {
+          ...s,
+          availability,
+          finalAttendance: finalBySession.get(s.id) ?? null,
+          rsvp: availabilityToRsvp(availability),
+          rpe: null,
+        };
       }));
     } finally {
       setLoading(false);
@@ -214,7 +277,15 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
 
   async function handleRPE(session: TeamSessionRow, rpe: number, duration: number) {
     const ok = await submitAthleteRPE(session.id, userId, rpe, duration);
-    if (ok) setTeamSessions(prev => prev.map(s => s.id === session.id ? { ...s, rpe } : s));
+    if (ok) {
+      setTeamSessions(prev => prev.map(s => s.id === session.id ? { ...s, rpe } : s));
+      setOpenBlock(prev => {
+        if (prev?.kind === 'team' && prev.session.id === session.id) {
+          return { kind: 'team', session: { ...prev.session, rpe } };
+        }
+        return prev;
+      });
+    }
   }
 
   const hourLabels = Array.from({ length: TOTAL_H }, (_, i) => START_H + i);
@@ -284,6 +355,7 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
                       const height = Math.max(24, (dur / 60) * HOUR_PX);
                       const color = TYPE_COLORS[s.trainingType ?? ''] ?? '#6b7280';
                       const isPast = iso < today;
+                      const context = isPast ? loadContextForSession(s) : null;
                       return (
                         <button key={s.id} onClick={() => setOpenBlock({ kind: 'team', session: s })} className={`absolute left-0.5 right-0.5 z-20 overflow-hidden rounded-md text-left transition-all hover:brightness-110 ${isPast ? 'opacity-60' : ''}`} style={{ top: `${top}px`, height: `${height}px`, backgroundColor: color + '22', borderLeft: `3px solid ${color}` }}>
                           <div className="flex h-full flex-col justify-start overflow-hidden px-1 py-0.5">
@@ -295,6 +367,7 @@ export function UnifiedAthleteCalendar({ userId, personalSessions = [], plannedS
                               </p>
                             )}
                             {height >= 50 && isPast && s.rpe && <p className="text-[9px] leading-tight text-emerald-400">RPE {s.rpe}</p>}
+                            {height >= 62 && context && !s.rpe && <p className="text-[9px] leading-tight text-amber-300">Load offen</p>}
                           </div>
                         </button>
                       );
@@ -367,6 +440,7 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
   const isSaving = saving === s.id;
   const dateLabel = new Date(s.datum + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
   const color = TYPE_COLORS[s.trainingType ?? ''] ?? '#6b7280';
+  const loadContext = isPast ? loadContextForSession(s) : null;
 
   return (
     <Overlay onClose={onClose} title={s.title} color={color}>
@@ -382,7 +456,9 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
         {!isPast && <AvailabilityControls sessionId={s.id} athleteUserId={userId} value={s.availability} saving={isSaving} onSubmit={input => onAvailability(s, input)} />}
 
         {isPast && (
-          <div>
+          <div className="space-y-2">
+            {loadContext && <LoadContextNotice context={loadContext} />}
+
             {s.rpe ? (
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-500">RPE eingetragen: <span className="font-semibold text-emerald-400">{s.rpe}</span></p>
@@ -402,6 +478,11 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
                 <div>
                   <p className="mb-1 text-xs text-gray-400">Dauer (Min.): <span className="font-semibold text-white">{durValue}</span></p>
                   <input type="number" min={1} max={360} value={durValue} onChange={e => setDurValue(+e.target.value)} className="h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-2 text-sm text-white outline-none focus:border-violet-500" />
+                  {s.finalAttendance?.status === 'partial' && s.finalAttendance.minutesParticipated && (
+                    <button type="button" onClick={() => setDurValue(s.finalAttendance?.minutesParticipated ?? durValue)} className="mt-2 rounded-lg border border-sky-800/50 bg-sky-950/30 px-2 py-1 text-[11px] font-semibold text-sky-300 transition-colors hover:bg-sky-900/40">
+                      Coach-Minuten uebernehmen: {s.finalAttendance.minutesParticipated} Min.
+                    </button>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={async () => { setSubmittingRPE(true); await onRPE(s, rpeValue, durValue); setSubmittingRPE(false); setShowRPEForm(false); }} disabled={submittingRPE} className="flex-1 rounded-xl bg-violet-600 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40">{submittingRPE ? 'Speichern...' : 'Speichern'}</button>
@@ -413,6 +494,21 @@ function SessionOverlay({ block, today, userId, saving, onAvailability, onRPE, o
         )}
       </div>
     </Overlay>
+  );
+}
+
+function LoadContextNotice({ context }: { context: { label: string; text: string; tone: 'amber' | 'blue' | 'green' } }) {
+  const tones = {
+    amber: 'border-amber-800/50 bg-amber-950/30 text-amber-200',
+    blue: 'border-sky-800/50 bg-sky-950/30 text-sky-200',
+    green: 'border-emerald-800/50 bg-emerald-950/30 text-emerald-200',
+  };
+
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${tones[context.tone]}`}>
+      <p className="text-xs font-black">{context.label}</p>
+      <p className="mt-0.5 text-xs leading-5 text-gray-400">{context.text}</p>
+    </div>
   );
 }
 
