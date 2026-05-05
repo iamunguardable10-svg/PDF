@@ -101,6 +101,10 @@ export interface AttendanceRecord {
   // Trainer final
   finalStatus?: FinalAttendanceStatus;
   finalizedAt?: string;
+  // Athlete load entry for team sessions
+  rpe?: number;
+  actualDuration?: number;
+  rpeSubmittedAt?: string;
 }
 
 // Derived effective status for display
