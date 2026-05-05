@@ -2,12 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, Plus, Users2, UserRound } from 'lucide-react';
 import { CalendarView } from '../../calendar/CalendarView';
-import { SessionDetail } from '../../attendance/SessionDetail';
 import { SessionPlanner } from '../../attendance/SessionPlanner';
 import { loadTeamSessionsAsEvents } from '../../../lib/calendarLoaders';
 import { loadSessionsByTeam, loadTeamMembers, updateSession } from '../../../lib/attendanceStorage';
 import type { CalEvent } from '../../../types/calEvent';
-import type { AttendanceSession, AttendanceTeamMember } from '../../../types/attendance';
+import type { AttendanceTeamMember } from '../../../types/attendance';
 import type { DepartmentCalendarSession } from '../../../types/organization';
 import type { AthleteGroup, ManagedAthlete } from '../../../types/trainerDashboard';
 import type { CoachOutletContext } from '../CoachShell';
@@ -81,7 +80,7 @@ function buildTeamRows(roster: ManagedAthlete[], members: AttendanceTeamMember[]
 export function TeamScreen() {
   const { teamId }   = useParams<{ teamId: string }>();
   const navigate     = useNavigate();
-  const { user, teams, roster, groups, reload, demoMode } = useOutletContext<CoachOutletContext>();
+  const { teams, roster, groups, reload, demoMode } = useOutletContext<CoachOutletContext>();
 
   const team = teams.find(t => t.id === teamId) ?? null;
 
@@ -91,7 +90,6 @@ export function TeamScreen() {
   const [events,         setEvents]         = useState<CalEvent[]>([]);
   const [rawSessions,    setRawSessions]    = useState<DepartmentCalendarSession[]>([]);
   const [loading,        setLoading]        = useState(true);
-  const [openSession,    setOpenSession]    = useState<DepartmentCalendarSession | null>(null);
   const [showPlanner,    setShowPlanner]    = useState(false);
   const [planDatum,      setPlanDatum]      = useState<string | undefined>();
   const [planTime,       setPlanTime]       = useState<string | undefined>();
@@ -108,6 +106,11 @@ export function TeamScreen() {
     .filter(session => session.datum >= new Date().toISOString().split('T')[0])
     .sort((a, b) => `${a.datum} ${a.startTime ?? ''}`.localeCompare(`${b.datum} ${b.startTime ?? ''}`)), [rawSessions]);
   const nextSession = upcomingSessions[0] ?? null;
+
+  const openCockpit = useCallback((session: DepartmentCalendarSession) => {
+    if (!teamId) return;
+    navigate(`/coach/teams/${teamId}/sessions/${session.id}`);
+  }, [navigate, teamId]);
 
   const load = useCallback(async () => {
     if (!teamId || !team) { setLoading(false); return; }
@@ -191,7 +194,7 @@ export function TeamScreen() {
 
       <CoachFlowCard
         nextSession={nextSession}
-        onOpenNext={() => nextSession && setOpenSession(nextSession)}
+        onOpenNext={() => nextSession && openCockpit(nextSession)}
         onCreate={() => handleAddEvent(new Date().toISOString().split('T')[0], '10:00')}
       />
 
@@ -214,7 +217,7 @@ export function TeamScreen() {
             loading={loading}
             onEventClick={ev => {
               const raw = rawSessions.find(s => s.id === ev.sourceId);
-              if (raw) setOpenSession(raw);
+              if (raw) openCockpit(raw);
             }}
             onAddEvent={handleAddEvent}
             onMoveEvent={handleMoveEvent}
@@ -263,15 +266,6 @@ export function TeamScreen() {
         </section>
       )}
 
-      {openSession && (
-        <SessionDetail
-          session={openSession as unknown as AttendanceSession}
-          trainerId={user.id}
-          onClose={() => setOpenSession(null)}
-          onDeleted={() => { setOpenSession(null); load(); reload(); }}
-        />
-      )}
-
       {showPlanner && (
         <SessionPlanner
           trainerId={user.id}
@@ -295,8 +289,8 @@ function CoachFlowCard({ nextSession, onOpenNext, onCreate }: { nextSession: Dep
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-wide text-sky-300">Coach flow</p>
-          <h3 className="mt-1 text-lg font-black text-white">Plan session. Click session. Review who comes.</h3>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-400">Attendance is not a separate place to hunt for. It starts from the session in this team calendar.</p>
+          <h3 className="mt-1 text-lg font-black text-white">Plan session. Click session. Review exceptions.</h3>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-400">The session opens as a full cockpit page. Players who are out, maybe or late appear before the expected list.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {nextSession && (
