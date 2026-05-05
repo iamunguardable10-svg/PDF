@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { ElementType } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { CalendarDays, ChevronRight, Check, Loader2, Plus, Trash2, Users2, X } from 'lucide-react';
 import type { CoachOutletContext } from '../CoachShell';
@@ -205,7 +206,7 @@ function MiniInfo({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, text, tone }: { icon: typeof Users2; label: string; value: string; text: string; tone: 'sky' | 'emerald' | 'violet' | 'gray' }) {
+function SummaryCard({ icon: Icon, label, value, text, tone }: { icon: ElementType; label: string; value: string; text: string; tone: 'sky' | 'emerald' | 'violet' | 'gray' }) {
   const tones = {
     sky: 'border-sky-800/50 bg-sky-950/20 text-sky-300',
     emerald: 'border-emerald-800/50 bg-emerald-950/20 text-emerald-300',
