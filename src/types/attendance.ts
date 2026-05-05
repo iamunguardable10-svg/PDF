@@ -139,6 +139,7 @@ export interface TeamMessage {
 
 export interface SessionMessage {
   id: string;
+  sessionId: string;
   senderUserId: string;
   senderName: string;
   message: string;
