@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { ElementType } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Users2, Building2, Warehouse, ChevronLeft, RefreshCw,
+  LayoutDashboard, Users2, Warehouse, ChevronLeft, RefreshCw,
   ClipboardList, CalendarDays, UserRound, Activity, CheckCircle2, BarChart3, Bell, Settings,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
@@ -55,6 +55,7 @@ export interface CoachOutletContext {
 interface NavItem {
   path: string;
   label: string;
+  helper: string;
   Icon: ElementType;
   accent: string;
   accentText: string;
@@ -62,23 +63,35 @@ interface NavItem {
   requires?: keyof PermissionSet;
 }
 
+interface NavSection {
+  title: string;
+  description: string;
+  paths: string[];
+}
+
 const NAV_ITEMS: NavItem[] = [
-  { path: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard, accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500' },
-  { path: 'sessions', label: 'Sessions', Icon: ClipboardList, accent: 'bg-blue-900/40', accentText: 'text-blue-300', accentBorder: 'border-blue-500' },
-  { path: 'calendar', label: 'Calendar', Icon: CalendarDays, accent: 'bg-cyan-900/40', accentText: 'text-cyan-300', accentBorder: 'border-cyan-500' },
-  { path: 'players', label: 'Players', Icon: UserRound, accent: 'bg-indigo-900/40', accentText: 'text-indigo-300', accentBorder: 'border-indigo-500' },
-  { path: 'groups', label: 'Groups', Icon: Users2, accent: 'bg-purple-900/40', accentText: 'text-purple-300', accentBorder: 'border-purple-500' },
-  { path: 'teams', label: 'Teams', Icon: Users2, accent: 'bg-sky-900/40', accentText: 'text-sky-300', accentBorder: 'border-sky-500', requires: 'canManageTeams' },
-  { path: 'department', label: 'Departments', Icon: Building2, accent: 'bg-emerald-900/40', accentText: 'text-emerald-300', accentBorder: 'border-emerald-500', requires: 'canManageDepartments' },
-  { path: 'facilities', label: 'Facilities', Icon: Warehouse, accent: 'bg-teal-900/40', accentText: 'text-teal-300', accentBorder: 'border-teal-500', requires: 'canManageFacilities' },
-  { path: 'load-monitor', label: 'Load', Icon: Activity, accent: 'bg-orange-900/40', accentText: 'text-orange-300', accentBorder: 'border-orange-500' },
-  { path: 'attendance', label: 'Attendance', Icon: CheckCircle2, accent: 'bg-green-900/40', accentText: 'text-green-300', accentBorder: 'border-green-500', requires: 'canFinalizeAttendance' },
-  { path: 'analytics', label: 'Analytics', Icon: BarChart3, accent: 'bg-amber-900/40', accentText: 'text-amber-300', accentBorder: 'border-amber-500', requires: 'canViewAnalytics' },
-  { path: 'alerts', label: 'Alerts', Icon: Bell, accent: 'bg-red-900/40', accentText: 'text-red-300', accentBorder: 'border-red-500' },
-  { path: 'settings', label: 'Settings', Icon: Settings, accent: 'bg-gray-800/70', accentText: 'text-gray-300', accentBorder: 'border-gray-500' },
+  { path: 'dashboard', label: 'Home', helper: 'Daily decisions', Icon: LayoutDashboard, accent: 'bg-violet-900/40', accentText: 'text-violet-300', accentBorder: 'border-violet-500' },
+  { path: 'teams', label: 'Teams', helper: 'Choose workspace first', Icon: Users2, accent: 'bg-sky-900/40', accentText: 'text-sky-300', accentBorder: 'border-sky-500', requires: 'canManageTeams' },
+  { path: 'sessions', label: 'Sessions', helper: 'Plan within a team', Icon: ClipboardList, accent: 'bg-blue-900/40', accentText: 'text-blue-300', accentBorder: 'border-blue-500' },
+  { path: 'calendar', label: 'Calendar', helper: 'Team schedule', Icon: CalendarDays, accent: 'bg-cyan-900/40', accentText: 'text-cyan-300', accentBorder: 'border-cyan-500' },
+  { path: 'players', label: 'Players', helper: 'Roster and profiles', Icon: UserRound, accent: 'bg-indigo-900/40', accentText: 'text-indigo-300', accentBorder: 'border-indigo-500' },
+  { path: 'groups', label: 'Groups', helper: 'Team and cross-team groups', Icon: Users2, accent: 'bg-purple-900/40', accentText: 'text-purple-300', accentBorder: 'border-purple-500' },
+  { path: 'attendance', label: 'Attendance', helper: 'Participation context', Icon: CheckCircle2, accent: 'bg-green-900/40', accentText: 'text-green-300', accentBorder: 'border-green-500', requires: 'canFinalizeAttendance' },
+  { path: 'load-monitor', label: 'Load', helper: 'Team performance', Icon: Activity, accent: 'bg-orange-900/40', accentText: 'text-orange-300', accentBorder: 'border-orange-500' },
+  { path: 'analytics', label: 'Analytics', helper: 'Team trends', Icon: BarChart3, accent: 'bg-amber-900/40', accentText: 'text-amber-300', accentBorder: 'border-amber-500', requires: 'canViewAnalytics' },
+  { path: 'alerts', label: 'Alerts', helper: 'Issues to review', Icon: Bell, accent: 'bg-red-900/40', accentText: 'text-red-300', accentBorder: 'border-red-500' },
+  { path: 'facilities', label: 'Facilities', helper: 'Courts and rooms', Icon: Warehouse, accent: 'bg-teal-900/40', accentText: 'text-teal-300', accentBorder: 'border-teal-500', requires: 'canManageFacilities' },
+  { path: 'settings', label: 'Settings', helper: 'Workflow and admin', Icon: Settings, accent: 'bg-gray-800/70', accentText: 'text-gray-300', accentBorder: 'border-gray-500' },
 ];
 
-const MOBILE_PRIMARY_NAV = ['dashboard', 'sessions', 'calendar', 'attendance', 'load-monitor'];
+const NAV_SECTIONS: NavSection[] = [
+  { title: 'Start', description: 'Club-wide overview', paths: ['dashboard'] },
+  { title: 'Team Workspace', description: 'Pick a team, then work inside it', paths: ['teams', 'sessions', 'calendar', 'players', 'groups'] },
+  { title: 'Team Performance', description: 'View by selected team', paths: ['attendance', 'load-monitor', 'analytics', 'alerts'] },
+  { title: 'Operations', description: 'Resources and settings', paths: ['facilities', 'settings'] },
+];
+
+const MOBILE_PRIMARY_NAV = ['dashboard', 'teams', 'sessions', 'attendance', 'load-monitor'];
 
 interface Props {
   user: User;
@@ -107,6 +120,13 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
 
   const permissions = useMemo(() => getCoachPermissions(coachContext), [coachContext]);
   const navItems = useMemo(() => NAV_ITEMS.filter(item => !item.requires || Boolean(permissions[item.requires])), [permissions]);
+  const navItemsByPath = useMemo(() => new Map(navItems.map(item => [item.path, item])), [navItems]);
+  const navSections = useMemo(() => NAV_SECTIONS
+    .map(section => ({
+      ...section,
+      items: section.paths.map(path => navItemsByPath.get(path)).filter((item): item is NavItem => Boolean(item)),
+    }))
+    .filter(section => section.items.length > 0), [navItemsByPath]);
   const mobileNavItems = useMemo(() => navItems.filter(item => MOBILE_PRIMARY_NAV.includes(item.path)), [navItems]);
   const demoData = useMemo(() => buildCoachDemoData(user.id), [user.id]);
 
@@ -222,6 +242,7 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
   const activeNav = navItems.find(n => location.pathname.includes(`/coach/${n.path}`))
     ?? navItems[0]
     ?? NAV_ITEMS[0];
+  const activeSection = navSections.find(section => section.items.some(item => item.path === activeNav.path)) ?? navSections[0];
 
   const outletCtx: CoachOutletContext = {
     user, org: activeOrg, departments: activeDepartments, teams: activeTeams, sessions: activeSessions,
@@ -244,7 +265,7 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
             <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-purple-700 rounded-lg flex items-center justify-center text-xs font-black shadow-lg shadow-violet-900/30 flex-shrink-0">TL</div>
             <div className="min-w-0">
               <span className="block truncate text-sm font-semibold text-white leading-none">{activeOrg?.name ?? 'TeamLoad'}</span>
-              <span className="hidden text-[11px] text-gray-500 sm:inline">{demoMode ? `Demo club · ${roleLabel(permissions.role)}` : `${coachName} · ${roleLabel(permissions.role)}`}</span>
+              <span className="hidden text-[11px] text-gray-500 sm:inline">{demoMode ? `Demo club - ${roleLabel(permissions.role)}` : `${coachName} - ${roleLabel(permissions.role)}`}</span>
             </div>
           </div>
 
@@ -257,7 +278,7 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
             >
               Demo {demoMode ? 'on' : 'off'}
             </button>
-            <span className={`hidden sm:block text-xs font-medium px-2.5 py-1 rounded-lg ${activeNav.accent} ${activeNav.accentText}`}>{activeNav.label}</span>
+            <span className={`hidden sm:block text-xs font-medium px-2.5 py-1 rounded-lg ${activeNav.accent} ${activeNav.accentText}`}>{activeSection?.title ?? 'Coach'} / {activeNav.label}</span>
             <button onClick={reload} title="Refresh data" className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-gray-800 transition-colors">
               <RefreshCw size={13} className={loading && !demoMode ? 'animate-spin' : ''} />
             </button>
@@ -266,20 +287,45 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
       </header>
 
       <div className="flex flex-1 min-h-0">
-        <nav className="hidden sm:flex flex-col w-48 border-r border-gray-800 bg-gray-950 flex-shrink-0 py-3 gap-0.5 overflow-y-auto">
-          {navItems.map(item => {
-            const isActive = location.pathname.includes(`/coach/${item.path}`);
-            return (
-              <button
-                key={item.path}
-                onClick={() => navigate(`/coach/${item.path}`)}
-                className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors border-l-2 ${isActive ? `${item.accent} ${item.accentText} ${item.accentBorder}` : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'}`}
-              >
-                <item.Icon size={15} className="flex-shrink-0" />
-                {item.label}
-              </button>
-            );
-          })}
+        <nav className="hidden sm:flex flex-col w-60 border-r border-gray-800 bg-gray-950 flex-shrink-0 py-3 overflow-y-auto">
+          <div className="px-3 pb-3">
+            <button
+              onClick={() => navigate('/coach/teams')}
+              className="w-full rounded-2xl border border-sky-900/40 bg-sky-950/20 px-3 py-3 text-left transition-colors hover:border-sky-700/70"
+            >
+              <p className="text-xs font-black uppercase tracking-wide text-sky-300">Team-first workflow</p>
+              <p className="mt-1 text-[11px] leading-4 text-gray-500">Choose a team, then manage players, groups, sessions and performance in context.</p>
+            </button>
+          </div>
+
+          <div className="space-y-3 px-2 pb-4">
+            {navSections.map(section => (
+              <div key={section.title}>
+                <div className="px-2 pb-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-600">{section.title}</p>
+                  <p className="mt-0.5 text-[10px] text-gray-700">{section.description}</p>
+                </div>
+                <div className="space-y-0.5">
+                  {section.items.map(item => {
+                    const isActive = location.pathname.includes(`/coach/${item.path}`);
+                    return (
+                      <button
+                        key={item.path}
+                        onClick={() => navigate(`/coach/${item.path}`)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl border-l-2 px-3 py-2 text-left transition-colors ${isActive ? `${item.accent} ${item.accentText} ${item.accentBorder}` : 'border-transparent text-gray-500 hover:bg-gray-800/40 hover:text-gray-200'}`}
+                      >
+                        <item.Icon size={15} className="flex-shrink-0" />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold leading-4">{item.label}</span>
+                          <span className="block truncate text-[10px] leading-4 opacity-70">{item.helper}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         </nav>
 
         <main className="flex-1 overflow-y-auto">
