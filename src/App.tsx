@@ -14,6 +14,7 @@ import { TrainerDashboard } from './components/TrainerDashboard';
 import { DashboardScreen }   from './components/coach/screens/DashboardScreen';
 import { TeamsScreen }        from './components/coach/screens/TeamsScreen';
 import { TeamScreen }         from './components/coach/screens/TeamScreen';
+import { SessionCockpitScreen } from './components/coach/screens/SessionCockpitScreen';
 import { DepartmentScreen }   from './components/coach/screens/DepartmentScreen';
 import { FacilitiesScreen }   from './components/coach/screens/FacilitiesScreen';
 import { FacilityScreen }     from './components/coach/screens/FacilityScreen';
@@ -318,6 +319,7 @@ function App() {
           <Route path="groups"                 element={<GroupsScreen />} />
           <Route path="teams"                  element={<TeamsScreen />} />
           <Route path="teams/:teamId"          element={<TeamScreen />} />
+          <Route path="teams/:teamId/sessions/:sessionId" element={<SessionCockpitScreen />} />
           <Route path="department"             element={<DepartmentScreen />} />
           <Route path="facilities"             element={<FacilitiesScreen />} />
           <Route path="facilities/:facilityId" element={<FacilityScreen />} />
