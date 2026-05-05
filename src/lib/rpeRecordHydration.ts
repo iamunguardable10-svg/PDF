@@ -1,5 +1,4 @@
-import { loadMyRecords } from './attendanceStorage';
-import type { AttendanceRecord } from '../types/attendance';
+import { CLOUD_ENABLED, supabase } from './supabase';
 
 export interface AthleteTeamRpeEntry {
   sessionId: string;
@@ -10,26 +9,39 @@ export interface AthleteTeamRpeEntry {
 
 export type AthleteTeamRpeMap = Map<string, AthleteTeamRpeEntry>;
 
-function toNullableNumber(value: number | undefined): number | null {
+function toNullableNumber(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
 }
 
-function toEntry(record: AttendanceRecord): AthleteTeamRpeEntry {
-  return {
-    sessionId: record.sessionId,
-    rpe: toNullableNumber(record.rpe),
-    actualDuration: toNullableNumber(record.actualDuration),
-    rpeSubmittedAt: record.rpeSubmittedAt ?? null,
-  };
+function toNullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
 }
 
 export async function loadAthleteTeamRpeMap(userId: string): Promise<AthleteTeamRpeMap> {
-  const records = await loadMyRecords(userId);
   const map: AthleteTeamRpeMap = new Map();
+  if (!CLOUD_ENABLED) return map;
 
-  for (const record of records) {
-    if (record.rpe == null && record.actualDuration == null && !record.rpeSubmittedAt) continue;
-    map.set(record.sessionId, toEntry(record));
+  const { data, error } = await supabase
+    .from('att_records')
+    .select('session_id, rpe, actual_duration, rpe_submitted_at')
+    .eq('athlete_user_id', userId)
+    .not('rpe_submitted_at', 'is', null);
+
+  if (error) {
+    console.warn('[loadAthleteTeamRpeMap]', error.message);
+    return map;
+  }
+
+  for (const row of data ?? []) {
+    const sessionId = toNullableString(row.session_id);
+    if (!sessionId) continue;
+
+    map.set(sessionId, {
+      sessionId,
+      rpe: toNullableNumber(row.rpe),
+      actualDuration: toNullableNumber(row.actual_duration),
+      rpeSubmittedAt: toNullableString(row.rpe_submitted_at),
+    });
   }
 
   return map;
