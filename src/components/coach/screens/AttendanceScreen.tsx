@@ -15,6 +15,7 @@ import {
   validateFinalAttendance,
 } from '../../../lib/finalAttendance';
 import type { CoachFinalAttendanceInput, CoachFinalAttendanceRecord } from '../../../lib/finalAttendance';
+import { finalAttendanceModeCopy, loadFinalAttendanceSettings } from '../../../lib/finalAttendanceSettings';
 
 type CoachAvailabilityRow = {
   id: string;
@@ -59,6 +60,7 @@ export function AttendanceScreen() {
   const [hydratingFinal, setHydratingFinal] = useState(false);
   const [hydratingAvailability, setHydratingAvailability] = useState(false);
   const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [finalAttendanceSettings] = useState(() => loadFinalAttendanceSettings());
 
   const today = new Date().toISOString().split('T')[0];
   const upcomingSessions = useMemo(() => sessions
@@ -116,6 +118,7 @@ export function AttendanceScreen() {
     };
   }, [demoMode, upcomingSessions]);
 
+  const modeCopy = finalAttendanceModeCopy(finalAttendanceSettings.mode);
   const availabilityRows = useMemo(() => buildAvailabilityRows(upcomingSessions, roster, demoMode, availabilityRecords), [availabilityRecords, upcomingSessions, roster, demoMode]);
   const summary = useMemo(() => summarize(availabilityRows), [availabilityRows]);
   const finalSummary = useMemo(() => summarizeFinal(finalRecords), [finalRecords]);
@@ -171,7 +174,7 @@ export function AttendanceScreen() {
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-green-300">TeamLoad</p>
         <h2 className="mt-1 text-2xl font-black text-white">Attendance</h2>
-        <p className="mt-1 text-sm text-gray-400">Athlete reports are the default signal. Coach final attendance is a lightweight verification layer for confirming expected players and correcting exceptions.</p>
+        <p className="mt-1 text-sm text-gray-400">{modeCopy.body}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
@@ -185,14 +188,14 @@ export function AttendanceScreen() {
         <div className="flex flex-col gap-2 border-b border-gray-800 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <div>
             <h3 className="text-sm font-bold text-white">Coach final attendance</h3>
-            <p className="mt-0.5 text-xs text-gray-500">Optional verification: confirm expected players in one click, then adjust only exceptions.</p>
+            <p className="mt-0.5 text-xs text-gray-500">{modeCopy.actionHint}</p>
           </div>
           <span className="w-fit rounded-full border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs font-semibold text-gray-300">{activeSession?.title ?? 'No session'}</span>
         </div>
         <div className="grid gap-2 border-b border-gray-800 px-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-4">
           <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-3 py-3">
-            <p className="text-xs font-black uppercase tracking-wide text-emerald-200">Lightweight mode</p>
-            <p className="mt-1 text-xs leading-5 text-gray-400">No need to click every athlete every day. Confirm everyone who matched the plan, then manually correct late, partial or absent cases.</p>
+            <p className="text-xs font-black uppercase tracking-wide text-emerald-200">{modeCopy.eyebrow}</p>
+            <p className="mt-1 text-xs leading-5 text-gray-400">{modeCopy.body}</p>
             <p className="mt-2 text-[11px] font-semibold text-gray-500">Active session: {activeFinalizedCount}/{activeSessionFinalRows.length} finalized - {activeExceptionCount} exception{activeExceptionCount === 1 ? '' : 's'} to review</p>
           </div>
           <button
