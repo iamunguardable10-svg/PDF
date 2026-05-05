@@ -6,16 +6,26 @@ import { SessionDetail } from '../../attendance/SessionDetail';
 import { SessionPlanner } from '../../attendance/SessionPlanner';
 import { TrainerDashboard } from '../../TrainerDashboard';
 import { loadTeamSessionsAsEvents } from '../../../lib/calendarLoaders';
-import { loadSessionsByTeam, updateSession } from '../../../lib/attendanceStorage';
+import { loadSessionsByTeam, loadTeamMembers, updateSession } from '../../../lib/attendanceStorage';
 import type { CalEvent } from '../../../types/calEvent';
-import type { AttendanceSession } from '../../../types/attendance';
+import type { AttendanceSession, AttendanceTeamMember } from '../../../types/attendance';
 import type { DepartmentCalendarSession } from '../../../types/organization';
+import type { AthleteGroup, ManagedAthlete } from '../../../types/trainerDashboard';
 import type { CoachOutletContext } from '../CoachShell';
 
 type MainTab = 'calendar' | 'players' | 'groups' | 'performance';
 type PlayersTab = 'roster' | 'profiles' | 'load-profile';
 type GroupsTab = 'team-groups' | 'cross-team-groups';
 type PerformanceTab = 'load' | 'attendance' | 'analytics';
+
+type TeamMemberRow = {
+  key: string;
+  name: string;
+  sport: string;
+  source: 'roster' | 'team-member';
+  athlete?: ManagedAthlete;
+  member?: AttendanceTeamMember;
+};
 
 function weekWindow() {
   const d = new Date();
@@ -26,10 +36,56 @@ function weekWindow() {
   return { from, to };
 }
 
+function athleteMatchesMember(athlete: ManagedAthlete, member: AttendanceTeamMember): boolean {
+  return Boolean(member.athleteRosterId && member.athleteRosterId === athlete.id);
+}
+
+function buildTeamRows(roster: ManagedAthlete[], members: AttendanceTeamMember[], demoMode: boolean, fallbackSport: string): TeamMemberRow[] {
+  if (demoMode && members.length === 0) {
+    return roster.map(athlete => ({
+      key: athlete.id,
+      name: athlete.name,
+      sport: athlete.sport || fallbackSport || 'Athlete',
+      source: 'roster',
+      athlete,
+    }));
+  }
+
+  const rows: TeamMemberRow[] = [];
+  const matchedMemberIds = new Set<string>();
+
+  for (const athlete of roster) {
+    const member = members.find(item => athleteMatchesMember(athlete, item));
+    if (!member) continue;
+    matchedMemberIds.add(member.id);
+    rows.push({
+      key: athlete.id,
+      name: athlete.name,
+      sport: athlete.sport || member.sport || fallbackSport || 'Athlete',
+      source: 'roster',
+      athlete,
+      member,
+    });
+  }
+
+  for (const member of members) {
+    if (matchedMemberIds.has(member.id)) continue;
+    rows.push({
+      key: member.id,
+      name: member.name,
+      sport: member.sport || fallbackSport || 'Athlete',
+      source: 'team-member',
+      member,
+    });
+  }
+
+  return rows.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function TeamScreen() {
   const { teamId }   = useParams<{ teamId: string }>();
   const navigate     = useNavigate();
-  const { user, teams, roster, groups, coachName, reload } = useOutletContext<CoachOutletContext>();
+  const { user, teams, roster, groups, coachName, reload, demoMode } = useOutletContext<CoachOutletContext>();
 
   const team = teams.find(t => t.id === teamId) ?? null;
 
@@ -37,6 +93,8 @@ export function TeamScreen() {
   const [playersTab,     setPlayersTab]     = useState<PlayersTab>('roster');
   const [groupsTab,      setGroupsTab]      = useState<GroupsTab>('team-groups');
   const [performanceTab, setPerformanceTab] = useState<PerformanceTab>('load');
+  const [teamMembers,    setTeamMembers]    = useState<AttendanceTeamMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
   const [events,         setEvents]         = useState<CalEvent[]>([]);
   const [rawSessions,    setRawSessions]    = useState<DepartmentCalendarSession[]>([]);
   const [loading,        setLoading]        = useState(true);
@@ -44,6 +102,14 @@ export function TeamScreen() {
   const [showPlanner,    setShowPlanner]    = useState(false);
   const [planDatum,      setPlanDatum]      = useState<string | undefined>();
   const [planTime,       setPlanTime]       = useState<string | undefined>();
+
+  const teamRows = useMemo(() => buildTeamRows(roster, teamMembers, demoMode, team?.sport ?? ''), [demoMode, roster, team?.sport, teamMembers]);
+  const teamRoster = useMemo(() => teamRows.map(row => row.athlete).filter((athlete): athlete is ManagedAthlete => Boolean(athlete)), [teamRows]);
+  const teamGroupIds = useMemo(() => new Set(teamRoster.flatMap(athlete => athlete.groupIds)), [teamRoster]);
+  const teamGroups = useMemo(() => groups.filter(group => teamGroupIds.has(group.id)), [groups, teamGroupIds]);
+  const crossTeamGroups = useMemo(() => groups.filter(group => !teamGroupIds.has(group.id)), [groups, teamGroupIds]);
+  const plannerRoster = demoMode ? roster : teamRoster;
+  const plannerGroups = teamGroups.length > 0 ? teamGroups : groups.filter(group => plannerRoster.some(athlete => athlete.groupIds.includes(group.id)));
 
   const upcomingSessions = useMemo(() => rawSessions
     .filter(session => session.datum >= new Date().toISOString().split('T')[0])
@@ -63,6 +129,24 @@ export function TeamScreen() {
   }, [teamId, team]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!teamId || demoMode) {
+      setTeamMembers([]);
+      setLoadingMembers(false);
+      return;
+    }
+
+    setLoadingMembers(true);
+    loadTeamMembers(teamId).then(members => {
+      if (cancelled) return;
+      setTeamMembers(members);
+      setLoadingMembers(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [demoMode, teamId]);
 
   function handleAddEvent(datum: string, time: string) {
     setPlanDatum(datum); setPlanTime(time); setShowPlanner(true);
@@ -85,10 +169,6 @@ export function TeamScreen() {
       </div>
     );
   }
-
-  const teamGroupCount = Math.ceil(groups.length / 2);
-  const teamGroups = groups.slice(0, teamGroupCount);
-  const crossTeamGroups = groups.slice(teamGroupCount);
 
   return (
     <div className="space-y-4">
@@ -119,9 +199,16 @@ export function TeamScreen() {
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <MainTabButton active={mainTab === 'calendar'} label="Calendar" helper="Sessions live here" Icon={CalendarDays} onClick={() => setMainTab('calendar')} />
-        <MainTabButton active={mainTab === 'players'} label="Players" helper="Roster submenus" Icon={UserRound} onClick={() => setMainTab('players')} />
-        <MainTabButton active={mainTab === 'groups'} label="Groups" helper="Team and cross-team" Icon={Users2} onClick={() => setMainTab('groups')} />
-        <MainTabButton active={mainTab === 'performance'} label="Performance" helper="Load, attendance, analytics" Icon={Activity} onClick={() => setMainTab('performance')} />
+        <MainTabButton active={mainTab === 'players'} label="Players" helper="Team roster" Icon={UserRound} onClick={() => setMainTab('players')} />
+        <MainTabButton active={mainTab === 'groups'} label="Groups" helper="Scoped groups" Icon={Users2} onClick={() => setMainTab('groups')} />
+        <MainTabButton active={mainTab === 'performance'} label="Performance" helper="Team context" Icon={Activity} onClick={() => setMainTab('performance')} />
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-4">
+        <MiniInfo label="Team members" value={loadingMembers ? 'Loading' : String(teamRows.length)} />
+        <MiniInfo label="Team groups" value={String(teamGroups.length)} />
+        <MiniInfo label="Sessions" value={String(rawSessions.length)} />
+        <MiniInfo label="Upcoming" value={String(upcomingSessions.length)} />
       </div>
 
       {mainTab === 'calendar' && (
@@ -168,18 +255,22 @@ export function TeamScreen() {
             <div className="rounded-2xl border border-gray-800 bg-gray-900/60">
               <div className="border-b border-gray-800 px-4 py-4">
                 <p className="text-xs font-black uppercase tracking-wide text-indigo-300">Team roster</p>
-                <p className="mt-1 text-sm text-gray-400">Players belong under the selected team. Exact persisted team membership should be the next data-model pass.</p>
+                <p className="mt-1 text-sm text-gray-400">This list is scoped to members of {team.name}. Add or remove players through the team membership flow.</p>
               </div>
               <div className="divide-y divide-gray-800">
-                {roster.length > 0 ? roster.map(athlete => (
-                  <div key={athlete.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                {loadingMembers ? (
+                  <EmptyState text="Loading team members..." />
+                ) : teamRows.length > 0 ? teamRows.map(row => (
+                  <div key={row.key} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div>
-                      <p className="text-sm font-bold text-white">{athlete.name}</p>
-                      <p className="text-xs text-gray-500">{athlete.sport || team.sport || 'Athlete'}</p>
+                      <p className="text-sm font-bold text-white">{row.name}</p>
+                      <p className="text-xs text-gray-500">{row.sport}</p>
                     </div>
-                    <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[10px] font-bold text-gray-400">Roster</span>
+                    <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[10px] font-bold text-gray-400">
+                      {row.source === 'roster' ? 'Roster linked' : 'Team member'}
+                    </span>
                   </div>
-                )) : <EmptyState text="No athletes loaded for this team yet." />}
+                )) : <EmptyState text="No players assigned to this team yet." />}
               </div>
             </div>
           )}
@@ -187,16 +278,16 @@ export function TeamScreen() {
           {playersTab === 'profiles' && (
             <TeamContextCard
               eyebrow="Player profiles"
-              title="Individual player detail lives under the team"
-              text="Open an athlete from this team to review availability history, participation context and notes. This should become a player detail route inside the team workspace."
+              title="Open player detail from the team roster"
+              text="Player profiles should start from the selected team's roster. This avoids mixing U18, U16 and cross-team development groups in one flat player list."
             />
           )}
 
           {playersTab === 'load-profile' && (
             <TeamContextCard
               eyebrow="Load profiles"
-              title="Missing load warnings belong here, not in the team graph"
-              text="A player profile is the right place for warnings like present but no load submitted, partial attendance or late arrival. The team graph should stay aggregate and clean."
+              title="Missing load warnings belong on player profiles"
+              text="Warnings like present but no load submitted, partial attendance or late arrival belong on the player's team profile. The team graph should stay aggregate and clean."
             />
           )}
         </section>
@@ -216,18 +307,18 @@ export function TeamScreen() {
           {groupsTab === 'team-groups' && (
             <GroupPanel
               title="Team groups"
-              text="Lineups, position groups and practice groups inside this team."
+              text="Groups used by players assigned to this team. Examples: starters, guards, bigs, rehab group inside this team."
               groups={teamGroups}
-              empty="No team groups yet."
+              empty="No groups are linked to this team's players yet."
             />
           )}
 
           {groupsTab === 'cross-team-groups' && (
             <GroupPanel
               title="Cross-team groups"
-              text="Return to load, injured, guards development and load-watch groups can include athletes from multiple teams."
+              text="Groups not currently used by this team's assigned players. Examples: return to load, injured, guards development or club-wide load watch."
               groups={crossTeamGroups}
-              empty="No cross-team groups yet."
+              empty="No cross-team groups available."
             />
           )}
         </section>
@@ -250,7 +341,7 @@ export function TeamScreen() {
               <TeamContextCard
                 eyebrow="Team load"
                 title="Performance is viewed per team"
-                text="Load and ACWR should be filtered by selected team and based on player load inputs such as RPE x duration or validated workload data. Attendance remains context only."
+                text="Team load should be calculated from players assigned to this team and based on real player load inputs such as RPE x duration. Until the embedded dashboard accepts a team filter, the card below is still the coach-level load dashboard."
               />
               <TrainerDashboard user={user} trainerName={coachName} embedded />
             </section>
@@ -259,10 +350,8 @@ export function TeamScreen() {
           {performanceTab === 'attendance' && (
             <TeamContextCard
               eyebrow="Team attendance"
-              title="Attendance starts from a session"
-              text="The coach should normally click a calendar session and then see who is expected, who reported maybe/no/late, and who still needs final confirmation."
-              action="Open attendance fallback"
-              onAction={() => navigate('/coach/attendance')}
+              title="Attendance starts from a calendar session"
+              text="The normal workflow is: open the team calendar, click a session, then review expected players, maybe/no/late reports and final attendance. This keeps attendance scoped to the selected team and session."
             />
           )}
 
@@ -270,7 +359,7 @@ export function TeamScreen() {
             <TeamContextCard
               eyebrow="Team analytics"
               title="Analytics should be team-scoped first"
-              text="Club-wide analytics can come later. The intuitive default is selected team, then optional comparison across teams."
+              text="The intuitive default is the selected team, then optional comparison across teams. This workspace now provides the selected team context for that next analytics pass."
               action="Open analytics fallback"
               onAction={() => navigate('/coach/analytics')}
             />
@@ -292,8 +381,8 @@ export function TeamScreen() {
           trainerId={user.id}
           teams={[team]}
           membersByTeam={{}}
-          roster={roster}
-          groups={groups}
+          roster={plannerRoster}
+          groups={plannerGroups}
           prefillDatum={planDatum}
           prefillTime={planTime}
           onCreated={() => { setShowPlanner(false); load(); reload(); }}
@@ -317,6 +406,15 @@ function MainTabButton({ active, label, helper, Icon, onClick }: { active: boole
   );
 }
 
+function MiniInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-900/50 px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-gray-600">{label}</p>
+      <p className="mt-1 truncate text-xs font-semibold text-gray-300">{value}</p>
+    </div>
+  );
+}
+
 function SubMenu({ items, active, onChange }: { items: { key: string; label: string }[]; active: string; onChange: (key: string) => void }) {
   return (
     <div className="flex w-fit gap-1 rounded-xl bg-gray-900/60 p-1">
@@ -333,7 +431,7 @@ function SubMenu({ items, active, onChange }: { items: { key: string; label: str
   );
 }
 
-function GroupPanel({ title, text, groups, empty }: { title: string; text: string; groups: { id: string; name: string; color: string }[]; empty: string }) {
+function GroupPanel({ title, text, groups, empty }: { title: string; text: string; groups: AthleteGroup[]; empty: string }) {
   return (
     <div className="rounded-2xl border border-gray-800 bg-gray-900/60 px-4 py-4">
       <p className="text-xs font-black uppercase tracking-wide text-purple-300">{title}</p>
