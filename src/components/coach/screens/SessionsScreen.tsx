@@ -15,7 +15,7 @@ type SessionRow = { session: AttendanceSession; assigned: boolean; editable: boo
 
 export function SessionsScreen() {
   const navigate = useNavigate();
-  const { user, sessions, teams, roster, groups, coachContext, permissions, demoMode } = useOutletContext<CoachOutletContext>();
+  const { user, sessions, teams, roster, groups, coachContext, permissions } = useOutletContext<CoachOutletContext>();
   const [filter, setFilter] = useState<SessionFilter>('mine');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [availabilityRecords, setAvailabilityRecords] = useState<AthleteAvailabilityRecord[]>([]);
@@ -167,9 +167,6 @@ export function SessionsScreen() {
             availabilityRecords={selectedAvailability}
             finalRecords={finalRecords}
             editable={selectedRow.editable}
-            demoMode={demoMode}
-            loadingAvailability={loadingAvailability}
-            loadingFinal={loadingFinal}
             onOpenPlayer={(athleteId) => navigate(`/coach/players?athlete=${encodeURIComponent(athleteId)}`)}
           />
         ) : (
