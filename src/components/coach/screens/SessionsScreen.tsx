@@ -1,23 +1,21 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { Activity, CalendarDays, CheckCircle2, Lock, MapPin, Plus, ShieldCheck, UsersRound } from 'lucide-react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
+import { CalendarDays, Lock, Plus, ShieldCheck } from 'lucide-react';
 import type { CoachOutletContext } from '../CoachShell';
-import type { AttendanceSession, FinalAttendanceStatus } from '../../../types/attendance';
+import type { AttendanceSession } from '../../../types/attendance';
 import { loadAvailabilityForCoachSessionsAsync } from '../../../lib/availability';
-import type { AthleteAvailabilityRecord, AthleteAvailabilityStatus } from '../../../lib/availability';
-import { finalAttendanceLabel, loadFinalAttendanceForSessionAsync } from '../../../lib/finalAttendance';
+import type { AthleteAvailabilityRecord } from '../../../lib/availability';
+import { loadFinalAttendanceForSessionAsync } from '../../../lib/finalAttendance';
 import type { CoachFinalAttendanceRecord } from '../../../lib/finalAttendance';
 import { canEditSession, isSessionAssignedToCoach, roleLabel } from '../../../lib/rolePermissions';
+import { CoachSessionDetailV1 } from '../CoachSessionDetailV1';
 
 type SessionFilter = 'mine' | 'editable' | 'all';
 type SessionRow = { session: AttendanceSession; assigned: boolean; editable: boolean };
-type StatusSummary = Record<AthleteAvailabilityStatus, number>;
-type FinalSummary = Record<FinalAttendanceStatus, number>;
-
-const FINAL_STATUSES: FinalAttendanceStatus[] = ['present', 'late', 'partial', 'excused_absent', 'unexcused_absent'];
 
 export function SessionsScreen() {
-  const { user, sessions, teams, roster, coachContext, permissions } = useOutletContext<CoachOutletContext>();
+  const navigate = useNavigate();
+  const { user, sessions, teams, roster, groups, coachContext, permissions, demoMode } = useOutletContext<CoachOutletContext>();
   const [filter, setFilter] = useState<SessionFilter>('mine');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [availabilityRecords, setAvailabilityRecords] = useState<AthleteAvailabilityRecord[]>([]);
@@ -30,28 +28,24 @@ export function SessionsScreen() {
     .filter(session => session.datum >= today)
     .sort((a, b) => `${a.datum}${a.startTime ?? ''}`.localeCompare(`${b.datum}${b.startTime ?? ''}`)), [sessions, today]);
 
-  const sessionRows = useMemo<SessionRow[]>(() => {
-    return upcomingSessions
-      .map(session => {
-        const assigned = isSessionAssignedToCoach(session, teams, user.id, coachContext);
-        const editable = canEditSession(session, teams, user.id, permissions, coachContext);
-        return { session, assigned, editable };
-      })
-      .filter(row => {
-        if (filter === 'mine') return row.assigned;
-        if (filter === 'editable') return row.editable;
-        return true;
-      })
-      .sort((a, b) => {
-        if (a.assigned !== b.assigned) return a.assigned ? -1 : 1;
-        return `${a.session.datum}${a.session.startTime ?? ''}`.localeCompare(`${b.session.datum}${b.session.startTime ?? ''}`);
-      })
-      .slice(0, 16);
-  }, [coachContext, filter, permissions, teams, upcomingSessions, user.id]);
+  const sessionRows = useMemo<SessionRow[]>(() => upcomingSessions
+    .map(session => {
+      const assigned = isSessionAssignedToCoach(session, teams, user.id, coachContext);
+      const editable = canEditSession(session, teams, user.id, permissions, coachContext);
+      return { session, assigned, editable };
+    })
+    .filter(row => {
+      if (filter === 'mine') return row.assigned;
+      if (filter === 'editable') return row.editable;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.assigned !== b.assigned) return a.assigned ? -1 : 1;
+      return `${a.session.datum}${a.session.startTime ?? ''}`.localeCompare(`${b.session.datum}${b.session.startTime ?? ''}`);
+    })
+    .slice(0, 16), [coachContext, filter, permissions, teams, upcomingSessions, user.id]);
 
-  const selectedRow = useMemo(() => {
-    return sessionRows.find(row => row.session.id === selectedSessionId) ?? sessionRows[0] ?? null;
-  }, [selectedSessionId, sessionRows]);
+  const selectedRow = useMemo(() => sessionRows.find(row => row.session.id === selectedSessionId) ?? sessionRows[0] ?? null, [selectedSessionId, sessionRows]);
   const selectedSession = selectedRow?.session ?? null;
 
   useEffect(() => {
@@ -60,22 +54,13 @@ export function SessionsScreen() {
       setAvailabilityRecords([]);
       return;
     }
-
     let cancelled = false;
     setLoadingAvailability(true);
-
     loadAvailabilityForCoachSessionsAsync(sessionIds)
-      .then(records => {
-        if (!cancelled) setAvailabilityRecords(records);
-      })
+      .then(records => { if (!cancelled) setAvailabilityRecords(records); })
       .catch(error => console.warn('[SessionsScreen:availability]', error))
-      .finally(() => {
-        if (!cancelled) setLoadingAvailability(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      .finally(() => { if (!cancelled) setLoadingAvailability(false); });
+    return () => { cancelled = true; };
   }, [upcomingSessions]);
 
   useEffect(() => {
@@ -83,22 +68,13 @@ export function SessionsScreen() {
       setFinalRecords([]);
       return;
     }
-
     let cancelled = false;
     setLoadingFinal(true);
-
     loadFinalAttendanceForSessionAsync(selectedSession.id)
-      .then(records => {
-        if (!cancelled) setFinalRecords(records);
-      })
+      .then(records => { if (!cancelled) setFinalRecords(records); })
       .catch(error => console.warn('[SessionsScreen:finalAttendance]', error))
-      .finally(() => {
-        if (!cancelled) setLoadingFinal(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      .finally(() => { if (!cancelled) setLoadingFinal(false); });
+    return () => { cancelled = true; };
   }, [selectedSession]);
 
   const selectedAvailability = selectedSession ? availabilityRecords.filter(record => record.sessionId === selectedSession.id) : [];
@@ -114,7 +90,7 @@ export function SessionsScreen() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <Header title="Sessions" text="Your assigned sessions are shown first. Select one session to see the operational detail view." />
+        <Header title="Sessions" text="Select one session to see the time-aware coach detail view: attendance first, load context only where it helps." />
         <div className="flex flex-wrap gap-2">
           <FilterButton active={filter === 'mine'} onClick={() => setFilter('mine')}>My sessions</FilterButton>
           <FilterButton active={filter === 'editable'} onClick={() => setFilter('editable')}>Editable</FilterButton>
@@ -128,20 +104,20 @@ export function SessionsScreen() {
         <InfoCard label="Editable" value={String(editableCount)} text="Sessions you may manage." />
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.82fr_1.18fr]">
         <div className="rounded-2xl border border-gray-800 bg-gray-900/70 p-3">
           <div className="mb-3 flex items-center justify-between gap-3 px-1">
             <div>
-              <p className="text-sm font-bold text-white">Upcoming operational block</p>
-              <p className="text-xs text-gray-500">Default player status is expected/available until they report maybe, late or no.</p>
+              <p className="text-sm font-bold text-white">Session queue</p>
+              <p className="text-xs text-gray-500">Default player status is expected until exception.</p>
             </div>
             {permissions.canCreateSessions ? (
               <button className="inline-flex items-center gap-1.5 rounded-xl border border-violet-700 bg-violet-900/30 px-3 py-1.5 text-xs font-bold text-violet-200">
-                <Plus size={14} /> New session
+                <Plus size={14} /> New
               </button>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-xl border border-gray-700 bg-gray-900 px-3 py-1.5 text-xs font-bold text-gray-500">
-                <Lock size={14} /> View only
+                <Lock size={14} /> View
               </span>
             )}
           </div>
@@ -164,13 +140,11 @@ export function SessionsScreen() {
                         {assigned && <Badge tone="violet">Assigned</Badge>}
                         {editable ? <Badge tone="green">Editable</Badge> : <Badge tone="gray">Read only</Badge>}
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {formatDate(session.datum)}{session.startTime ? ` - ${session.startTime}` : ''}{session.location ? ` - ${session.location}` : ''}
-                      </p>
+                      <p className="mt-1 text-xs text-gray-500">{formatDate(session.datum)}{session.startTime ? ` - ${session.startTime}` : ''}{session.location ? ` - ${session.location}` : ''}</p>
                       <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">
                         <span className="inline-flex items-center gap-1 rounded-lg bg-gray-950/60 px-2 py-1"><CalendarDays size={12} /> {team?.name ?? 'No team assigned'}</span>
                         {session.trainingType && <span className="rounded-lg bg-gray-950/60 px-2 py-1">{session.trainingType}</span>}
-                        {editable && <span className="inline-flex items-center gap-1 rounded-lg bg-gray-950/60 px-2 py-1"><ShieldCheck size={12} /> Coach actions allowed</span>}
+                        {editable && <span className="inline-flex items-center gap-1 rounded-lg bg-gray-950/60 px-2 py-1"><ShieldCheck size={12} /> Coach actions</span>}
                       </div>
                     </div>
                     <div className="shrink-0 text-right text-xs text-gray-500">
@@ -184,110 +158,27 @@ export function SessionsScreen() {
           </div>
         </div>
 
-        <SessionDetailPanel
-          row={selectedRow}
-          teamName={selectedTeam?.name ?? 'No team assigned'}
-          rosterCount={roster.length}
-          availabilityRecords={selectedAvailability}
-          finalRecords={finalRecords}
-          loadingAvailability={loadingAvailability}
-          loadingFinal={loadingFinal}
-        />
+        {selectedRow ? (
+          <CoachSessionDetailV1
+            session={selectedRow.session}
+            teamName={selectedTeam?.name ?? 'No team assigned'}
+            roster={roster}
+            groups={groups}
+            availabilityRecords={selectedAvailability}
+            finalRecords={finalRecords}
+            editable={selectedRow.editable}
+            demoMode={demoMode}
+            loadingAvailability={loadingAvailability}
+            loadingFinal={loadingFinal}
+            onOpenPlayer={(athleteId) => navigate(`/coach/players?athlete=${encodeURIComponent(athleteId)}`)}
+          />
+        ) : (
+          <section className="rounded-2xl border border-dashed border-gray-800 bg-gray-900/50 p-6 text-sm text-gray-500">
+            Select or create a session to open its operational detail view.
+          </section>
+        )}
       </div>
     </div>
-  );
-}
-
-function SessionDetailPanel({ row, teamName, rosterCount, availabilityRecords, finalRecords, loadingAvailability, loadingFinal }: {
-  row: SessionRow | null;
-  teamName: string;
-  rosterCount: number;
-  availabilityRecords: AthleteAvailabilityRecord[];
-  finalRecords: CoachFinalAttendanceRecord[];
-  loadingAvailability: boolean;
-  loadingFinal: boolean;
-}) {
-  if (!row) {
-    return (
-      <section className="rounded-2xl border border-dashed border-gray-800 bg-gray-900/50 p-6 text-sm text-gray-500">
-        Select or create a session to open its operational detail view.
-      </section>
-    );
-  }
-
-  const { session, editable } = row;
-  const availabilitySummary = summarizeAvailability(availabilityRecords);
-  const finalSummary = summarizeFinal(finalRecords);
-  const expectedCount = Math.max(0, rosterCount - availabilityRecords.length);
-
-  return (
-    <section className="rounded-2xl border border-gray-800 bg-gray-900/70 p-4">
-      <div className="flex flex-col gap-3 border-b border-gray-800 pb-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-wider text-sky-300">Session detail</p>
-          <h3 className="mt-1 truncate text-xl font-black text-white">{session.title}</h3>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
-            <Pill icon={CalendarDays}>{formatDate(session.datum)}{session.startTime ? ` - ${session.startTime}` : ''}{session.endTime ? `-${session.endTime}` : ''}</Pill>
-            <Pill icon={UsersRound}>{teamName}</Pill>
-            {session.location && <Pill icon={MapPin}>{session.location}</Pill>}
-            {session.trainingType && <Pill icon={Activity}>{session.trainingType}</Pill>}
-          </div>
-        </div>
-        <Badge tone={editable ? 'green' : 'gray'}>{editable ? 'Coach actions allowed' : 'Read only'}</Badge>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-4">
-        <InfoCard label="Expected" value={String(expectedCount)} text="No exception reported." />
-        <InfoCard label="Late" value={String(availabilitySummary.late)} text={loadingAvailability ? 'Loading...' : 'Arriving later.'} />
-        <InfoCard label="Maybe / No" value={String(availabilitySummary.maybe + availabilitySummary.no)} text="Needs decision before start." />
-        <InfoCard label="Finalized" value={String(finalRecords.length)} text={loadingFinal ? 'Loading...' : 'Coach confirmed.'} />
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-gray-800 bg-gray-950/40 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-bold text-white">Availability before session</p>
-              <p className="text-xs text-gray-500">Athlete exceptions that affect planning.</p>
-            </div>
-            <span className="rounded-lg border border-gray-800 px-2 py-1 text-xs text-gray-400">{loadingAvailability ? 'Loading' : `${availabilityRecords.length} open`}</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {availabilityRecords.length === 0 ? (
-              <EmptyMini icon={CheckCircle2} title="No exceptions" text="Plan with the full expected roster unless someone reports later." />
-            ) : availabilityRecords.map(record => <AvailabilityMini key={record.id} record={record} />)}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-gray-800 bg-gray-950/40 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-bold text-white">Final attendance after session</p>
-              <p className="text-xs text-gray-500">Authoritative coach record for load context.</p>
-            </div>
-            <span className="rounded-lg border border-gray-800 px-2 py-1 text-xs text-gray-400">{loadingFinal ? 'Loading' : `${finalRecords.length} final`}</span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {FINAL_STATUSES.map(status => (
-              <div key={status} className="rounded-xl border border-gray-800 bg-gray-900/70 px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{finalAttendanceLabel(status)}</p>
-                <p className="mt-1 text-lg font-black text-white">{finalSummary[status]}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 rounded-xl border border-gray-800 bg-gray-900/50 px-3 py-3 text-xs leading-5 text-gray-500">
-            Final attendance should be completed after the session. This becomes the source for participation and load decisions.
-          </div>
-        </div>
-      </div>
-
-      {session.coachNote && (
-        <div className="mt-4 rounded-2xl border border-gray-800 bg-gray-950/40 p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Coach note</p>
-          <p className="mt-1 text-sm leading-6 text-gray-300">{session.coachNote}</p>
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -303,63 +194,11 @@ function Empty({ title, text, canCreate }: { title: string; text: string; canCre
           <p className="text-sm font-black text-white">{title}</p>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-400">{text}</p>
         </div>
-        {canCreate && (
-          <button className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-violet-500 px-3 py-2 text-xs font-black text-white">
-            <Plus size={14} /> Plan first session
-          </button>
-        )}
-      </div>
-      <div className="mt-4 grid gap-2 text-xs text-gray-500 sm:grid-cols-3">
-        <span className="rounded-xl bg-gray-950/40 px-3 py-2">1. Add date, time and team</span>
-        <span className="rounded-xl bg-gray-950/40 px-3 py-2">2. Athletes report only exceptions</span>
-        <span className="rounded-xl bg-gray-950/40 px-3 py-2">3. Coach finalizes attendance</span>
+        {canCreate && <button className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-violet-500 px-3 py-2 text-xs font-black text-white"><Plus size={14} /> Plan first session</button>}
       </div>
     </div>
   );
 }
-
-function EmptyMini({ icon: Icon, title, text }: { icon: typeof CheckCircle2; title: string; text: string }) {
-  return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/60 px-3 py-4 text-center">
-      <Icon className="mx-auto h-6 w-6 text-emerald-300" />
-      <p className="mt-2 text-sm font-bold text-white">{title}</p>
-      <p className="mt-1 text-xs leading-5 text-gray-500">{text}</p>
-    </div>
-  );
-}
-
-function AvailabilityMini({ record }: { record: AthleteAvailabilityRecord }) {
-  const tone = record.status === 'no' ? 'text-rose-300' : record.status === 'late' ? 'text-amber-300' : 'text-gray-200';
-  return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/70 px-3 py-2">
-      <div className="flex items-center justify-between gap-3">
-        <p className="truncate text-sm font-bold text-white">{record.athleteUserId}</p>
-        <span className={`shrink-0 text-xs font-bold uppercase ${tone}`}>{record.status === 'late' ? `${record.lateMinutes ?? 0} min late` : record.status}</span>
-      </div>
-      <p className="mt-1 text-xs leading-5 text-gray-500">{record.reason || 'No reason provided'}</p>
-    </div>
-  );
-}
-
-function Pill({ icon: Icon, children }: { icon: typeof CalendarDays; children: ReactNode }) {
-  return <span className="inline-flex items-center gap-1 rounded-lg bg-gray-950/60 px-2 py-1"><Icon size={12} /> {children}</span>;
-}
-
-function summarizeAvailability(records: AthleteAvailabilityRecord[]): StatusSummary {
-  return records.reduce<StatusSummary>((acc, record) => {
-    acc[record.status] += 1;
-    return acc;
-  }, { expected: 0, maybe: 0, no: 0, late: 0 });
-}
-
-function summarizeFinal(records: CoachFinalAttendanceRecord[]): FinalSummary {
-  return records.reduce<FinalSummary>((acc, record) => {
-    acc[record.status] += 1;
-    return acc;
-  }, { present: 0, late: 0, partial: 0, excused_absent: 0, unexcused_absent: 0 });
-}
-
-function formatDate(iso: string) { return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
 
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button onClick={onClick} className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${active ? 'border-violet-600 bg-violet-900/40 text-violet-200' : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-500 hover:text-white'}`}>{children}</button>;
@@ -370,10 +209,8 @@ function InfoCard({ label, value, text }: { label: string; value: string; text: 
 }
 
 function Badge({ tone, children }: { tone: 'violet' | 'green' | 'gray'; children: ReactNode }) {
-  const tones = {
-    violet: 'border-violet-700 bg-violet-900/40 text-violet-200',
-    green: 'border-green-700 bg-green-900/30 text-green-200',
-    gray: 'border-gray-700 bg-gray-900 text-gray-400',
-  };
+  const tones = { violet: 'border-violet-700 bg-violet-900/40 text-violet-200', green: 'border-green-700 bg-green-900/30 text-green-200', gray: 'border-gray-700 bg-gray-900 text-gray-400' };
   return <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${tones[tone]}`}>{children}</span>;
 }
+
+function formatDate(iso: string) { return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
