@@ -1,4 +1,5 @@
-import { CalendarDays, CheckCircle2, Clock3, UsersRound } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { CalendarDays, UsersRound } from 'lucide-react';
 import type { AttendanceSession } from '../../types/attendance';
 import type { AthleteAvailabilityRecord } from '../../lib/availability';
 import type { CoachFinalAttendanceRecord } from '../../lib/finalAttendance';
