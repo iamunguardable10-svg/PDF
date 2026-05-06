@@ -20,8 +20,8 @@ export function SessionsScreen() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [availabilityRecords, setAvailabilityRecords] = useState<AthleteAvailabilityRecord[]>([]);
   const [finalRecords, setFinalRecords] = useState<CoachFinalAttendanceRecord[]>([]);
-  const [loadingAvailability, setLoadingAvailability] = useState(false);
-  const [loadingFinal, setLoadingFinal] = useState(false);
+  const [, setLoadingAvailability] = useState(false);
+  const [, setLoadingFinal] = useState(false);
   const today = new Date().toISOString().split('T')[0];
 
   const upcomingSessions = useMemo(() => sessions
