@@ -11,7 +11,8 @@ import { canEditSession, isSessionAssignedToCoach, roleLabel } from '../../../li
 import { CoachSessionDetailV1 } from '../CoachSessionDetailV1';
 
 type SessionFilter = 'mine' | 'editable' | 'all';
-type SessionRow = { session: AttendanceSession; assigned: boolean; editable: boolean };
+type SessionLifecycle = 'upcoming' | 'live' | 'after';
+type SessionRow = { session: AttendanceSession; assigned: boolean; editable: boolean; lifecycle: SessionLifecycle };
 
 export function SessionsScreen() {
   const navigate = useNavigate();
@@ -24,15 +25,15 @@ export function SessionsScreen() {
   const [, setLoadingFinal] = useState(false);
   const today = new Date().toISOString().split('T')[0];
 
-  const upcomingSessions = useMemo(() => sessions
-    .filter(session => session.datum >= today)
-    .sort((a, b) => `${a.datum}${a.startTime ?? ''}`.localeCompare(`${b.datum}${b.startTime ?? ''}`)), [sessions, today]);
+  const relevantSessions = useMemo(() => sessions
+    .filter(session => session.datum >= addDaysIso(-2))
+    .sort((a, b) => `${a.datum}${a.startTime ?? ''}`.localeCompare(`${b.datum}${b.startTime ?? ''}`)), [sessions]);
 
-  const sessionRows = useMemo<SessionRow[]>(() => upcomingSessions
+  const sessionRows = useMemo<SessionRow[]>(() => relevantSessions
     .map(session => {
       const assigned = isSessionAssignedToCoach(session, teams, user.id, coachContext);
       const editable = canEditSession(session, teams, user.id, permissions, coachContext);
-      return { session, assigned, editable };
+      return { session, assigned, editable, lifecycle: getSessionLifecycle(session) };
     })
     .filter(row => {
       if (filter === 'mine') return row.assigned;
@@ -40,16 +41,18 @@ export function SessionsScreen() {
       return true;
     })
     .sort((a, b) => {
+      const lifecycleDiff = lifecycleWeight(a.lifecycle) - lifecycleWeight(b.lifecycle);
+      if (lifecycleDiff !== 0) return lifecycleDiff;
       if (a.assigned !== b.assigned) return a.assigned ? -1 : 1;
       return `${a.session.datum}${a.session.startTime ?? ''}`.localeCompare(`${b.session.datum}${b.session.startTime ?? ''}`);
     })
-    .slice(0, 16), [coachContext, filter, permissions, teams, upcomingSessions, user.id]);
+    .slice(0, 16), [coachContext, filter, permissions, relevantSessions, teams, user.id]);
 
   const selectedRow = useMemo(() => sessionRows.find(row => row.session.id === selectedSessionId) ?? sessionRows[0] ?? null, [selectedSessionId, sessionRows]);
   const selectedSession = selectedRow?.session ?? null;
 
   useEffect(() => {
-    const sessionIds = upcomingSessions.map(session => session.id);
+    const sessionIds = relevantSessions.map(session => session.id);
     if (sessionIds.length === 0) {
       setAvailabilityRecords([]);
       return;
@@ -61,7 +64,7 @@ export function SessionsScreen() {
       .catch(error => console.warn('[SessionsScreen:availability]', error))
       .finally(() => { if (!cancelled) setLoadingAvailability(false); });
     return () => { cancelled = true; };
-  }, [upcomingSessions]);
+  }, [relevantSessions]);
 
   useEffect(() => {
     if (!selectedSession) {
@@ -81,9 +84,11 @@ export function SessionsScreen() {
   const selectedTeam = selectedSession ? teams.find(team => team.id === selectedSession.teamId) ?? null : null;
   const assignedCount = sessionRows.filter(row => row.assigned).length;
   const editableCount = sessionRows.filter(row => row.editable).length;
-  const hasUpcomingSessions = upcomingSessions.length > 0;
-  const emptyTitle = hasUpcomingSessions ? 'No sessions match this filter' : 'No upcoming sessions yet';
-  const emptyText = hasUpcomingSessions
+  const liveCount = sessionRows.filter(row => row.lifecycle === 'live').length;
+  const afterCount = sessionRows.filter(row => row.lifecycle === 'after').length;
+  const hasRelevantSessions = relevantSessions.length > 0;
+  const emptyTitle = hasRelevantSessions ? 'No sessions match this filter' : 'No sessions in this window yet';
+  const emptyText = hasRelevantSessions
     ? 'Switch to All visible or Editable to find sessions outside your direct assignment.'
     : 'Create the first training block so athletes can see what is coming and only report exceptions.';
 
@@ -98,10 +103,11 @@ export function SessionsScreen() {
         </div>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-4">
         <InfoCard label="Role" value={roleLabel(permissions.role)} text="Controls what you can create or edit." />
-        <InfoCard label="Assigned" value={String(assignedCount)} text="Sessions directly relevant to you." />
-        <InfoCard label="Editable" value={String(editableCount)} text="Sessions you may manage." />
+        <InfoCard label="Live" value={String(liveCount)} text="Needs the fastest operational scan." />
+        <InfoCard label="To complete" value={String(afterCount)} text="Review attendance after session." />
+        <InfoCard label="Editable" value={String(editableCount)} text={`${assignedCount} assigned in this queue.`} />
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[0.82fr_1.18fr]">
@@ -109,7 +115,7 @@ export function SessionsScreen() {
           <div className="mb-3 flex items-center justify-between gap-3 px-1">
             <div>
               <p className="text-sm font-bold text-white">Session queue</p>
-              <p className="text-xs text-gray-500">Default player status is expected until exception.</p>
+              <p className="text-xs text-gray-500">Sorted by urgency: live, after session, upcoming.</p>
             </div>
             {permissions.canCreateSessions ? (
               <button className="inline-flex items-center gap-1.5 rounded-xl border border-violet-700 bg-violet-900/30 px-3 py-1.5 text-xs font-bold text-violet-200">
@@ -123,7 +129,7 @@ export function SessionsScreen() {
           </div>
 
           <div className="space-y-2">
-            {sessionRows.length === 0 ? <Empty title={emptyTitle} text={emptyText} canCreate={permissions.canCreateSessions} /> : sessionRows.map(({ session, assigned, editable }) => {
+            {sessionRows.length === 0 ? <Empty title={emptyTitle} text={emptyText} canCreate={permissions.canCreateSessions} /> : sessionRows.map(({ session, assigned, editable, lifecycle }) => {
               const team = teams.find(t => t.id === session.teamId);
               const sessionAvailability = availabilityRecords.filter(record => record.sessionId === session.id);
               const isSelected = selectedSession?.id === session.id;
@@ -131,11 +137,12 @@ export function SessionsScreen() {
                 <button
                   key={session.id}
                   onClick={() => setSelectedSessionId(session.id)}
-                  className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${isSelected ? 'border-sky-500 bg-sky-950/20' : assigned ? 'border-violet-700/70 bg-violet-950/20 hover:border-violet-500' : 'border-gray-700 bg-gray-800/50 hover:border-gray-500'}`}
+                  className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${sessionCardClass(isSelected, assigned, lifecycle)}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
+                        <QueueLifecycleBadge lifecycle={lifecycle} />
                         <p className="truncate font-semibold text-white">{session.title}</p>
                         {assigned && <Badge tone="violet">Assigned</Badge>}
                         {editable ? <Badge tone="green">Editable</Badge> : <Badge tone="gray">Read only</Badge>}
@@ -146,6 +153,7 @@ export function SessionsScreen() {
                         {session.trainingType && <span className="rounded-lg bg-gray-950/60 px-2 py-1">{session.trainingType}</span>}
                         {editable && <span className="inline-flex items-center gap-1 rounded-lg bg-gray-950/60 px-2 py-1"><ShieldCheck size={12} /> Coach actions</span>}
                       </div>
+                      <p className={`mt-2 text-xs font-bold ${queueHintClass(lifecycle)}`}>{queueHint(lifecycle)}</p>
                     </div>
                     <div className="shrink-0 text-right text-xs text-gray-500">
                       <p className="font-semibold text-gray-300">{sessionAvailability.length}</p>
@@ -210,4 +218,40 @@ function Badge({ tone, children }: { tone: 'violet' | 'green' | 'gray'; children
   return <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${tones[tone]}`}>{children}</span>;
 }
 
+function QueueLifecycleBadge({ lifecycle }: { lifecycle: SessionLifecycle }) {
+  const text = lifecycle === 'live' ? 'Live' : lifecycle === 'after' ? 'Complete' : 'Upcoming';
+  const cls = lifecycle === 'live' ? 'border-emerald-700 bg-emerald-900/30 text-emerald-200' : lifecycle === 'after' ? 'border-amber-700 bg-amber-900/30 text-amber-200' : 'border-sky-700 bg-sky-900/30 text-sky-200';
+  return <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${cls}`}>{text}</span>;
+}
+
+function getSessionLifecycle(session: AttendanceSession): SessionLifecycle {
+  const now = new Date();
+  const start = parseSessionTime(session.datum, session.startTime, false);
+  const end = parseSessionTime(session.datum, session.endTime, true);
+  if (session.datum < todayIso()) return 'after';
+  if (start && end && now >= start && now <= end) return 'live';
+  if (end && now > end) return 'after';
+  return 'upcoming';
+}
+
+function parseSessionTime(dateIso: string, time: string | undefined, isEnd: boolean): Date | null {
+  const value = time || (isEnd ? '23:59' : '00:00');
+  const parsed = new Date(`${dateIso}T${value}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function lifecycleWeight(lifecycle: SessionLifecycle) { return lifecycle === 'live' ? 0 : lifecycle === 'after' ? 1 : 2; }
+function sessionCardClass(isSelected: boolean, assigned: boolean, lifecycle: SessionLifecycle) {
+  if (isSelected && lifecycle === 'live') return 'border-emerald-500 bg-emerald-950/25 shadow-lg shadow-emerald-950/20';
+  if (isSelected && lifecycle === 'after') return 'border-amber-500 bg-amber-950/25 shadow-lg shadow-amber-950/20';
+  if (isSelected) return 'border-sky-500 bg-sky-950/20';
+  if (lifecycle === 'live') return 'border-emerald-800/70 bg-emerald-950/15 hover:border-emerald-600';
+  if (lifecycle === 'after') return 'border-amber-800/70 bg-amber-950/15 hover:border-amber-600';
+  if (assigned) return 'border-violet-700/70 bg-violet-950/20 hover:border-violet-500';
+  return 'border-gray-700 bg-gray-800/50 hover:border-gray-500';
+}
+function queueHint(lifecycle: SessionLifecycle) { return lifecycle === 'live' ? 'Now: scan attendance and adjust session plan.' : lifecycle === 'after' ? 'After session: finalize attendance when ready.' : 'Before session: check exceptions first.'; }
+function queueHintClass(lifecycle: SessionLifecycle) { return lifecycle === 'live' ? 'text-emerald-300' : lifecycle === 'after' ? 'text-amber-300' : 'text-sky-300'; }
 function formatDate(iso: string) { return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
+function todayIso() { return new Date().toISOString().split('T')[0]; }
+function addDaysIso(days: number) { const date = new Date(); date.setDate(date.getDate() + days); return date.toISOString().split('T')[0]; }
