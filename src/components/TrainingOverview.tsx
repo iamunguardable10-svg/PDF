@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Session, PlannedSession } from '../types/acwr';
 
 import { TRAINING_UNITS, TE_COLORS, TE_EMOJI } from '../types/acwr';
-import { WeekCalendar } from './WeekCalendar';
+import { WeekCalendarV2 } from './WeekCalendarV2';
 
 interface Props {
   sessions: Session[];
@@ -108,7 +108,7 @@ export function TrainingOverview({
       </div>
 
       {view === 'kalender' && (
-        <WeekCalendar
+        <WeekCalendarV2
           sessions={sessions}
           plannedSessions={plannedSessions}
           onConfirm={onConfirmPlanned}
