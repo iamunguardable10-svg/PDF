@@ -90,6 +90,42 @@ function getRpeColor(rpe: number): string {
   return '#f87171';
 }
 
+function getEntryVisual(entry: CalendarEntry, color: string) {
+  if (entry.kind === 'done') {
+    return {
+      className: 'shadow-sm',
+      style: {
+        borderColor: `${color}aa`,
+        backgroundColor: `${color}2f`,
+        boxShadow: `inset 0 0 0 1px ${color}22`,
+      },
+      badge: null,
+    };
+  }
+
+  if (entry.kind === 'overdue') {
+    return {
+      className: 'shadow-lg ring-1 ring-offset-0',
+      style: {
+        borderColor: color,
+        backgroundColor: `${color}42`,
+        boxShadow: `0 0 18px ${color}33, inset 0 0 0 1px ${color}44`,
+      },
+      badge: 'offen',
+    };
+  }
+
+  return {
+    className: 'opacity-75 hover:opacity-100 border-dashed',
+    style: {
+      borderColor: `${color}6f`,
+      backgroundColor: `${color}16`,
+      boxShadow: 'none',
+    },
+    badge: 'geplant',
+  };
+}
+
 function CreateSessionModal({
   datum,
   onClose,
@@ -398,6 +434,7 @@ export function WeekCalendarV2({ sessions, plannedSessions, onConfirm, onUpdate,
   }, [days, sessions, plannedSessions, today]);
 
   const labelEnd = addDays(weekStart, 6);
+  const openCount = plannedSessions.filter(session => !session.confirmed && session.datum < today).length;
 
   return (
     <div className="space-y-3">
@@ -406,6 +443,13 @@ export function WeekCalendarV2({ sessions, plannedSessions, onConfirm, onUpdate,
         <div className="text-center"><div className="text-sm font-bold text-white">{weekStart.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} – {labelEnd.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}</div><button onClick={() => setWeekStart(getWeekStart())} className="text-xs font-bold text-violet-400">Heute</button></div>
         <button onClick={() => setWeekStart(d => addDays(d, 7))} className="rounded-xl border border-gray-800 px-3 py-2 text-sm text-gray-400 hover:text-white">→</button>
       </div>
+
+      {openCount > 0 && (
+        <div className="rounded-2xl border border-amber-800/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+          <span className="font-black">{openCount} offene {openCount === 1 ? 'Einheit' : 'Einheiten'}</span>
+          <span className="ml-1 text-amber-300/70">im Kalender kräftig hervorgehoben.</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
         {days.map(day => {
@@ -421,17 +465,23 @@ export function WeekCalendarV2({ sessions, plannedSessions, onConfirm, onUpdate,
                 {entries.length === 0 && <div className="rounded-xl border border-dashed border-gray-800 px-2 py-4 text-center text-xs text-gray-700">frei</div>}
                 {entries.map(entry => {
                   const color = TE_COLORS[entry.te];
+                  const visual = getEntryVisual(entry, color);
                   return (
                     <button
                       key={`${entry.kind}-${entry.id}`}
                       onClick={() => entry.kind === 'done' && entry.done ? setDoneOpen(entry.done) : entry.planned ? setPlannedOpen(entry.planned) : undefined}
-                      className="w-full rounded-xl border px-2 py-2 text-left transition hover:brightness-110"
-                      style={{ borderColor: `${color}88`, backgroundColor: `${color}24` }}
+                      className={`relative w-full rounded-xl border px-2 py-2 text-left transition hover:brightness-110 ${visual.className}`}
+                      style={visual.style}
                     >
-                      <div className="flex items-center gap-2"><span>{TE_EMOJI[entry.te]}</span><span className="truncate text-xs font-black text-white">{entry.te}</span></div>
-                      <div className="mt-0.5 text-[11px] text-gray-400">{entry.time ? `${entry.time} · ` : ''}{entry.duration ? `${entry.duration} Min` : entry.kind === 'done' ? '' : 'geplant'}</div>
+                      {visual.badge && (
+                        <span className={`absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${entry.kind === 'overdue' ? 'bg-amber-300 text-gray-950' : 'bg-gray-950/70 text-gray-400'}`}>
+                          {visual.badge}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-2 pr-10"><span>{TE_EMOJI[entry.te]}</span><span className="truncate text-xs font-black text-white">{entry.te}</span></div>
+                      <div className={`mt-0.5 text-[11px] ${entry.kind === 'planned' ? 'text-gray-500' : 'text-gray-300'}`}>{entry.time ? `${entry.time} · ` : ''}{entry.duration ? `${entry.duration} Min` : entry.kind === 'done' ? '' : 'geplant'}</div>
                       {entry.kind === 'done' && <div className="mt-0.5 text-[11px] font-bold text-orange-400">RPE {entry.rpe} · {entry.load} AU</div>}
-                      {entry.kind === 'overdue' && <div className="mt-0.5 text-[11px] font-bold text-amber-400">Eintragen offen</div>}
+                      {entry.kind === 'overdue' && <div className="mt-0.5 text-[11px] font-black text-amber-200">Eintragen offen</div>}
                     </button>
                   );
                 })}
