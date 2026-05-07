@@ -23,7 +23,6 @@ export function SessionsScreen() {
   const [finalRecords, setFinalRecords] = useState<CoachFinalAttendanceRecord[]>([]);
   const [, setLoadingAvailability] = useState(false);
   const [, setLoadingFinal] = useState(false);
-  const today = new Date().toISOString().split('T')[0];
 
   const relevantSessions = useMemo(() => sessions
     .filter(session => session.datum >= addDaysIso(-2))
