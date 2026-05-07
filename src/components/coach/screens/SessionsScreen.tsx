@@ -9,6 +9,7 @@ import { loadFinalAttendanceForSessionAsync } from '../../../lib/finalAttendance
 import type { CoachFinalAttendanceRecord } from '../../../lib/finalAttendance';
 import { canEditSession, isSessionAssignedToCoach, roleLabel } from '../../../lib/rolePermissions';
 import { CoachSessionDetailV1 } from '../CoachSessionDetailV1';
+import type { ManagedAthlete } from '../../../types/trainerDashboard';
 
 type SessionFilter = 'mine' | 'editable' | 'all';
 type SessionLifecycle = 'upcoming' | 'live' | 'after';
@@ -16,7 +17,7 @@ type SessionRow = { session: AttendanceSession; assigned: boolean; editable: boo
 
 export function SessionsScreen() {
   const navigate = useNavigate();
-  const { user, sessions, teams, roster, groups, coachContext, permissions } = useOutletContext<CoachOutletContext>();
+  const { user, sessions, teams, roster, groups, coachContext, permissions, demoMode } = useOutletContext<CoachOutletContext>();
   const [filter, setFilter] = useState<SessionFilter>('mine');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [availabilityRecords, setAvailabilityRecords] = useState<AthleteAvailabilityRecord[]>([]);
@@ -27,6 +28,9 @@ export function SessionsScreen() {
   const relevantSessions = useMemo(() => sessions
     .filter(session => session.datum >= addDaysIso(-2))
     .sort((a, b) => `${a.datum}${a.startTime ?? ''}`.localeCompare(`${b.datum}${b.startTime ?? ''}`)), [sessions]);
+
+  const demoAvailabilityRecords = useMemo(() => demoMode ? buildDemoAvailabilityRecords(relevantSessions, roster) : [], [demoMode, relevantSessions, roster]);
+  const activeAvailabilityRecords = demoMode ? demoAvailabilityRecords : availabilityRecords;
 
   const sessionRows = useMemo<SessionRow[]>(() => relevantSessions
     .map(session => {
@@ -51,6 +55,10 @@ export function SessionsScreen() {
   const selectedSession = selectedRow?.session ?? null;
 
   useEffect(() => {
+    if (demoMode) {
+      setAvailabilityRecords([]);
+      return;
+    }
     const sessionIds = relevantSessions.map(session => session.id);
     if (sessionIds.length === 0) {
       setAvailabilityRecords([]);
@@ -63,10 +71,10 @@ export function SessionsScreen() {
       .catch(error => console.warn('[SessionsScreen:availability]', error))
       .finally(() => { if (!cancelled) setLoadingAvailability(false); });
     return () => { cancelled = true; };
-  }, [relevantSessions]);
+  }, [demoMode, relevantSessions]);
 
   useEffect(() => {
-    if (!selectedSession) {
+    if (!selectedSession || demoMode) {
       setFinalRecords([]);
       return;
     }
@@ -77,9 +85,10 @@ export function SessionsScreen() {
       .catch(error => console.warn('[SessionsScreen:finalAttendance]', error))
       .finally(() => { if (!cancelled) setLoadingFinal(false); });
     return () => { cancelled = true; };
-  }, [selectedSession]);
+  }, [demoMode, selectedSession]);
 
-  const selectedAvailability = selectedSession ? availabilityRecords.filter(record => record.sessionId === selectedSession.id) : [];
+  const selectedAvailability = selectedSession ? activeAvailabilityRecords.filter(record => record.sessionId === selectedSession.id) : [];
+  const selectedFinalRecords = selectedSession && demoMode ? buildDemoFinalRecords(selectedSession, roster) : finalRecords;
   const selectedTeam = selectedSession ? teams.find(team => team.id === selectedSession.teamId) ?? null : null;
   const assignedCount = sessionRows.filter(row => row.assigned).length;
   const editableCount = sessionRows.filter(row => row.editable).length;
@@ -130,14 +139,10 @@ export function SessionsScreen() {
           <div className="space-y-2">
             {sessionRows.length === 0 ? <Empty title={emptyTitle} text={emptyText} canCreate={permissions.canCreateSessions} /> : sessionRows.map(({ session, assigned, editable, lifecycle }) => {
               const team = teams.find(t => t.id === session.teamId);
-              const sessionAvailability = availabilityRecords.filter(record => record.sessionId === session.id);
+              const sessionAvailability = activeAvailabilityRecords.filter(record => record.sessionId === session.id);
               const isSelected = selectedSession?.id === session.id;
               return (
-                <button
-                  key={session.id}
-                  onClick={() => setSelectedSessionId(session.id)}
-                  className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${sessionCardClass(isSelected, assigned, lifecycle)}`}
-                >
+                <button key={session.id} onClick={() => setSelectedSessionId(session.id)} className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${sessionCardClass(isSelected, assigned, lifecycle)}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -172,7 +177,7 @@ export function SessionsScreen() {
             roster={roster}
             groups={groups}
             availabilityRecords={selectedAvailability}
-            finalRecords={finalRecords}
+            finalRecords={selectedFinalRecords}
             editable={selectedRow.editable}
             onOpenPlayer={(athleteId) => navigate(`/coach/players?athlete=${encodeURIComponent(athleteId)}`)}
           />
@@ -233,6 +238,46 @@ function getSessionLifecycle(session: AttendanceSession): SessionLifecycle {
   return 'upcoming';
 }
 
+function buildDemoAvailabilityRecords(sessions: AttendanceSession[], roster: ManagedAthlete[]): AthleteAvailabilityRecord[] {
+  const find = (name: string) => roster.find(player => player.name.toLowerCase().includes(name));
+  const records: AthleteAvailabilityRecord[] = [];
+  const now = new Date().toISOString();
+  const u18 = sessions.find(session => session.id === 'demo-session-1');
+  const u16 = sessions.find(session => session.id === 'demo-session-2');
+  const guards = sessions.find(session => session.id === 'demo-session-3');
+  const recovery = sessions.find(session => session.id === 'demo-session-7');
+
+  function add(session: AttendanceSession | undefined, athlete: ManagedAthlete | undefined, status: AthleteAvailabilityRecord['status'], reason: string, lateMinutes?: number) {
+    if (!session || !athlete) return;
+    records.push({ id: `${session.id}:${athlete.id}:demo`, sessionId: session.id, athleteUserId: athlete.id, status, reason, lateMinutes, updatedAt: now });
+  }
+
+  add(u18, find('elias'), 'late', 'Physio vorher, kommt nach Warm-up.', 20);
+  add(u18, find('leo'), 'maybe', 'Sprunggelenk reagiert auf Belastung.', undefined);
+  add(u18, find('tom'), 'no', 'Krank gemeldet.', undefined);
+  add(u16, find('mika'), 'late', 'Schule geht länger.', 15);
+  add(guards, find('finn'), 'maybe', 'Fühlt sich müde, entscheidet nach Shootaround.', undefined);
+  add(recovery, find('elias'), 'no', 'Individuelle Behandlung statt Team-Recovery.', undefined);
+
+  return records;
+}
+
+function buildDemoFinalRecords(session: AttendanceSession, roster: ManagedAthlete[]): CoachFinalAttendanceRecord[] {
+  if (session.id !== 'demo-session-1' && session.id !== 'demo-session-2') return [];
+  const now = new Date().toISOString();
+  const base = roster.slice(0, 5);
+  return base.map((athlete, index) => ({
+    id: `${session.id}:${athlete.id}:final-demo`,
+    sessionId: session.id,
+    athleteId: athlete.id,
+    athleteName: athlete.name,
+    status: index === 1 ? 'late' : index === 3 ? 'partial' : 'present',
+    minutesParticipated: index === 3 ? 42 : undefined,
+    note: index === 1 ? 'Late arrival confirmed.' : index === 3 ? 'Partial load due to return-to-play limit.' : '',
+    finalizedAt: now,
+  }));
+}
+
 function parseSessionTime(dateIso: string, time: string | undefined, isEnd: boolean): Date | null {
   const value = time || (isEnd ? '23:59' : '00:00');
   const parsed = new Date(`${dateIso}T${value}:00`);
@@ -251,6 +296,6 @@ function sessionCardClass(isSelected: boolean, assigned: boolean, lifecycle: Ses
 }
 function queueHint(lifecycle: SessionLifecycle) { return lifecycle === 'live' ? 'Now: scan attendance and adjust session plan.' : lifecycle === 'after' ? 'After session: finalize attendance when ready.' : 'Before session: check exceptions first.'; }
 function queueHintClass(lifecycle: SessionLifecycle) { return lifecycle === 'live' ? 'text-emerald-300' : lifecycle === 'after' ? 'text-amber-300' : 'text-sky-300'; }
-function formatDate(iso: string) { return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
+function formatDate(iso: string) { return new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
 function todayIso() { return new Date().toISOString().split('T')[0]; }
 function addDaysIso(days: number) { const date = new Date(); date.setDate(date.getDate() + days); return date.toISOString().split('T')[0]; }
