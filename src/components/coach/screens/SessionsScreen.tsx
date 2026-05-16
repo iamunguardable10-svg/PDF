@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { CalendarDays, Lock, Plus, ShieldCheck } from 'lucide-react';
 import type { CoachOutletContext } from '../CoachShell';
-import type { AttendanceSession } from '../../../types/attendance';
+import type { AttendanceSession, AttendanceTrainingType } from '../../../types/attendance';
+import { createSession } from '../../../lib/attendanceStorage';
 import { loadAvailabilityForCoachSessionsAsync } from '../../../lib/availability';
 import type { AthleteAvailabilityRecord } from '../../../lib/availability';
 import { loadFinalAttendanceForSessionAsync } from '../../../lib/finalAttendance';
@@ -14,14 +15,18 @@ import type { ManagedAthlete } from '../../../types/trainerDashboard';
 type SessionFilter = 'mine' | 'editable' | 'all';
 type SessionLifecycle = 'upcoming' | 'live' | 'after';
 type SessionRow = { session: AttendanceSession; assigned: boolean; editable: boolean; lifecycle: SessionLifecycle };
+type CreateSessionFormValue = { title: string; datum: string; startTime: string; endTime: string; location: string; teamId: string; trainingType: AttendanceTrainingType; coachNote: string };
+
+const TRAINING_TYPES: AttendanceTrainingType[] = ['Training', 'Spiel', 'S&C', 'Taktik', 'Videoanalyse', 'Regeneration', 'Sonstiges'];
 
 export function SessionsScreen() {
   const navigate = useNavigate();
-  const { user, sessions, teams, roster, groups, coachContext, permissions, demoMode } = useOutletContext<CoachOutletContext>();
+  const { user, sessions, teams, roster, groups, coachContext, permissions, demoMode, org, reload } = useOutletContext<CoachOutletContext>();
   const [filter, setFilter] = useState<SessionFilter>('mine');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [availabilityRecords, setAvailabilityRecords] = useState<AthleteAvailabilityRecord[]>([]);
   const [finalRecords, setFinalRecords] = useState<CoachFinalAttendanceRecord[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
   const [, setLoadingAvailability] = useState(false);
   const [, setLoadingFinal] = useState(false);
 
@@ -87,6 +92,33 @@ export function SessionsScreen() {
     return () => { cancelled = true; };
   }, [demoMode, selectedSession]);
 
+  async function handleCreateSession(input: CreateSessionFormValue) {
+    if (demoMode) {
+      setCreateOpen(false);
+      return;
+    }
+    const team = teams.find(item => item.id === input.teamId);
+    const result = await createSession({
+      trainerId: user.id,
+      title: input.title.trim(),
+      description: input.coachNote.trim(),
+      datum: input.datum,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      location: input.location.trim(),
+      radiusM: 75,
+      teamId: input.teamId || undefined,
+      organizationId: org?.id,
+      departmentId: team?.departmentId,
+      trainingType: input.trainingType,
+      coachNote: input.coachNote.trim(),
+      memberIds: roster.map(player => ({ id: player.id, rosterId: player.id, name: player.name })),
+    });
+    setCreateOpen(false);
+    await reload();
+    if (result?.session?.id) setSelectedSessionId(result.session.id);
+  }
+
   const selectedAvailability = selectedSession ? activeAvailabilityRecords.filter(record => record.sessionId === selectedSession.id) : [];
   const selectedFinalRecords = selectedSession && demoMode ? buildDemoFinalRecords(selectedSession, roster) : finalRecords;
   const selectedTeam = selectedSession ? teams.find(team => team.id === selectedSession.teamId) ?? null : null;
@@ -126,7 +158,7 @@ export function SessionsScreen() {
               <p className="text-xs text-gray-500">Sorted by urgency: live, after session, upcoming.</p>
             </div>
             {permissions.canCreateSessions ? (
-              <button className="inline-flex items-center gap-1.5 rounded-xl border border-violet-700 bg-violet-900/30 px-3 py-1.5 text-xs font-bold text-violet-200">
+              <button onClick={() => setCreateOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-violet-700 bg-violet-900/30 px-3 py-1.5 text-xs font-bold text-violet-200">
                 <Plus size={14} /> New
               </button>
             ) : (
@@ -137,7 +169,7 @@ export function SessionsScreen() {
           </div>
 
           <div className="space-y-2">
-            {sessionRows.length === 0 ? <Empty title={emptyTitle} text={emptyText} canCreate={permissions.canCreateSessions} /> : sessionRows.map(({ session, assigned, editable, lifecycle }) => {
+            {sessionRows.length === 0 ? <Empty title={emptyTitle} text={emptyText} canCreate={permissions.canCreateSessions} onCreate={() => setCreateOpen(true)} /> : sessionRows.map(({ session, assigned, editable, lifecycle }) => {
               const team = teams.find(t => t.id === session.teamId);
               const sessionAvailability = activeAvailabilityRecords.filter(record => record.sessionId === session.id);
               const isSelected = selectedSession?.id === session.id;
@@ -187,15 +219,55 @@ export function SessionsScreen() {
           </section>
         )}
       </div>
+
+      {createOpen && <CreateSessionSheet teams={teams} demoMode={demoMode} onClose={() => setCreateOpen(false)} onCreate={handleCreateSession} />}
     </div>
   );
+}
+
+function CreateSessionSheet({ teams, demoMode, onClose, onCreate }: { teams: { id: string; name: string }[]; demoMode: boolean; onClose: () => void; onCreate: (value: CreateSessionFormValue) => Promise<void> }) {
+  const [form, setForm] = useState<CreateSessionFormValue>({ title: 'Team Practice', datum: todayIso(), startTime: '18:30', endTime: '20:00', location: 'Main Court', teamId: teams[0]?.id ?? '', trainingType: 'Training', coachNote: 'Attendance first. Adjust intensity with Team Readiness.' });
+  const [saving, setSaving] = useState(false);
+  const canSave = Boolean(form.title.trim() && form.datum && form.startTime && form.endTime && form.location.trim() && (demoMode || form.teamId));
+
+  async function submit() {
+    if (!canSave || saving) return;
+    setSaving(true);
+    await onCreate(form);
+    setSaving(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center" onClick={event => { if (event.currentTarget === event.target) onClose(); }}>
+      <div className="max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-3xl border border-gray-700 bg-gray-900 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
+          <div><p className="text-sm font-black text-white">New session</p><p className="text-xs text-gray-500">Create the operational block athletes react to.</p></div>
+          <button onClick={onClose} className="rounded-xl px-3 py-1 text-gray-500 hover:bg-gray-800 hover:text-white">×</button>
+        </div>
+        <div className="space-y-3 px-5 py-4">
+          {demoMode && <div className="rounded-2xl border border-green-800/40 bg-green-950/20 px-3 py-2 text-xs text-green-200">Demo mode: this preview closes the sheet. Turn demo off to write a real session.</div>}
+          <Field label="Title"><input value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} className="input" /></Field>
+          <div className="grid grid-cols-2 gap-2"><Field label="Date"><input type="date" value={form.datum} onChange={e => setForm(prev => ({ ...prev, datum: e.target.value }))} className="input [color-scheme:dark]" /></Field><Field label="Team"><select value={form.teamId} onChange={e => setForm(prev => ({ ...prev, teamId: e.target.value }))} className="input"><option value="">Select</option>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></Field></div>
+          <div className="grid grid-cols-2 gap-2"><Field label="Start"><input type="time" value={form.startTime} onChange={e => setForm(prev => ({ ...prev, startTime: e.target.value }))} className="input [color-scheme:dark]" /></Field><Field label="End"><input type="time" value={form.endTime} onChange={e => setForm(prev => ({ ...prev, endTime: e.target.value }))} className="input [color-scheme:dark]" /></Field></div>
+          <Field label="Location"><input value={form.location} onChange={e => setForm(prev => ({ ...prev, location: e.target.value }))} className="input" /></Field>
+          <Field label="Type"><select value={form.trainingType} onChange={e => setForm(prev => ({ ...prev, trainingType: e.target.value as AttendanceTrainingType }))} className="input">{TRAINING_TYPES.map(type => <option key={type} value={type}>{type}</option>)}</select></Field>
+          <Field label="Coach note"><textarea rows={3} value={form.coachNote} onChange={e => setForm(prev => ({ ...prev, coachNote: e.target.value }))} className="input resize-none" /></Field>
+          <button disabled={!canSave || saving} onClick={submit} className="w-full rounded-2xl bg-violet-600 py-3 text-sm font-black text-white disabled:opacity-40">{saving ? 'Saving...' : demoMode ? 'Preview session flow' : 'Create session'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <label className="block text-xs text-gray-500">{label}<div className="mt-1 [&_.input]:w-full [&_.input]:rounded-xl [&_.input]:border [&_.input]:border-gray-700 [&_.input]:bg-gray-800 [&_.input]:px-3 [&_.input]:py-2 [&_.input]:text-sm [&_.input]:text-white [&_.input]:outline-none [&_.input]:focus:border-violet-500">{children}</div></label>;
 }
 
 function Header({ title, text }: { title: string; text: string }) {
   return <div><p className="text-xs font-semibold uppercase tracking-wider text-violet-300">TeamLoad</p><h2 className="mt-1 text-2xl font-black text-white">{title}</h2><p className="mt-1 text-sm text-gray-400">{text}</p></div>;
 }
 
-function Empty({ title, text, canCreate }: { title: string; text: string; canCreate: boolean }) {
+function Empty({ title, text, canCreate, onCreate }: { title: string; text: string; canCreate: boolean; onCreate: () => void }) {
   return (
     <div className="rounded-2xl border border-dashed border-violet-800/70 bg-violet-950/15 px-5 py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -203,7 +275,7 @@ function Empty({ title, text, canCreate }: { title: string; text: string; canCre
           <p className="text-sm font-black text-white">{title}</p>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-400">{text}</p>
         </div>
-        {canCreate && <button className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-violet-500 px-3 py-2 text-xs font-black text-white"><Plus size={14} /> Plan first session</button>}
+        {canCreate && <button onClick={onCreate} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-violet-500 px-3 py-2 text-xs font-black text-white"><Plus size={14} /> Plan first session</button>}
       </div>
     </div>
   );
