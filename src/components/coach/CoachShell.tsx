@@ -3,7 +3,7 @@ import type { ElementType } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users2, Warehouse, ChevronLeft, RefreshCw,
-  Activity, Bell, Settings,
+  Activity, Bell, Settings, LogOut,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import type { AttendanceTeam, AttendanceSession } from '../../types/attendance';
@@ -98,11 +98,13 @@ interface Props {
   user: User;
   trainerName: string;
   onBack: () => void;
+  onSignOut?: () => void;
+  onLoginRequest?: () => void;
   initialDemoMode?: boolean;
   lockDemoMode?: boolean;
 }
 
-export function CoachShell({ user, trainerName, onBack, initialDemoMode = false, lockDemoMode = false }: Props) {
+export function CoachShell({ user, trainerName, onBack, onSignOut, onLoginRequest, initialDemoMode = false, lockDemoMode = false }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -273,17 +275,25 @@ export function CoachShell({ user, trainerName, onBack, initialDemoMode = false,
           </div>
 
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setDemoMode(!demoMode)}
-              disabled={lockDemoMode}
-              title={lockDemoMode ? 'Demo preview is locked for local demo mode' : 'Toggle demo data'}
-              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${demoMode ? 'bg-green-900/40 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'} ${lockDemoMode ? 'cursor-not-allowed opacity-80' : ''}`}
-            >
-              Demo {demoMode ? 'on' : 'off'}
-            </button>
+            {lockDemoMode ? (
+              <button onClick={onLoginRequest ?? onBack} className="text-xs font-semibold px-2.5 py-1 rounded-lg border bg-green-900/40 border-green-700 text-green-300 transition-colors hover:border-green-500 hover:text-green-100" title="Login to use real club data">
+                Demo · Login
+              </button>
+            ) : (
+              <button
+                onClick={() => setDemoMode(!demoMode)}
+                title="Toggle demo data"
+                className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${demoMode ? 'bg-green-900/40 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}
+              >
+                {demoMode ? 'Demo on' : 'Demo off'}
+              </button>
+            )}
             <span className={`hidden sm:block text-xs font-medium px-2.5 py-1 rounded-lg ${activeNav.accent} ${activeNav.accentText}`}>{activeSection?.title ?? 'Coach'} / {activeNav.label}</span>
             <button onClick={reload} title="Refresh data" className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-gray-800 transition-colors">
               <RefreshCw size={13} className={loading && !demoMode ? 'animate-spin' : ''} />
+            </button>
+            <button onClick={onSignOut ?? onBack} title={lockDemoMode ? 'Leave demo' : 'Sign out'} className="p-1.5 rounded-lg text-gray-600 hover:text-red-300 hover:bg-gray-800 transition-colors">
+              <LogOut size={13} />
             </button>
           </div>
         </div>
