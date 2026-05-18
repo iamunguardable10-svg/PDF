@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutDashboard, Users, Dumbbell, ShieldCheck, ClipboardList, CheckCircle2, Activity, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Users, Dumbbell, ShieldCheck, ClipboardList, CheckCircle2, Activity, CalendarDays, ArrowLeft } from 'lucide-react';
 import { ClubJoinFlow } from './ClubJoinFlow';
 import type { AppMode } from '../../types/appMode';
 
@@ -9,6 +9,7 @@ interface Props {
   userSport?: string;
   onSelect: (mode: AppMode) => void;
   onJoined?: () => void;
+  onBackToLanding?: () => void;
 }
 
 const PRODUCT_STEPS = [
@@ -18,7 +19,7 @@ const PRODUCT_STEPS = [
   { title: 'Read load context', text: 'Attendance and participation become useful workload signals.', Icon: Activity },
 ];
 
-export function RoleSelectScreen({ userId, userName = '', userSport = '', onSelect, onJoined }: Props) {
+export function RoleSelectScreen({ userId, userName = '', userSport = '', onSelect, onJoined, onBackToLanding }: Props) {
   const [showJoinFlow, setShowJoinFlow] = useState(false);
 
   if (showJoinFlow && userId) {
@@ -39,6 +40,15 @@ export function RoleSelectScreen({ userId, userName = '', userSport = '', onSele
   return (
     <div className="min-h-screen bg-[#0a0b0f] text-white flex flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-5xl">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          {onBackToLanding ? (
+            <button onClick={onBackToLanding} className="inline-flex items-center gap-1.5 rounded-xl border border-gray-800 bg-gray-950/70 px-3 py-2 text-xs font-bold text-gray-400 transition-colors hover:border-violet-700 hover:text-white">
+              <ArrowLeft size={14} /> Zur Startseite
+            </button>
+          ) : <span />}
+          <span className="rounded-xl border border-gray-800 bg-gray-950/70 px-3 py-2 text-xs text-gray-600">Role setup</span>
+        </div>
+
         <div className="flex items-center justify-center gap-2.5 mb-8">
           <div className="w-11 h-11 bg-gradient-to-br from-violet-500 to-purple-700 rounded-2xl flex items-center justify-center text-lg font-black shadow-lg shadow-violet-900/40">
             TL
